@@ -10,31 +10,29 @@
 #include <sys/time.h>
 #include <quadmath.h>
 
-FILE *f[256];
+FILE **f;
 
-int err = 0;
-int cerr;
+int      err = 0;
+int         cerr;
 char cerrstr[32];
 
-uint32_t varsize[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-uint8_t  *u08var;
-int8_t   *s08var;
-uint16_t *u16var;
-int16_t  *s16var;
-uint32_t *u32var;
-int32_t  *s32var;
-uint64_t *u64var;
-int64_t  *s64var;
-float    *sflvar;
-double   *sdbvar;
-char    **strvar;
+char            *mem;
+uint32_t memsize = 0;
 
-char cmd[65536] = "";
-char *tmpargs[256];
-char *arg[256];
-uint8_t argt[256];
-int argl[256];
-int argct = 0;
+uint32_t varsize[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+char    **varstr;
+char   **varname;
+bool   *varinuse;
+uint8_t *vartype;
+int     varmaxct;
+
+char            *cmd;
+int             cmdl;
+char       **tmpargs;
+char           **arg;
+uint8_t        *argt;
+int            *argl;
+int        argct = 0;
 
 bool debug = false;
 
@@ -47,25 +45,17 @@ void cleanExit() {
     signal(SIGINT, forceExit);
     signal(SIGKILL, forceExit);
     signal(SIGTERM, forceExit);
-    free(u08var);
-    free(s08var);
-    free(u16var);
-    free(s16var);
-    free(u32var);
-    free(s32var);
-    free(u64var);
-    free(s64var);
-    free(sflvar);
-    free(sdbvar);
-    free(strvar);
     fflush(stdout);
     printf("\n");
     exit(err);
 }
 
-char VER[] = "0.2";
+char VER[] = "0.3";
+
+//    if (debug) printf(":\n");
 
 int runcmd();
+void copyStrSnip(char* str1, int i, int j, char* str2);
 
 int main(int argc, char *argv[]) {
     signal(SIGINT, cleanExit); 
@@ -81,6 +71,9 @@ int main(int argc, char *argv[]) {
         }
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
             printf("Usage: clibasic [options]\n");
+            printf("\n");
+            printf("--help      Shows the help screen.\n");
+            printf("--version   Shows the version info.\n");
             exit = true;
         }
         if (!strcmp(argv[i], "--debug") || !strcmp(argv[i], "-d")) {
@@ -90,69 +83,188 @@ int main(int argc, char *argv[]) {
     if (exit) cleanExit();
     printf("Command Line Interface BASIC version %s\n", VER);
     if (debug) printf("Running in debug mode\n");
-    u08var = (uint8_t *) malloc(0);
-    s08var = (int8_t *) malloc(0);
-    u16var = (uint16_t *) malloc(0);
-    s16var = (int16_t *) malloc(0);
-    u32var = (uint32_t *) malloc(0);
-    s32var = (int32_t *) malloc(0);
-    u64var = (uint64_t *) malloc(0);
-    s64var = (int64_t *) malloc(0);
-    sflvar = (float *) malloc(0);
-    sdbvar = (double *) malloc(0);
-    strvar = malloc(0);    
-    for (int i = 0; i < 256; i++) {
-        tmpargs[256] = (char *) malloc(0);
-        arg[256] = (char *) malloc(0);
-    }
+    char conbuf[32768];
+    //cmd = malloc(0);
+    //argl = malloc(0);
+    //arg = malloc(0);
+    //tmpargs = malloc(0);
+    //argt = malloc(0);
     while (!exit) {
-        for (int i = 0; i < 65536; i++) {cmd[i] = 0;}
+        for (int i = 0; i < 32768; i++) conbuf[i] = 0;
         int cp = 0;
         printf("CLIBASIC> ");
         char c = 0;
         while (c != '\n') {
-            c = getc(stdin);
+            c = getchar();
+            if (c == '\0') {} else
             if (c == EOF) {cleanExit();} else
-            if (c == '\b' && cp > 0) {cp--; cmd[cp] = 0;} else
+            if (c == '\b' && cp > 0) {cp--; conbuf[cp] = 0;} else
             if (c == '\e') {
-            
+                // Escape code handling code
             } else
-            if (c == '\n') {} else
-            {cmd[cp] = c; cp++;}
+            if (c == '\n') {conbuf[cp] = 0; goto proccmd;} else
+            {conbuf[cp] = c; cp++;}
+            if (conbuf[0] == '\0') c = 0;
         }
-        if (debug) printf("cmd: {%s}\n", cmd);
-        if (cp > 0) runcmd();
+        proccmd:
+        cp = 0;
+        //int cmdp = 0;
+        bool inStr = false;
+        if (debug) printf("conbuf: {%s}\n", conbuf);
+        while (true) {
+            if (debug) printf("cmdpoc(1): cp:[%d], cmdl:[%d], char:[%c](%d)\n", cp, cmdl, conbuf[cp], (int)conbuf[cp]);
+            if (conbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
+            if ((conbuf[cp] == ':' && !inStr) || conbuf[cp] == '\0') {
+                while(conbuf[cp - cmdl] == ' ') {cmdl--;}
+                cmd = realloc(cmd, (cmdl + 1) * sizeof(char));
+                copyStrSnip(conbuf, cp - cmdl, cp, cmd);
+                if (debug) printf("cmd: {%s} [%d] [%d]\n", cmd, cp - cmdl, cp);
+                runcmd();
+                cmdl = 0;
+                if (conbuf[cp] == '\0') goto brkproccmd;
+            } else
+            {cmdl++;}
+            cp++;
+            if (debug) printf("cmdpoc(2): cp:[%d], cmdl:[%d], char:[%c](%d)\n", cp, cmdl, conbuf[cp], (int)conbuf[cp]);
+        }
+        brkproccmd:
+        if (0) {};
     }
     cleanExit();
+    return 0;
 }
 
-bool is_spCharS1(char* bfr, int pos) {
-    return (bfr[pos] == '+' || bfr[pos] == '-' || bfr[pos] == '/' || bfr[pos] == '*' || bfr[pos] == '^' || bfr[pos] == '%' || bfr[pos] == ',' || bfr[pos] == ' ');
+// reserved for mkvar and rmvar define lines
+
+bool isSpChar(char* bfr, int pos) {
+    return (bfr[pos] == '+' || bfr[pos] == '-' || bfr[pos] == '/' || bfr[pos] == '*' || bfr[pos] == '^' || bfr[pos] == '%' || bfr[pos] == ',');
+}
+
+int copyStr(char* str1, char* str2) {
+    int i;
+    for (i = 0; str1[i] != '\0'; i++) {str2[i] = str1[i];}
+    str2[i] = 0;
+    return i;
+}
+
+void copyStrSnip(char* str1, int i, int j, char* str2) {
+    int i2 = 0;
+    for (int i3 = i; i3 < j; i3++) {str2[i2] = str1[i3]; i2++;}
+    str2[i2] = 0;
+}
+
+void copyStrTo(char* str1, int i, char* str2) {
+    int i2 = 0;
+    int i3;
+    for (i3 = i; str1[i] != '\0'; i++) {str2[i3] = str1[i2]; i2++; i3++;}
+    str2[i3] = 0;
+}
+
+void copyStrApnd(char* str1, char* str2) {
+    int j = 0, i = 0;
+    if (debug) printf("copyStrApnd: strlen(str2): [%d]\n", (int)strlen(str2));
+    for (i = strlen(str2); str1[j] != '\0'; i++) {str2[i] = str1[j]; j++;}
+    str2[i] = 0;
 }
 
 uint8_t getType(char* str) {
     if (str[0] == '"') {return 1/*STR*/;}
     bool p = false;
     for (int i = 0; str[i] != '\0'; i++) {
-        if (str[i] < '0' && str[i] > '9' && str[i] != '.') {return 255 /*VAR*/;} else
+        if ((str[i] < '0' || str[i] > '9') && str[i] != '.') {return 255 /*VAR*/;} else
         if (str[i] == '.') {if (p) {return 0 /*ERR*/;} p = true;}
     }
     return 2/*NUM*/;
 }
 
-bool solveargs() {
+uint8_t getVar(char* vn, char* varout) {
+    if (vn[0] == '\0') return 0;
+    int v = -1;
+    for (int i = 0; i < varmaxct; i++) {
+        if (varinuse[i] && !strcmp(vn, varname[i])) {v = i; break;}
+    }
+    if (v == -1) {
+        if (vn[strlen(vn) - 1] == '$') {varout = ""; return 1;}
+        else {varout = "0"; return 2;}
+    } else {
+        copyStr(varstr[v], &varout[v]);
+        return vartype[v];
+    }
+    return 0;
+}
+
+uint8_t getVal(char* inbuf, char* outbuf) {
+    if (debug) printf("getVal: inbuf: {%s}\n", inbuf);
+    int ip = 0, jp = 0;
+    char tmp[2][32768];
+    uint8_t t = 0;
+    uint8_t dt = 0;
     bool inStr = false;
-    int pct = 0;
-    bool hitnull = false;
-    if (debug) printf("argct: %d\n", argct);
-    char tmpbuf[65536];
-    for (int i = 0; i <= argct; i++) {
+    if (debug) printf("checking for syntax error\n");
+    if (isSpChar(inbuf, 0) || isSpChar(inbuf, strlen(inbuf) - 1)) {cerr = 1; return 0;}
+    if (debug) printf("no syntax error detected\n");
+    outbuf[0] = 0; //REM (427689): REMOVE LATER
+    tmp[0][0] = 0; tmp[1][0] = 0;
+    while (true) {
+        if (debug) printf("getVal (1): ip: [%d], jp: [%d]\n", ip, jp);
+        bool seenStr = false;
+        while (true) {
+            if (debug) printf("getVal (2): ip: [%d], jp: [%d]\n", ip, jp);
+            if (inbuf[jp] == '"') {inStr = !inStr; if (seenStr && inStr) {cerr = 1; return 0;} seenStr = true;}
+            if ((isSpChar(inbuf, jp) && !inStr) || inbuf[jp] == '\0') goto gvbrk;
+            jp++;
+        }
+        gvbrk:
+        copyStrSnip(inbuf, ip, jp, tmp[0]);
+        if (debug) printf("getVal (3): tmp[0]: {%s}\n", tmp[0]);
+        t = getType(tmp[0]);
+        if (debug) printf("getType: tmp[0]: [%u]\n", t);
+        if (t == 255) {t = getVar(tmp[0], tmp[0]);}
+        if (debug) printf("getType: tmp[0]: [%u]\n", t);
+        if (debug) printf("getVal (4): tmp[0]: {%s}\n", tmp[0]);
+        if (t != 0 && dt == 0) {dt = t;} else
+        if ((t != 0 && t != dt)) {cerr = 2; return false;} else
+        if (t == 0) {cerr = 1; return false;}
+        if ((dt == 1 && inbuf[jp] != '+') && inbuf[jp] != '\0') {cerr = 1; return 0;}
+        // Solver
+        if (debug) printf("getVal (4): tmp[1]: {%s}\n", tmp[1]);
+        if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[0]); copyStrApnd(tmp[0], tmp[1]);} /*else*/
+        if (debug) printf("getVal (4): tmp[1]: {%s}\n", tmp[1]);
+        // 
+        if (inbuf[jp] == '\0') {break;}
+        jp++;
+        ip = jp;
+    }
+    copyStr(tmp[1], outbuf);
+    return t;
+}
+
+bool solveargs() {
+    //bool inStr = false;
+    //int pct = 0;
+    //bool hitnull = false;
+    if (debug) printf("solveargs: argct: %d\n", argct);
+    argt = realloc(argt, argct + 1);
+    arg = realloc(arg, (argct + 1) * sizeof(char*));
+    char tmpbuf[32768];
+    argt[0] = 0;
+    arg[0] = tmpargs[0];
+    /*for (int i = 1; i <= argct; i++) {
+        int j = 0;
+        while (tmpargs[i][j] != '\0') {j++;}
+        arg[i] = realloc(arg[i], (j + 1) * sizeof(char));
+        argl[i] = copyStr(tmpargs[i], arg[i]);
+    }*/
+    for (int i = 1; i <= argct; i++) {
         if (debug) printf("$ [%d]: %d\n", i, argl[i]);
-        argt[i] = 0; // 0 = Unset (for syntax error detection), 1 = string, 2 = number (int64_t), 3... specific number types
-        arg[i] = realloc(arg[i], (argl[i] + 1) * sizeof(char));
-        arg[i] = "";
-        arg[i] = tmpargs[i];
-        argt[i] = getType(arg[i]);
+        argt[i] = 0; // 0 = Unset (for error detection), 1 = string, 2 = number
+        for (int p = 0; p < 32767; p++) {tmpbuf[p] = 0;}
+        argt[i] = getVal(tmpargs[i], tmpbuf);
+        if (debug) printf("solveargs: argt[%d]: %d\n", i, argt[i]);
+        if (argt[i] == 0) return false;
+        arg[i] = (char*)realloc(arg[i], (strlen(tmpbuf) + 1) * sizeof(char));
+        copyStr(tmpbuf, arg[i]);
+        argl[i] = strlen(arg[i]);
     }
     return true;
 }
@@ -162,7 +274,10 @@ bool mkargs() {
     int pct = 0;
     bool hitnull = false;
     int cmdpos = 0;
-    for (int i = 0; i < 256 && !hitnull; i++) {
+    argct = 0;
+    if (debug) printf("count args and detect syntax errors:\n");
+    for (int i = 0; !hitnull; i++) {
+        argl = realloc(argl, (i + 1) * sizeof(int));
         argl[i] = 0;
         while (cmd[cmdpos] != '\0') {
             if (debug) printf("1![%d], [%d]: %c [%d]\n", i, cmdpos, cmd[cmdpos], argct);
@@ -171,78 +286,105 @@ bool mkargs() {
                 if (cmd[cmdpos] == ' ') {break;}
                 else {argl[0]++;}
             } else {
+                if (argct == 0) argct = 1;
                 if (cmd[cmdpos] == ' ' && !inStr && argl[i] == 0) {cmdpos++;}// else {if (debug) printf("?: %d\n", argl[i]);}
                 while (cmd[cmdpos] == ' ' && !inStr/* && (is_spCharS1(cmd, cmdpos - 1) || (is_spCharS1(cmd, cmdpos + 1) && is_spCharS1(cmd, cmdpos - 1)))*/) {cmdpos++;}
-                argl[i]++;
-                if (cmd[cmdpos] == ',' && !inStr && pct == 0) {goto exitctloop;} else
+                if (cmd[cmdpos] == ',' && !inStr && pct == 0) {argct++; argl = realloc(argl, (argct + 1) * sizeof(int)); goto exitctloop;} else
                 if (cmd[cmdpos] == '"') {inStr = !inStr;} else
                 if (cmd[cmdpos] == '(' && !inStr) {pct++;} else
                 if (cmd[cmdpos] == ')' && !inStr) {pct--;}
+                argl[i]++;
             }
+            if (cmd[cmdpos] == '\0') goto fexitctloop;
             cmdpos++;
             if (debug) printf("2![%d], [%d]: %c (%d)\n", i, cmdpos, cmd[cmdpos], (int)cmd[cmdpos]);
+           if (cmd[cmdpos] == '\0') goto fexitctloop;
         }
         exitctloop:
         if (inStr || pct != 0) {cerr = 1; return false;}
         cmdpos++;
-        argct = i;
         if (cmd[cmdpos] == '\0') hitnull = true;
         if (debug) printf("3![%d], [%d]: %c [%d]\n", i, cmdpos, cmd[cmdpos], argct);
     }
+    fexitctloop:
     hitnull = false;
     cmdpos = 0;
-    for (int i = 0; i <= argct && !hitnull; i++) {
-        tmpargs[i] = (char *) realloc(tmpargs[i], (argl[i] + 1) * sizeof(char));
-        for (int j = 0; j < argl[i]; j++) {
-            if (cmd[cmdpos] == '\0') {hitnull = true; break;}
-            if (debug) printf("1tx args[%d], [%d]: %c (%d)\n", i, cmdpos, cmd[cmdpos], (int)cmd[cmdpos]);
+    if (debug) printf("argct: %d\n", argct);
+    tmpargs = realloc(tmpargs, (argct + 1) * sizeof(char*));
+    if (debug) printf("allocate tmpargs size:\n");
+    for (int i = 0; i <= argct; i++) {if (debug) {printf("realloc size [%d]: %d\n", i, argl[i] + 1);}}
+    if (debug) printf("allocating tmpargs:\n");
+    for (int i = 0; i <= argct; i++) {
+        if (debug) printf("realloc size [%d]: %d\n", i, argl[i] + 1);
+        tmpargs[i] = (char*)realloc(tmpargs[i], (argl[i] + 1) * sizeof(char));
+        if (debug) printf("done\n");
+    }
+    if (debug) printf("put args in arg containers:\n");
+    for (int i = 0; i <= argct; i++) {
+        int argpos = 0;
+        while (argpos <= argl[i]) {
+            if (debug) printf("1t[%d], [%d]: %c [%d]\n", i, cmdpos, cmd[cmdpos], argct);
             if (i == 0) {
-                while (cmd[cmdpos] == ' ' && j == 0) {if (debug) {printf("FOUND SPACE\n");} cmdpos++;}
+                while (cmd[cmdpos] == ' ' && argl[0] == 0) {if (debug) {printf("FOUND SPACE\n");} cmdpos++;}
                 if (cmd[cmdpos] == ' ') {break;}
-                else {
-                    if(cmd[cmdpos] >= 'a' && cmd[cmdpos] <= 'z') {
-                        cmd[cmdpos] = cmd[cmdpos] -32;
-                    }
-                    tmpargs[0][j] = cmd[cmdpos];
-                }
+                else {tmpargs[0][argpos] = cmd[cmdpos]; argpos++;}
             } else {
-                if (cmd[cmdpos] == ' ' && !inStr && argl[i] == 0) {cmdpos++;}// else {if (debug) printf("?: %d\n", argl[i]);}
-                while (cmd[cmdpos] == ' ' && !inStr/* && (is_spCharS1(cmd, cmdpos - 1) || (is_spCharS1(cmd, cmdpos + 1) && is_spCharS1(cmd, cmdpos - 1)))*/) {cmdpos++;}
+                if (cmd[cmdpos] == ' ' && !inStr && argl[i] == 0) {cmdpos++;}
+                while (cmd[cmdpos] == ' ' && !inStr) {cmdpos++;}
                 if (cmd[cmdpos] == ',' && !inStr && pct == 0) {goto exittxloop;} else
                 if (cmd[cmdpos] == '"') {inStr = !inStr;} else
                 if (cmd[cmdpos] == '(' && !inStr) {pct++;} else
                 if (cmd[cmdpos] == ')' && !inStr) {pct--;}
-                tmpargs[i][j] = cmd[cmdpos];
+                tmpargs[i][argpos] = cmd[cmdpos];
+                argpos++;
             }
+            //if (cmd[cmdpos] == '\0') goto fexittxloop;
             cmdpos++;
-            tmpargs[i][j + 1] = 0;
-            if (debug) printf("2tx args[%d], [%d]: %c (%d)\n", i, cmdpos, cmd[cmdpos], (int)cmd[cmdpos]);
+            if (debug) printf("2t[%d], [%d]: %c (%d)\n", i, cmdpos, cmd[cmdpos], (int)cmd[cmdpos]);
+            //if (cmd[cmdpos] == '\0') goto fexittxloop;
         }
+        tmpargs[i][argl[i]] = '\0';
         exittxloop:
+        if (inStr || pct != 0) {cerr = 1; return false;}
         cmdpos++;
+        if (cmd[cmdpos + 1] == '\0') hitnull = true;
+        if (debug) printf("3t[%d], [%d]: %c [%d]\n", i, cmdpos, cmd[cmdpos], argct);
     }
+    //fexittxloop:
+    if (debug) printf("argct: %d\n", argct);    
+    if (debug) printf("check for blank arg:\n");
     if (argct == 1 && tmpargs[1][0] == '\0') {argct = 0;}
-    
+    if (debug) printf("solve args:\n");
     return solveargs();
 }
 
 int runcmd() {
     if (debug) printf("%s\n", cmd);
+    if (debug) printf("check for null:\n");
+    if (cmd[0] == '\0') return 0;
+    if (debug) printf("mkargs:\n");
     if (!mkargs()) goto cmderr;
-    if (debug) printf("%s\n", cmd);
+    if (debug) printf("run commands:\n");
+    //cerr = 255;
+    if (debug) printf("C [%d]: {%s}\n", 0, arg[0]);
+    for (int i = 1; i <= argct; i++) {
+        if (debug) printf("A [%d]: {%s}\n", i, arg[i]);
+    }
+    for (int i = 0; i < argl[0]; i++) {
+        if (arg[0][i] >= 'a' && arg[0][i] <= 'z') {
+            arg[0][i] = arg[0][i] - 32;
+        }
+    }
+    if (debug) printf("argct: %d\n", argct);
     cerr = 255;
-    for (int i = 0; i <= argct; i++) {
-        if (debug) printf("C [%d]: {%s}\n", i, arg[i]);
-    }
-    if (!strcmp(arg[0], "EXIT")) {
-        err = 0;
-        if (argct == 1) err = atoi(arg[1]); 
-        if (argct > 1) {cerr = 3; goto cmderr;}
-        printf("\x1b[A");
-        cleanExit();
-    }
+    if (debug) printf("cerr: %d\n", cerr);
+    // COMMANDS START
+    #include "commands.c"
+    // COMMANDS END
     /*if (inProg) {printf("Line %u: ");}*/
+    if (debug) printf("cerr: %d\n", cerr);
     cmderr:
+    if (debug) printf("cerr: %d\n", cerr);
     if (cerr != 0) {
         printf("ERROR %d: ", cerr);
         switch (cerr) {
@@ -269,9 +411,3 @@ int runcmd() {
     }
     return cerr;
 }
-
-/*
-        if((arg[0][i] >= 'a' && arg[0][i] <= 'z')) {
-            arg[0][i] -= 32;
-        }
-*/
