@@ -10,7 +10,7 @@
 #include <sys/time.h>
 #include <quadmath.h>
 
-char VER[] = "0.4";
+char VER[] = "0.4.1";
 
 FILE **f;
 
@@ -360,8 +360,8 @@ bool mkargs() {
                 else {argl[0]++;}
             } else {
                 if (argct == 0) argct = 1;
-                if (cmd[cmdpos] == ' ' && !inStr && argl[i] == 0) {cmdpos++;}// else {if (debug) printf("?: %d\n", argl[i]);}
-                while (cmd[cmdpos] == ' ' && !inStr/* && (is_spCharS1(cmd, cmdpos - 1) || (is_spCharS1(cmd, cmdpos + 1) && is_spCharS1(cmd, cmdpos - 1)))*/) {cmdpos++;}
+                //while (cmd[cmdpos] == ' ' && !inStr/* && (is_spCharS1(cmd, cmdpos - 1) || (is_spCharS1(cmd, cmdpos + 1) && is_spCharS1(cmd, cmdpos - 1)))*/) {cmdpos++;}
+                if (cmd[cmdpos] == ' ' && !inStr) {argl[i]--;}// else {if (debug) printf("?: %d\n", argl[i]);}
                 if (cmd[cmdpos] == ',' && !inStr && pct == 0) {argct++; argl = realloc(argl, (argct + 1) * sizeof(int)); goto exitctloop;} else
                 if (cmd[cmdpos] == '"') {inStr = !inStr;} else
                 if (cmd[cmdpos] == '(' && !inStr) {pct++;} else
@@ -402,7 +402,7 @@ bool mkargs() {
                 if (cmd[cmdpos] == ' ') {break;}
                 else {tmpargs[0][argpos] = cmd[cmdpos]; argpos++;}
             } else {
-                if (cmd[cmdpos] == ' ' && !inStr && argl[i] == 0) {cmdpos++;}
+                //if (cmd[cmdpos] == ' ' && !inStr && argl[i] == 0) {cmdpos++;}
                 while (cmd[cmdpos] == ' ' && !inStr) {cmdpos++;}
                 if (cmd[cmdpos] == ',' && !inStr && pct == 0) {goto exittxloop;} else
                 if (cmd[cmdpos] == '"') {inStr = !inStr;} else
@@ -418,10 +418,12 @@ bool mkargs() {
         }
         tmpargs[i][argl[i]] = '\0';
         exittxloop:
+        if (debug) printf("tmpargs[i]: {%s}\n", tmpargs[i]);
         if (inStr || pct != 0) {cerr = 1; return false;}
         cmdpos++;
         if (cmd[cmdpos + 1] == '\0') hitnull = true;
         if (debug) printf("3t[%d], [%d]: %c [%d]\n", i, cmdpos, cmd[cmdpos], argct);
+        if (debug) printf("tmpargs[%d]: {%s}\n", i, tmpargs[i]);
     }
     //fexittxloop:
     if (debug) printf("argct: %d\n", argct);    
