@@ -10,6 +10,8 @@
 #include <sys/time.h>
 #include <quadmath.h>
 
+char VER[] = "0.4";
+
 FILE **f;
 
 int      err = 0;
@@ -19,7 +21,7 @@ char cerrstr[32];
 char            *mem;
 uint32_t memsize = 0;
 
-uint32_t varsize[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+int      *varlen;
 char    **varstr;
 char   **varname;
 bool   *varinuse;
@@ -49,8 +51,6 @@ void cleanExit() {
     printf("\n");
     exit(err);
 }
-
-char VER[] = "0.3";
 
 //    if (debug) printf(":\n");
 
@@ -137,7 +137,7 @@ int main(int argc, char *argv[]) {
 // reserved for mkvar and rmvar define lines
 
 bool isSpChar(char* bfr, int pos) {
-    return (bfr[pos] == '+' || bfr[pos] == '-' || bfr[pos] == '/' || bfr[pos] == '*' || bfr[pos] == '^' || bfr[pos] == '%' || bfr[pos] == ',');
+    return (bfr[pos] == '+' || bfr[pos] == '-' || bfr[pos] == '*' || bfr[pos] == '/' || bfr[pos] == '^' || bfr[pos] == ',');
 }
 
 int copyStr(char* str1, char* str2) {
@@ -162,13 +162,13 @@ void copyStrTo(char* str1, int i, char* str2) {
 
 void copyStrApnd(char* str1, char* str2) {
     int j = 0, i = 0;
-    if (debug) printf("copyStrApnd: strlen(str2): [%d]\n", (int)strlen(str2));
+    //if (debug) printf("copyStrApnd: strlen(str2): [%d]\n", (int)strlen(str2));
     for (i = strlen(str2); str1[j] != '\0'; i++) {str2[i] = str1[j]; j++;}
     str2[i] = 0;
 }
 
 uint8_t getType(char* str) {
-    if (str[0] == '"') {return 1/*STR*/;}
+    if (str[0] == '"') {if (str[strlen(str) - 1] != '"') {return 0;} return 1/*STR*/;}
     bool p = false;
     for (int i = 0; str[i] != '\0'; i++) {
         if ((str[i] < '0' || str[i] > '9') && str[i] != '.') {return 255 /*VAR*/;} else
@@ -196,10 +196,14 @@ uint8_t getVar(char* vn, char* varout) {
 uint8_t getVal(char* inbuf, char* outbuf) {
     if (debug) printf("getVal: inbuf: {%s}\n", inbuf);
     int ip = 0, jp = 0;
-    char tmp[2][32768];
+    char tmp[4][32768];
     uint8_t t = 0;
     uint8_t dt = 0;
     bool inStr = false;
+    double num1 = 0;
+    double num2 = 0;
+    double num3 = 0;
+    int numAct;
     if (debug) printf("checking for syntax error\n");
     if (isSpChar(inbuf, 0) || isSpChar(inbuf, strlen(inbuf) - 1)) {cerr = 1; return 0;}
     if (debug) printf("no syntax error detected\n");
@@ -223,18 +227,87 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         if (debug) printf("getType: tmp[0]: [%u]\n", t);
         if (debug) printf("getVal (4): tmp[0]: {%s}\n", tmp[0]);
         if (t != 0 && dt == 0) {dt = t;} else
-        if ((t != 0 && t != dt)) {cerr = 2; return false;} else
+        if ((t != 0 && t != dt)) {cerr = 2; return 0;} else
         if (t == 0) {cerr = 1; return false;}
         if ((dt == 1 && inbuf[jp] != '+') && inbuf[jp] != '\0') {cerr = 1; return 0;}
         // Solver
         if (debug) printf("getVal (4): tmp[1]: {%s}\n", tmp[1]);
-        if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[0]); copyStrApnd(tmp[0], tmp[1]);} /*else*/
+        if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[1]);} else
+        if (t == 2) {
+            copyStr(inbuf, tmp[0]);
+            int p1, p2, p3;
+            while (true) {
+                numAct = 0;
+                p1 = 0, p2 = 0, p3 = 0;
+                if (debug) printf("checking for exp\n");
+                for (int i = 0; tmp[0][i] != '\0' && p2 == 0; i++) {
+                    if (tmp[0][i] == '^') {p2 = i; numAct = 4;}
+                }
+                if (debug) printf("checking for mlt/dvd\n");
+                for (int i = 0; tmp[0][i] != '\0' && p2 == 0; i++) {
+                    if (tmp[0][i] == '*') {p2 = i; numAct = 2;}
+                    if (tmp[0][i] == '/') {p2 = i; numAct = 3;}
+                }
+                if (debug) printf("checking for add/sub\n");
+                for (int i = 0; tmp[0][i] != '\0' && p2 == 0; i++) {
+                    if (tmp[0][i] == '+') {p2 = i; numAct = 0;}
+                    if (tmp[0][i] == '-') {p2 = i; numAct = 1;}
+                }
+                if (debug) printf("getVal: p1: [%d], p2: [%d], p3: [%d]\n", p1, p2, p3);
+                if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
+                if (p2 == 0) {
+                    if (debug) printf("no operations found\n");
+                    copyStr(tmp[0], tmp[1]); goto gvfexit;
+                }
+                for (int i = p2 - 1; i > 0; i--) {
+                    if (isSpChar(tmp[0], i)) {p1 = i; break;}
+                }
+                for (int i = p2 + 1; true; i++) {
+                    if (isSpChar(tmp[0], i) || tmp[0][i] == '\0') {p3 = i; break;}
+                }
+                copyStrSnip(tmp[0], p1, p2, tmp[2]);
+                t = getType(tmp[2]);
+                if (t == 0) {cerr = 1; return 0;} else
+                if (t == 255) {t = getVar(tmp[2], tmp[2]); if (t != 2) {cerr = 2; return 0;}}
+                copyStrSnip(tmp[0], p2 + 1, p3, tmp[3]);
+                t = getType(tmp[3]);
+                if (t == 0) {cerr = 1; return 0;} else
+                if (t == 255) {t = getVar(tmp[3], tmp[3]); if (t != 2) {cerr = 2; return 0;}}
+                if (debug) printf("getVal: p1: [%d], p2: [%d], p3: [%d]\n", p1, p2, p3);
+                sscanf(tmp[2], "%lf", &num1);
+                sscanf(tmp[3], "%lf", &num2);
+                if (debug) printf("getVal: num1: [%lf], num2: [%lf]\n", num1, num2);
+                if (debug) printf("getVal: numAct: [%d]\n", numAct);
+                switch (numAct) {
+                    case 0: num3 = num1 + num2; break;
+                    case 1: num3 = num1 - num2; break;
+                    case 2: if (num2 == 0) {cerr = 5; return 0;} num3 = num1 * num2; break;
+                    case 3: num3 = num1 / num2; break;
+                    case 4: num3 = pow(num1, num2); break;
+                }
+                tmp[1][0] = 0;
+                if (debug) printf("getVal: num3: [%lf]\n", num3);                
+                sprintf(tmp[2],"%lf", num3);
+                if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
+                copyStrSnip(tmp[0], p3, strlen(tmp[0]), tmp[3]);
+                if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
+                if (p1 != 0) copyStrSnip(tmp[0], 0, p1 + 1, tmp[1]);
+                if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
+                copyStrApnd(tmp[2], tmp[1]);
+                if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
+                copyStrApnd(tmp[3], tmp[1]);
+                if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
+                copyStr(tmp[1], tmp[0]);
+                if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
+            }
+        }
         if (debug) printf("getVal (4): tmp[1]: {%s}\n", tmp[1]);
         // 
         if (inbuf[jp] == '\0') {break;}
         jp++;
         ip = jp;
     }
+    gvfexit:
     copyStr(tmp[1], outbuf);
     return t;
 }
@@ -402,6 +475,9 @@ int runcmd() {
                 break;
             case 4:
                 printf("Invalid Variable Name: %s", cerrstr);
+                break;
+            case 5:
+                printf("Divide by zero");
                 break;
             case 255:
                 printf("Not a Command: %s", arg[0]);
