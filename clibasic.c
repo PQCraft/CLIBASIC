@@ -10,7 +10,7 @@
 #include <sys/time.h>
 #include <quadmath.h>
 
-char VER[] = "0.4.1";
+char VER[] = "0.4.2";
 
 FILE **f;
 
@@ -288,6 +288,8 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 tmp[1][0] = 0;
                 if (debug) printf("getVal: num3: [%lf]\n", num3);                
                 sprintf(tmp[2],"%lf", num3);
+                while (tmp[2][strlen(tmp[2]) - 1] == '0') {tmp[2][strlen(tmp[2]) - 1] = 0;}
+                if (tmp[2][strlen(tmp[2]) - 1] == '.') {tmp[2][strlen(tmp[2]) - 1] = 0;}
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 copyStrSnip(tmp[0], p3, strlen(tmp[0]), tmp[3]);
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
