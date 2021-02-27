@@ -10,7 +10,7 @@
 #include <sys/time.h>
 #include <quadmath.h>
 
-char VER[] = "0.4.5";
+char VER[] = "0.4.6";
 
 FILE **f;
 
@@ -243,7 +243,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     if (debug) printf("checking for syntax error\n");
     if (isSpChar(inbuf, 0) || isSpChar(inbuf, strlen(inbuf) - 1)) {cerr = 1; return 0;}
     if (debug) printf("no syntax error detected\n");
-    tmp[0][0] = 0; tmp[1][0] = 0;
+    tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
     while (true) {
         if (debug) printf("getVal (1): ip: [%d], jp: [%d]\n", ip, jp);
         bool seenStr = false;
@@ -294,6 +294,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                     if (debug) printf("no operations found\n");
                     copyStr(tmp[0], tmp[1]); goto gvfexit;
                 }
+                tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
                 for (int i = p2 - 1; i > 0; i--) {
                     if (isSpChar(tmp[0], i)) {p1 = i; break;}
                 }
@@ -445,9 +446,8 @@ bool mkargs() {
             cmdpos++;
             if (debug) printf("2t[%d], [%d]: %c (%d)\n", i, cmdpos, cmd[cmdpos], (int)cmd[cmdpos]);
         }
-        tmpargs[i][argl[i]] = '\0';
         exittxloop:
-        if (debug) printf("tmpargs[i]: {%s}\n", tmpargs[i]);
+        if (debug) printf("tmpargs[%d]: {%s}, len: [%d]\n", i, tmpargs[i], argl[i]);
         if (inStr || pct != 0) {cerr = 1; return false;}
         cmdpos++;
         if (cmd[cmdpos + 1] == '\0') hitnull = true;
@@ -457,6 +457,7 @@ bool mkargs() {
     if (debug) printf("argct: %d\n", argct);    
     if (debug) printf("check for blank arg:\n");
     if (argct == 1 && tmpargs[1][0] == '\0') {argct = 0;}
+    for (int i = 0; i <= argct; i++) {tmpargs[i][argl[i]] = '\0';}
     if (debug) printf("solve args:\n");
     return solveargs();
 }
