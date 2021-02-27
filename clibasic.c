@@ -10,7 +10,7 @@
 #include <sys/time.h>
 #include <quadmath.h>
 
-char VER[] = "0.4.2";
+char VER[] = "0.4.3";
 
 FILE **f;
 
@@ -165,6 +165,30 @@ void copyStrApnd(char* str1, char* str2) {
     //if (debug) printf("copyStrApnd: strlen(str2): [%d]\n", (int)strlen(str2));
     for (i = strlen(str2); str1[j] != '\0'; i++) {str2[i] = str1[j]; j++;}
     str2[i] = 0;
+}
+
+void getStr(char* str1, char* str2) {
+    char buf[32768];
+    int j = 0, i;
+    for (i = 0; str1[i] != '\0'; i++) {
+        char c = str1[i];
+        if (c == '\\') {
+            i++;
+            switch (str1[i]) {
+                case 'n': c = '\n'; break;
+                case 'r': c = '\r'; break;
+                case 'f': c = '\f'; break;
+                case 't': c = '\t'; break;
+                case 'b': c = '\b'; break;
+                case '\\': c = '\\'; break;
+                default: i--; break;
+            }
+        }
+        buf[j] = c;
+        j++;
+    }
+    buf[j] = 0;
+    copyStr(buf, str2);
 }
 
 uint8_t getType(char* str) {

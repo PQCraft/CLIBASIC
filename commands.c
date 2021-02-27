@@ -21,14 +21,7 @@ if (!strcmp(arg[0], "CLS")) {
 if (!strcmp(arg[0], "PRINT")) {
     cerr = 0;
     if (debug) printf("CMD[PRINT]: argct: %d\n", argct);
-    for (int i = 1; i <= argct; i++) {printf("%s", arg[i]);}
-    goto cmderr;
-}
-if (!strcmp(arg[0], "PRINTLN")) {
-    cerr = 0;
-    if (debug) printf("CMD[PRINTLN]: argct: %d\n", argct);
-    for (int i = 1; i <= argct; i++) {printf("%s", arg[i]);}
-    printf("\n");
+    for (int i = 1; i <= argct; i++) {getStr(arg[i], arg[i]); printf("%s", arg[i]);}
     goto cmderr;
 }
 if (!strcmp(arg[0], "EXEC") || !strcmp(arg[0], "SH")) {

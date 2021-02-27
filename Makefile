@@ -2,12 +2,24 @@ C = gcc
 
 CFLAGS = -O2
 
+all:
+	rm -f ./clibasic
+	$(C) $(CFLAGS) clibasic.c -o clibasic -lm
+	chmod +x ./clibasic
+	./clibasic
+
+all32:
+	rm -f ./clibasic
+	$(C) $(CFLAGS) -m32 clibasic.c -o clibasic -lm
+	chmod +x ./clibasic
+	./clibasic
+
 build:
-	$(C) $(CFLAGS) clibasic.c -o clibasic
+	$(C) $(CFLAGS) clibasic.c -o clibasic -lm
 	chmod +x ./clibasic
 
 build32:
-	$(C) $(CFLAGS) -m32 clibasic.c -o clibasic
+	$(C) $(CFLAGS) -m32 clibasic.c -o clibasic -lm
 	chmod +x ./clibasic
 
 run:
