@@ -10,7 +10,7 @@
 #include <sys/time.h>
 #include <quadmath.h>
 
-char VER[] = "0.4.3";
+char VER[] = "0.4.4";
 
 FILE **f;
 
@@ -35,6 +35,9 @@ char           **arg;
 uint8_t        *argt;
 int            *argl;
 int        argct = 0;
+
+uint8_t fgc = 7;
+uint8_t bgc = 0;
 
 bool debug = false;
 
@@ -81,6 +84,9 @@ int main(int argc, char *argv[]) {
         }
     }
     if (exit) cleanExit();
+    printf("\e[0m");
+    printf("\e[38;5;%um", fgc);
+    printf("\e[48;5;%um", bgc);
     printf("Command Line Interface BASIC version %s\n", VER);
     if (debug) printf("Running in debug mode\n");
     char conbuf[32768];
@@ -174,16 +180,30 @@ void getStr(char* str1, char* str2) {
         char c = str1[i];
         if (c == '\\') {
             i++;
+            char h[5];
+            unsigned int tc = 0;
             switch (str1[i]) {
                 case 'n': c = '\n'; break;
                 case 'r': c = '\r'; break;
                 case 'f': c = '\f'; break;
                 case 't': c = '\t'; break;
                 case 'b': c = '\b'; break;
+                case 'e': c = '\e'; break;
+                case 'x':
+                    h[0] = '0';
+                    h[1] = str1[i]; i++;
+                    h[2] = str1[i]; i++;
+                    h[3] = str1[i];
+                    h[4] = 0;
+                    sscanf(h, "%x", &tc);
+                    if (debug) printf("getStr: hexstr: {%s}, c: [%d]\n", h, tc);
+                    c = (char)tc;
+                    break;
                 case '\\': c = '\\'; break;
                 default: i--; break;
             }
         }
+        if (debug) printf("getStr: c: [%d], j: [%d]\n", (int)c, j);
         buf[j] = c;
         j++;
     }
