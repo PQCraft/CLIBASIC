@@ -36,6 +36,14 @@ if (!strcmp(arg[0], "COLOR")) {
     printf("\e[48;5;%um", bgc);
     goto cmderr;
 }
+if (!strcmp(arg[0], "SET") || !strcmp(arg[0], "LET")) {
+    cerr = 0;
+    if (argct != 2) {cerr = 3; goto cmderr;}
+    if (argt[1] != argt[2]) {cerr = 2; goto cmderr;}
+    if (getType(tmpargs[1]) != 255) {cerr = 3; goto cmderr;}
+    setVar(tmpargs[1], arg[2], argt[2]);
+    goto cmderr;
+}
 if (!strcmp(arg[0], "CLS")) {
     cerr = 0;
     if (argct > 1) {cerr = 3; goto cmderr;}

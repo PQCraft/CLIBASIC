@@ -116,28 +116,12 @@ int main(int argc, char *argv[]) {
     while (!exit) {
         for (int i = 0; i < 32768; i++) conbuf[i] = 0;
         int cp = 0;
-        /*printf("CLIBASIC> ");
-        char c = 0;
-        while (c != '\n') {
-            c = getchar();
-            if (c == '\0') {} else
-            if (c == EOF) {cleanExit();} else
-            if (c == '\b' && cp > 0) {cp--; conbuf[cp] = 0;} else
-            if (c == '\e') {
-                // Escape code handling code
-            } else
-            if (c == '\n') {conbuf[cp] = 0; goto proccmd;} else
-            {conbuf[cp] = c; cp++;}
-            if (conbuf[0] == '\0') c = 0;
-        }*/
         char *tmpstr;
         tmpstr = malloc(32768);
         getInput(tmpstr);
         copyStr(tmpstr, conbuf);
         free(tmpstr);
-        //proccmd:
         cp = 0;
-        //int cmdp = 0;
         bool inStr = false;
         if (debug) printf("conbuf: {%s}\n", conbuf);
         while (true) {
@@ -262,15 +246,6 @@ uint8_t getVar(char* vn, char* varout) {
     return 0;
 }
 
-/*
-int      *varlen;
-char    **varstr;
-char   **varname;
-bool   *varinuse;
-uint8_t *vartype;
-int     varmaxct;
-*/
-
 void setVar(char* vn, char* val, uint8_t t) {
     if (debug) printf("setVar: vn: {%s}\n", vn);
     if (debug) printf("setVar: val: {%s}\n", val);
@@ -279,7 +254,6 @@ void setVar(char* vn, char* val, uint8_t t) {
         if (!strcmp(vn, varname[i])) {v = i; break;}
     }
     if (v == -1) {
-        //char buf[32768];
         v = varmaxct;
         if (debug) printf("setVar: realloc varstr\n");
         varstr = realloc(varstr, (v + 1) * sizeof(char*));
@@ -354,7 +328,6 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         if ((t != 0 && t != dt)) {cerr = 2; return 0;} else
         if (t == 0) {cerr = 1; return false;}
         if ((dt == 1 && inbuf[jp] != '+') && inbuf[jp] != '\0') {cerr = 1; return 0;}
-        // Solver
         if (debug) printf("getVal (5): tmp[1]: {%s}\n", tmp[1]);
         if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[1]);} else
         if (t == 2) {
@@ -441,9 +414,6 @@ uint8_t getVal(char* inbuf, char* outbuf) {
 }
 
 bool solveargs() {
-    //bool inStr = false;
-    //int pct = 0;
-    //bool hitnull = false;
     if (debug) printf("solveargs: argct: %d\n", argct);
     argt = realloc(argt, argct + 1);
     argt = realloc(argt, argct + 1);
@@ -452,12 +422,6 @@ bool solveargs() {
     char tmpbuf[32768];
     argt[0] = 0;
     arg[0] = tmpargs[0];
-    /*for (int i = 1; i <= argct; i++) {
-        int j = 0;
-        while (tmpargs[i][j] != '\0') {j++;}
-        arg[i] = realloc(arg[i], (j + 1) * sizeof(char));
-        argl[i] = copyStr(tmpargs[i], arg[i]);
-    }*/
     for (int i = 1; i <= argct; i++) {
         if (debug) printf("$ [%d]: %d\n", i, argl[i]);
         argt[i] = 0; // 0 = Unset (for error detection), 1 = string, 2 = number
