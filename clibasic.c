@@ -10,7 +10,16 @@
 #include <sys/time.h>
 #include <quadmath.h>
 
-char VER[] = "0.4.6";
+#include<stdio.h> 
+#include<string.h> 
+#include<stdlib.h> 
+#include<unistd.h> 
+#include<sys/types.h> 
+#include<sys/wait.h> 
+#include<readline/readline.h> 
+#include<readline/history.h> 
+
+char VER[] = "0.5";
 
 FILE **f;
 
@@ -58,7 +67,21 @@ void cleanExit() {
 //    if (debug) printf(":\n");
 
 int runcmd();
+int copyStr(char* str1, char* str2);
 void copyStrSnip(char* str1, int i, int j, char* str2);
+uint8_t getVal(char* inbuf, char* outbuf);
+
+void getInput(char* str) { 
+    char* buf;
+    buf = readline("CLIBASIC> "); 
+    if (strlen(buf) != 0) { 
+        add_history(buf); 
+        copyStr(buf, str); 
+        return; 
+    } else { 
+        return; 
+    } 
+}
 
 int main(int argc, char *argv[]) {
     signal(SIGINT, cleanExit); 
@@ -93,7 +116,7 @@ int main(int argc, char *argv[]) {
     while (!exit) {
         for (int i = 0; i < 32768; i++) conbuf[i] = 0;
         int cp = 0;
-        printf("CLIBASIC> ");
+        /*printf("CLIBASIC> ");
         char c = 0;
         while (c != '\n') {
             c = getchar();
@@ -106,8 +129,13 @@ int main(int argc, char *argv[]) {
             if (c == '\n') {conbuf[cp] = 0; goto proccmd;} else
             {conbuf[cp] = c; cp++;}
             if (conbuf[0] == '\0') c = 0;
-        }
-        proccmd:
+        }*/
+        char *tmpstr;
+        tmpstr = malloc(32768);
+        getInput(tmpstr);
+        copyStr(tmpstr, conbuf);
+        free(tmpstr);
+        //proccmd:
         cp = 0;
         //int cmdp = 0;
         bool inStr = false;
@@ -214,19 +242,71 @@ uint8_t getType(char* str) {
 }
 
 uint8_t getVar(char* vn, char* varout) {
+    if (debug) printf("getVar: vn: {%s}\n", vn);
     if (vn[0] == '\0') return 0;
     int v = -1;
+    if (debug) printf("getVar: v: [%d]\n", v);
     for (int i = 0; i < varmaxct; i++) {
+        if (debug) printf("getVar: i: [%d]\n", i);
         if (varinuse[i] && !strcmp(vn, varname[i])) {v = i; break;}
     }
+    if (debug) printf("getVar: v: [%d]\n", v);
     if (v == -1) {
-        if (vn[strlen(vn) - 1] == '$') {varout = ""; return 1;}
-        else {varout = "0"; return 2;}
+        if (vn[strlen(vn) - 1] == '$') {varout[0] = 0; return 1;}
+        else {varout[0] = '0'; varout[1] = 0; return 2;}
     } else {
-        copyStr(varstr[v], &varout[v]);
+        if (debug) printf("getVar: varstr[%d]: {%s}\n", v, varstr[v]);
+        copyStr(varstr[v], varout);
         return vartype[v];
     }
     return 0;
+}
+
+/*
+int      *varlen;
+char    **varstr;
+char   **varname;
+bool   *varinuse;
+uint8_t *vartype;
+int     varmaxct;
+*/
+
+void setVar(char* vn, char* val, uint8_t t) {
+    if (debug) printf("setVar: vn: {%s}\n", vn);
+    if (debug) printf("setVar: val: {%s}\n", val);
+    int v = -1;
+    for (int i = 0; i < varmaxct; i++) {
+        if (!strcmp(vn, varname[i])) {v = i; break;}
+    }
+    if (v == -1) {
+        //char buf[32768];
+        v = varmaxct;
+        if (debug) printf("setVar: realloc varstr\n");
+        varstr = realloc(varstr, (v + 1) * sizeof(char*));
+        if (debug) printf("setVar: realloc varname\n");
+        varname = realloc(varname, (v + 1) * sizeof(char*));
+        if (debug) printf("setVar: realloc varlen\n");
+        varlen = (int*)realloc(varlen, (v + 1) * sizeof(int));
+        if (debug) printf("setVar: realloc varinuse\n");
+        varinuse = (bool*)realloc(varinuse, (v + 1) * sizeof(bool));
+        varinuse[v] = true;
+        if (debug) printf("setVar: realloc vartype\n");
+        vartype = (uint8_t*)realloc(vartype, (v + 1) * sizeof(uint8_t));
+        varlen[v] = strlen(val);
+        if (debug) printf("setVar: realloc varstr[v]\n");
+        varstr[v] = malloc(0);
+        varstr[v] = (char *)realloc(varstr[v], (varlen[v] + 1) * sizeof(char));
+        if (debug) printf("setVar: realloc varname[v]\n");
+        varname[v] = malloc(0);
+        varname[v] = (char *)realloc(varname[v], (strlen(vn) + 1) * sizeof(char));
+        copyStr(vn, varname[v]);
+        vartype[v] = t;
+        varmaxct++;
+    }
+    if (debug) printf("setVar: val: {%s}\n", val);
+    copyStr(val, varstr[v]);
+    if (debug) printf("setVar: varstr[v]: {%s}\n", varstr[v]);
+    return;
 }
 
 uint8_t getVal(char* inbuf, char* outbuf) {
@@ -258,7 +338,16 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         if (debug) printf("getVal (3): tmp[0]: {%s}\n", tmp[0]);
         t = getType(tmp[0]);
         if (debug) printf("getType: tmp[0]: [%u]\n", t);
-        if (t == 255) {t = getVar(tmp[0], tmp[0]);}
+        if (t == 255) {
+            t = getVar(tmp[0], tmp[0]);
+            if (t == 1) {
+                tmp[2][0] = '"'; tmp[2][1] = 0;
+                copyStr(tmp[0], tmp[3]);
+                copyStr(tmp[2], tmp[0]);
+                copyStrApnd(tmp[3], tmp[0]);
+                copyStrApnd(tmp[2], tmp[0]);
+            }
+        }
         if (debug) printf("getType: tmp[0]: [%u]\n", t);
         if (debug) printf("getVal (4): tmp[0]: {%s}\n", tmp[0]);
         if (t != 0 && dt == 0) {dt = t;} else
@@ -266,7 +355,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         if (t == 0) {cerr = 1; return false;}
         if ((dt == 1 && inbuf[jp] != '+') && inbuf[jp] != '\0') {cerr = 1; return 0;}
         // Solver
-        if (debug) printf("getVal (4): tmp[1]: {%s}\n", tmp[1]);
+        if (debug) printf("getVal (5): tmp[1]: {%s}\n", tmp[1]);
         if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[1]);} else
         if (t == 2) {
             copyStr(inbuf, tmp[0]);
@@ -291,6 +380,11 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 if (debug) printf("getVal: p1: [%d], p2: [%d], p3: [%d]\n", p1, p2, p3);
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 if (p2 == 0) {
+                    if (p3 == 0) {
+                        t = getType(tmp[0]);
+                        if (t == 0) {cerr = 1; return 0;} else
+                        if (t == 255) {t = getVar(tmp[0], tmp[0]); if (t != 2) {cerr = 2; return 0;}}
+                    }
                     if (debug) printf("no operations found\n");
                     copyStr(tmp[0], tmp[1]); goto gvfexit;
                 }
@@ -335,7 +429,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
             }
         }
-        if (debug) printf("getVal (4): tmp[1]: {%s}\n", tmp[1]);
+        if (debug) printf("getVal (6): tmp[1]: {%s}\n", tmp[1]);
         // 
         if (inbuf[jp] == '\0') {break;}
         jp++;
@@ -352,6 +446,8 @@ bool solveargs() {
     //bool hitnull = false;
     if (debug) printf("solveargs: argct: %d\n", argct);
     argt = realloc(argt, argct + 1);
+    argt = realloc(argt, argct + 1);
+    arg = realloc(arg, (argct + 1) * sizeof(char*));
     arg = realloc(arg, (argct + 1) * sizeof(char*));
     char tmpbuf[32768];
     argt[0] = 0;
@@ -369,7 +465,8 @@ bool solveargs() {
         argt[i] = getVal(tmpargs[i], tmpbuf);
         if (debug) printf("solveargs: argt[%d]: %d\n", i, argt[i]);
         if (argt[i] == 0) return false;
-        arg[i] = (char*)realloc(arg[i], (strlen(tmpbuf) + 1) * sizeof(char));
+        //arg[i] = (char*)realloc(arg[i], (strlen(tmpbuf) + 1) * sizeof(char));
+        arg[i] = (char*)malloc((strlen(tmpbuf) + 1) * sizeof(char));
         copyStr(tmpbuf, arg[i]);
         argl[i] = strlen(arg[i]);
     }
@@ -416,18 +513,20 @@ bool mkargs() {
     hitnull = false;
     cmdpos = 0;
     if (debug) printf("argct: %d\n", argct);
-    tmpargs = realloc(tmpargs, (argct + 1) * sizeof(char*));
+    //tmpargs = realloc(tmpargs, (argct + 1) * sizeof(char*));
+    tmpargs = malloc((argct + 1) * sizeof(char*));
     if (debug) printf("allocate tmpargs size:\n");
     if (debug) {for (int i = 0; i <= argct; i++) {printf("realloc size [%d]: %d\n", i, argl[i] + 1);}}
     if (debug) printf("allocating tmpargs:\n");
     for (int i = 0; i <= argct; i++) {
         if (debug) printf("realloc size [%d]: %d\n", i, argl[i] + 1);
-        tmpargs[i] = (char*)realloc(tmpargs[i], (argl[i] + 1) * sizeof(char));
+        //tmpargs[i] = (char*)realloc(tmpargs[i], (argl[i] + 1) * sizeof(char));
+        tmpargs[i] = (char*)malloc((argl[i] + 1) * sizeof(char));
     }
     if (debug) printf("put args in arg containers:\n");
     for (int i = 0; i <= argct; i++) {
         int argpos = 0;
-        while (argpos <= argl[i]) {
+        while (argpos <= argl[i] && cmd[cmdpos] != '\0') {
             if (debug) printf("1t[%d], [%d]: %c [%d]\n", i, cmdpos, cmd[cmdpos], argct);
             if (i == 0) {
                 while (cmd[cmdpos] == ' ' && argl[0] == 0) {if (debug) {printf("FOUND SPACE\n");} cmdpos++;}
@@ -447,6 +546,7 @@ bool mkargs() {
             if (debug) printf("2t[%d], [%d]: %c (%d)\n", i, cmdpos, cmd[cmdpos], (int)cmd[cmdpos]);
         }
         exittxloop:
+        tmpargs[i][argl[i]] = '\0';
         if (debug) printf("tmpargs[%d]: {%s}, len: [%d]\n", i, tmpargs[i], argl[i]);
         if (inStr || pct != 0) {cerr = 1; return false;}
         cmdpos++;
@@ -515,5 +615,9 @@ int runcmd() {
         }
         printf("\n");
     }
+    for (int i = 0; i <= argct; i++) {
+        free(tmpargs[i]);
+    }
+    free(tmpargs);    
     return cerr;
 }
