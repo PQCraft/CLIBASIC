@@ -9,17 +9,9 @@
 #include <inttypes.h>
 #include <sys/time.h>
 #include <quadmath.h>
+#include <editline.h>
 
-#include<stdio.h> 
-#include<string.h> 
-#include<stdlib.h> 
-#include<unistd.h> 
-#include<sys/types.h> 
-#include<sys/wait.h> 
-#include<readline/readline.h> 
-#include<readline/history.h> 
-
-char VER[] = "0.7.1";
+char VER[] = "0.8";
 
 FILE **f;
 
@@ -72,18 +64,6 @@ int copyStr(char* str1, char* str2);
 void copyStrSnip(char* str1, int i, int j, char* str2);
 uint8_t getVal(char* inbuf, char* outbuf);
 
-void getInput(char* str) { 
-    char* buf;
-    buf = readline("CLIBASIC> "); 
-    if (strlen(buf) != 0) { 
-        add_history(buf); 
-        copyStr(buf, str); 
-        return; 
-    } else { 
-        return; 
-    } 
-}
-
 int main(int argc, char *argv[]) {
     signal(SIGINT, cleanExit); 
     signal(SIGKILL, cleanExit); 
@@ -115,12 +95,15 @@ int main(int argc, char *argv[]) {
     if (debug) printf("Running in debug mode\n");
     char conbuf[32768];
     fstr = malloc(0);
+    cmd = malloc(0);
+    //arg = malloc(0);
+    //argt = malloc(0);
     while (!exit) {
         for (int i = 0; i < 32768; i++) conbuf[i] = 0;
         int cp = 0;
-        char *tmpstr;
-        tmpstr = malloc(32768);
-        getInput(tmpstr);
+        char *tmpstr = NULL;
+        putc('\r', stdout);
+        while (tmpstr == NULL) {tmpstr = readline("CLIBASIC> ");}
         copyStr(tmpstr, conbuf);
         free(tmpstr);
         cp = 0;
@@ -143,7 +126,7 @@ int main(int argc, char *argv[]) {
             if (debug) printf("cmdpoc(2): cp:[%d], cmdl:[%d], char:[%c](%d)\n", cp, cmdl, conbuf[cp], (int)conbuf[cp]);
         }
         brkproccmd:
-        if (0) {};
+        if (0) {}
     }
     cleanExit();
     return 0;
@@ -244,8 +227,11 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     if (debug) printf("getFunc: i: [%d]\n", i);
     copyStrSnip(inbuf, i + 1, strlen(inbuf) - 1, tmp[0]);
     fargct = getArgCt(tmp[0]);
+    if (debug) printf("getFunc: malloc farg:\n");
     farg = malloc((fargct + 1) * sizeof(char*));
+    if (debug) printf("getFunc: malloc flen:\n");
     flen = malloc((fargct + 1) * sizeof(int));
+    if (debug) printf("getFunc: malloc fargt:\n");
     fargt = malloc((fargct + 1) * sizeof(uint8_t));
     if (debug) printf("getFunc: fargct: [%d]\n", fargct);
     for (int j = 0; j <= fargct; j++) {
@@ -512,10 +498,10 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
 
 bool solveargs() {
     if (debug) printf("solveargs: argct: %d\n", argct);
-    argt = realloc(argt, argct + 1);
     //argt = realloc(argt, argct + 1);
-    arg = realloc(arg, (argct + 1) * sizeof(char*));
+    argt = malloc(argct + 1);
     //arg = realloc(arg, (argct + 1) * sizeof(char*));
+    arg = malloc((argct + 1) * sizeof(char*));
     char tmpbuf[32768];
     argt[0] = 0;
     arg[0] = tmpargs[0];
@@ -525,10 +511,11 @@ bool solveargs() {
         for (int p = 0; p < 32767; p++) {tmpbuf[p] = 0;}
         argt[i] = getVal(tmpargs[i], tmpbuf);
         if (debug) printf("solveargs: argt[%d]: %d\n", i, argt[i]);
+        if (debug) printf("solveargs: argl[%d]: %d\n", i, argl[i]);
         if (argt[i] == 0) return false;
         if (argt[i] == 255) {argt[i] = 0;}
         //arg[i] = (char*)realloc(arg[i], (strlen(tmpbuf) + 1) * sizeof(char));
-        arg[i] = (char*)malloc((strlen(tmpbuf) + 1) * sizeof(char));
+        arg[i] = malloc((argl[i] + 1) * sizeof(char));
         copyStr(tmpbuf, arg[i]);
         argl[i] = strlen(arg[i]);
     }
@@ -579,19 +566,21 @@ bool mkargs() {
     argct = getArgCt(tmpbuf[0]);
     if (debug) printf("mkargs: argct: [%d]\n", argct);
     tmpargs = malloc((argct + 1) * sizeof(char*));
-    argl = realloc(argl, (argct + 1) * sizeof(int));
+    argl = malloc((argct + 1) * sizeof(int));
     for (int i = 0; i <= argct; i++) {
         argl[i] = 0;
         if (debug) printf("realloc size [%d]: %d\n", i, argl[i] + 1);
-        tmpargs[i] = (char*)malloc((argl[i] + 1) * sizeof(char));
         if (i == 0) {
-            copyStrSnip(cmd, j, h, tmpargs[0]);
-            argl[i] = strlen(tmpargs[0]);
+            copyStrSnip(cmd, j, h, tmpbuf[0]);
+            argl[i] = strlen(tmpbuf[0]);
+            tmpargs[i] = malloc((argl[i] + 1) * sizeof(char));
+            copyStr(tmpbuf[0], tmpargs[i]);            
+            copyStrSnip(cmd, h + 1, strlen(cmd), tmpbuf[0]);
         } else {
-            argl[i] = 0;
             tmplen = getArg(i - 1, tmpbuf[0], tmpbuf[1]);
             if (tmplen == -1) {cerr = 1; return false;}
             argl[i] = tmplen;
+            tmpargs[i] = malloc((argl[i] + 1) * sizeof(char));
             copyStr(tmpbuf[1], tmpargs[i]);
         }
         tmpargs[i][argl[i]] = '\0';
@@ -654,11 +643,17 @@ int runcmd() {
                 printf("Not a Command: %s", arg[0]);
                 break;
         }
-        printf("\n");
+        putc('\n', stdout);
     }
     for (int i = 0; i <= argct; i++) {
         free(tmpargs[i]);
     }
+    for (int i = 1; i <= argct; i++) {
+        free(arg[i]);
+    }
     free(tmpargs);    
+    free(argl);    
+    free(argt);    
+    free(arg);    
     return cerr;
 }
