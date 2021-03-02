@@ -9,10 +9,9 @@
 #include <stdbool.h>
 #include <inttypes.h>
 #include <sys/time.h>
-#include <quadmath.h>
 #include <editline.h>
 
-char VER[] = "0.8.1";
+char VER[] = "0.8.2";
 
 FILE *prog;
 FILE *f[256];
@@ -61,8 +60,6 @@ void cleanExit() {
     exit(err);
 }
 
-//    if (debug) printf(":\n");
-
 int runcmd();
 int copyStr(char* str1, char* str2);
 void copyStrSnip(char* str1, int i, int j, char* str2);
@@ -74,7 +71,6 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, cleanExit); 
     bool exit = false;
     for (int i = 1; i < argc; i++) {
-        //printf("%d: [%s]\n", i, argv[i]);
         if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
             printf("Command Line Interface BASIC version %s\n", VER);
             printf("Copyright (C) PQCraft 2021\n");
@@ -103,8 +99,6 @@ int main(int argc, char *argv[]) {
     fstr = malloc(0);
     cmd = malloc(0);
     srand(time(0));
-    //arg = malloc(0);
-    //argt = malloc(0);
     while (!exit) {
         for (int i = 0; i < 32768; i++) conbuf[i] = 0;
         int cp = 0;
@@ -517,9 +511,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
 
 bool solveargs() {
     if (debug) printf("solveargs: argct: %d\n", argct);
-    //argt = realloc(argt, argct + 1);
     argt = malloc(argct + 1);
-    //arg = realloc(arg, (argct + 1) * sizeof(char*));
     arg = malloc((argct + 1) * sizeof(char*));
     char tmpbuf[32768];
     argt[0] = 0;
@@ -534,7 +526,6 @@ bool solveargs() {
         arg[i] = malloc((argl[i] + 1) * sizeof(char));
         if (argt[i] == 0) return false;
         if (argt[i] == 255) {argt[i] = 0;}
-        //arg[i] = (char*)realloc(arg[i], (strlen(tmpbuf) + 1) * sizeof(char));
         copyStr(tmpbuf, arg[i]);
         argl[i] = strlen(arg[i]);
     }
