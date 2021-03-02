@@ -19,7 +19,7 @@
 #include<readline/readline.h> 
 #include<readline/history.h> 
 
-char VER[] = "0.6.2";
+char VER[] = "0.7";
 
 FILE **f;
 
@@ -37,15 +37,17 @@ bool   *varinuse;
 uint8_t *vartype;
 int     varmaxct;
 
-char            *cmd;
-int             cmdl;
-char       **tmpargs;
-char           **arg;
-uint8_t        *argt;
-int            *argl;
-int        argct = 0;
+char      *cmd;
+int       cmdl;
+char **tmpargs;
+char     **arg;
+uint8_t  *argt;
+int      *argl;
+int  argct = 0;
 
-uint8_t fgc = 7;
+char *fstr;
+
+uint8_t fgc = 15;
 uint8_t bgc = 0;
 
 bool debug = false;
@@ -113,6 +115,7 @@ int main(int argc, char *argv[]) {
     printf("Command Line Interface BASIC version %s\n", VER);
     if (debug) printf("Running in debug mode\n");
     char conbuf[32768];
+    fstr = malloc(0);
     while (!exit) {
         for (int i = 0; i < 32768; i++) conbuf[i] = 0;
         int cp = 0;
@@ -226,14 +229,69 @@ uint8_t getType(char* str) {
 }
 
 uint8_t getVal(char* inbuf, char* outbuf);
+int getArg(int num, char* inbuf, char* outbuf);
+int getArgCt(char* inbuf);
+
+uint8_t getFunc(char* inbuf, char* outbuf) {
+    if (debug) printf("getFunc: inbuf: {%s}\n", inbuf);
+    char tmp[2][32768];
+    char **farg;
+    uint8_t *fargt;
+    int *flen;
+    int fargct;
+    int ftype = 0;
+    int i;
+    for (i = 0; inbuf[i] != '('; i++) {if (inbuf[i] >= 'a' && inbuf[i] <= 'z') inbuf[i] = inbuf[i] - 32;}
+    if (debug) printf("getFunc: i: [%d]\n", i);
+    copyStrSnip(inbuf, i + 1, strlen(inbuf) - 1, tmp[0]);
+    fargct = getArgCt(tmp[0]);
+    farg = malloc((fargct + 1) * sizeof(char*));
+    flen = malloc((fargct + 1) * sizeof(int));
+    fargt = malloc((fargct + 1) * sizeof(uint8_t));
+    if (debug) printf("getFunc: fargct: [%d]\n", fargct);
+    for (int j = 0; j <= fargct; j++) {
+        if (debug) printf("getFunc: tmp[0]: {%s}\n", tmp[0]);
+        if (debug) printf("getFunc: tmp[1]: {%s}\n", tmp[1]);
+        if (j == 0) {
+            flen[0] = i;
+            farg[0] = (char *)malloc((flen[0] + 1) * sizeof(char));
+            fstr = realloc(fstr, (flen[0] + 1) * sizeof(char));
+            copyStrSnip(inbuf, 0, i, farg[0]);
+            copyStrSnip(inbuf, 0, i, fstr);
+        } else {
+            flen[j] = getArg(j - 1, tmp[0], tmp[1]);
+            if (debug) printf("getFunc: tmp[0]: {%s}\n", tmp[0]);
+            if (debug) printf("getFunc: tmp[1]: {%s}\n", tmp[1]);
+            farg[j] = (char *)malloc((flen[j] + 1) * sizeof(char));
+            fargt[j] = getVal(tmp[1], farg[j]);
+            if (fargt[j] == 0) goto fexit;
+            if (fargt[j] == 255) fargt[j] = 0;
+        }
+        if (debug) printf("getFunc: inbuf: {%s}\n", inbuf);
+        if (debug) printf("getFunc: flen[%d]: [%d]\n", j, flen[j]);
+        if (debug) printf("getFunc: farg[%d]: {%s}\n", j, farg[j]);
+    }
+    outbuf[0] = 0;
+    cerr = 127;
+    #include "functions.c"
+    fexit:
+    for (int j = 0; j <= fargct; j++) {
+        free(farg[j]);
+    }
+    free(farg);
+    free(flen);
+    free(fargt);
+    if (debug) printf("getFunc: outbuf: {%s}\n", outbuf);
+    if (debug) printf("getFunc: fstr: {%s}\n", fstr);
+    if (cerr != 0) return 0;
+    return ftype;
+}
 
 uint8_t getVar(char* vn, char* varout) {
     if (debug) printf("getVar: vn: {%s}\n", vn);
-    /*if (vn[0] == '(' && vn[strlen(vn) - 1] == ')') {
-        char tmpbuf[32768];
-        copyStrSnip(vn, 1, strlen(vn) - 1, tmpbuf);
-        return getVal(tmpbuf, varout);
-    }*/
+    if (vn[strlen(vn) - 1] == ')') {
+        return getFunc(vn, varout);
+    }
     if (vn[0] == '\0') return 0;
     int v = -1;
     if (debug) printf("getVar: v: [%d]\n", v);
@@ -351,6 +409,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
         if (debug) printf("getType: tmp[0]: [%u]\n", t);
         if (t == 255) {
             t = getVar(tmp[0], tmp[0]);
+            if (t == 0) {return 0;}
             if (t == 1) {
                 tmp[2][0] = '"'; tmp[2][1] = 0;
                 copyStr(tmp[0], tmp[3]);
@@ -455,9 +514,9 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
 bool solveargs() {
     if (debug) printf("solveargs: argct: %d\n", argct);
     argt = realloc(argt, argct + 1);
-    argt = realloc(argt, argct + 1);
+    //argt = realloc(argt, argct + 1);
     arg = realloc(arg, (argct + 1) * sizeof(char*));
-    arg = realloc(arg, (argct + 1) * sizeof(char*));
+    //arg = realloc(arg, (argct + 1) * sizeof(char*));
     char tmpbuf[32768];
     argt[0] = 0;
     arg[0] = tmpargs[0];
@@ -495,6 +554,7 @@ int getArg(int num, char* inbuf, char* outbuf) {
     int pct = 0;
     int ct = 0;
     int len = 0;
+    if (debug) printf("getArg: inbuf: {%s}\n", inbuf);
     for (int i = 0; inbuf[i] != '\0' && ct <= num; i++) {
         if (inbuf[i] == '(' && !inStr) {pct++;}
         if (inbuf[i] == ')' && !inStr) {pct--;}
@@ -587,6 +647,9 @@ int runcmd() {
                 break;
             case 5:
                 printf("Divide by zero");
+                break;
+            case 127:
+                printf("Not a Function: %s", fstr);
                 break;
             case 255:
                 printf("Not a Command: %s", arg[0]);
