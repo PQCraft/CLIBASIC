@@ -1,9 +1,10 @@
+// '$' IS RESERVED FOR SYSTEM COMMANDS (COMMANDS THAT CHANGE CLIBASIC INTERNAL VARIABLES)
 if (!strcmp(arg[0], "FOO") || !strcmp(arg[0], "FOOBAR")) {
     cerr = 0;
     if (debug) printf("CMD[FOO/FOOBAR]: argct: [%d]\n", argct);
     goto cmderr;
 }
-if (!strcmp(arg[0], "EXIT")) {
+if (!strcmp(arg[0], "EXIT") || !strcmp(arg[0], "QUIT")) {
     cerr = 0;
     if (argct == 1) err = atoi(arg[1]); 
     if (argct > 1) {cerr = 3; goto cmderr;}
@@ -56,5 +57,12 @@ if (!strcmp(arg[0], "CLS")) {
         tbgc = (uint8_t)atoi(arg[1]);
     }
     printf("\e[48;5;%um\e[0;0H\e[2J\e[48;5;%um", tbgc, bgc);
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$PROMPT")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    copyStr(tmpargs[1], prompt);
     goto cmderr;
 }

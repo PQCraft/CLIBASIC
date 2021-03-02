@@ -1,7 +1,7 @@
 C = gcc
 
 CFLAGS1 = -Wall -Wextra -O2
-CFLAGS2 = -lm -leditline -lncurses
+CFLAGS2 = -lm -ledit
 
 all:
 	rm -f ./clibasic

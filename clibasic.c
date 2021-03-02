@@ -1,4 +1,5 @@
 #include <math.h>
+#include <time.h>
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
@@ -11,9 +12,10 @@
 #include <quadmath.h>
 #include <editline.h>
 
-char VER[] = "0.8";
+char VER[] = "0.8.1";
 
-FILE **f;
+FILE *prog;
+FILE *f[256];
 
 int      err = 0;
 int         cerr;
@@ -39,21 +41,23 @@ int  argct = 0;
 
 char *fstr;
 
+char prompt[32768];
+
 uint8_t fgc = 15;
 uint8_t bgc = 0;
 
 bool debug = false;
 
 void forceExit() {
-    printf("\n");
-    exit(255);
+    //printf("\n");
+    exit(0);
 }
 
 void cleanExit() {
     signal(SIGINT, forceExit);
     signal(SIGKILL, forceExit);
     signal(SIGTERM, forceExit);
-    printf("\e[0m\n");
+    printf("\e[0m\r\n");
     exit(err);
 }
 
@@ -94,8 +98,11 @@ int main(int argc, char *argv[]) {
     printf("Command Line Interface BASIC version %s\n", VER);
     if (debug) printf("Running in debug mode\n");
     char conbuf[32768];
+    char pstr[32768];
+    strcpy(prompt, "\"CLIBASIC> \"");
     fstr = malloc(0);
     cmd = malloc(0);
+    srand(time(0));
     //arg = malloc(0);
     //argt = malloc(0);
     while (!exit) {
@@ -103,7 +110,12 @@ int main(int argc, char *argv[]) {
         int cp = 0;
         char *tmpstr = NULL;
         putc('\r', stdout);
-        while (tmpstr == NULL) {tmpstr = readline("CLIBASIC> ");}
+        int tmpt = getVal(prompt, pstr);
+        if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
+        while (tmpstr == NULL) {tmpstr = readline(pstr);}
+        if (debug) printf("check for null:\n");
+        if (tmpstr[0] == '\0') {free(tmpstr); goto brkproccmd;}
+        add_history(tmpstr);
         copyStr(tmpstr, conbuf);
         free(tmpstr);
         cp = 0;
@@ -130,6 +142,13 @@ int main(int argc, char *argv[]) {
     }
     cleanExit();
     return 0;
+}
+
+double randNum(double num1, double num2) 
+{
+    double range = num2 - num1;
+    double div = RAND_MAX / range;
+    return num1 + (rand() / div);
 }
 
 bool isSpChar(char* bfr, int pos) {
@@ -471,7 +490,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                 }
                 tmp[1][0] = 0;
                 if (debug) printf("getVal: num3: [%lf]\n", num3);                
-                sprintf(tmp[2],"%lf", num3);
+                sprintf(tmp[2], "%lf", num3);
                 while (tmp[2][strlen(tmp[2]) - 1] == '0') {tmp[2][strlen(tmp[2]) - 1] = 0;}
                 if (tmp[2][strlen(tmp[2]) - 1] == '.') {tmp[2][strlen(tmp[2]) - 1] = 0;}
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
@@ -492,7 +511,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
     gvfexit:
     //if (dt == 0) {dt = 2; tmp[1][0] = '0'; tmp[1][1] = '\0';}
     copyStr(tmp[1], outbuf);
-    if (outbuf[0] == '\0') {outbuf[0] = '0'; outbuf[1] = '\0'; return 2;}
+    if (outbuf[0] == '\0' && dt != 1) {outbuf[0] = '0'; outbuf[1] = '\0'; return 2;}
     return dt;
 }
 
@@ -512,10 +531,10 @@ bool solveargs() {
         argt[i] = getVal(tmpargs[i], tmpbuf);
         if (debug) printf("solveargs: argt[%d]: %d\n", i, argt[i]);
         if (debug) printf("solveargs: argl[%d]: %d\n", i, argl[i]);
+        arg[i] = malloc((argl[i] + 1) * sizeof(char));
         if (argt[i] == 0) return false;
         if (argt[i] == 255) {argt[i] = 0;}
         //arg[i] = (char*)realloc(arg[i], (strlen(tmpbuf) + 1) * sizeof(char));
-        arg[i] = malloc((argl[i] + 1) * sizeof(char));
         copyStr(tmpbuf, arg[i]);
         argl[i] = strlen(arg[i]);
     }
