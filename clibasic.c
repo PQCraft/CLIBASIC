@@ -19,7 +19,7 @@
 #include<readline/readline.h> 
 #include<readline/history.h> 
 
-char VER[] = "0.7";
+char VER[] = "0.7.1";
 
 FILE **f;
 
@@ -61,8 +61,7 @@ void cleanExit() {
     signal(SIGINT, forceExit);
     signal(SIGKILL, forceExit);
     signal(SIGTERM, forceExit);
-    fflush(stdout);
-    printf("\n");
+    printf("\e[0m\n");
     exit(err);
 }
 
