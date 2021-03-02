@@ -25,11 +25,13 @@ if (!strcmp(arg[0], "PRINT")) {
 if (!strcmp(arg[0], "COLOR")) {
     cerr = 0;
     if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
+    if (argt[1] == 0) {} else
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
-    fgc = (uint8_t)atoi(arg[1]);
+    else {fgc = (uint8_t)atoi(arg[1]);}
     if (argct > 1) {
+        if (argt[2] == 0) {} else
         if (argt[2] != 2) {cerr = 2; goto cmderr;}
-        bgc = (uint8_t)atoi(arg[2]);
+        else {bgc = (uint8_t)atoi(arg[2]);}
     }
     if (debug) printf("CMD[COLOR]: fgc: [%u], bgc: [%u]\n", fgc, bgc);
     printf("\e[38;5;%um", fgc);
@@ -38,6 +40,7 @@ if (!strcmp(arg[0], "COLOR")) {
 }
 if (!strcmp(arg[0], "SET") || !strcmp(arg[0], "LET")) {
     cerr = 0;
+    if (argt[1] == 0) {cerr = 3; goto cmderr;}
     if (argct != 2) {cerr = 3; goto cmderr;}
     if (argt[1] != argt[2]) {cerr = 2; goto cmderr;}
     if (getType(tmpargs[1]) != 255) {cerr = 3; goto cmderr;}

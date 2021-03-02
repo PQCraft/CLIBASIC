@@ -19,7 +19,7 @@
 #include<readline/readline.h> 
 #include<readline/history.h> 
 
-char VER[] = "0.6.1";
+char VER[] = "0.6.2";
 
 FILE **f;
 
@@ -291,7 +291,7 @@ void setVar(char* vn, char* val, uint8_t t) {
 }
 
 uint8_t getVal(char* tmpinbuf, char* outbuf) {
-    if (tmpinbuf[0] == '\0') {outbuf[0] = '0'; outbuf[1] = '\0'; return 2;}
+    if (tmpinbuf[0] == '\0') {return 255;}
     char inbuf[32768];
     copyStr(tmpinbuf, inbuf);
     if (debug) printf("getVal: inbuf: {%s}\n", inbuf);
@@ -313,7 +313,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
         if (inbuf[i] == '(') {if (tmpct == 0) {ip = i;} tmpct++;}
         if (inbuf[i] == ')') {
             tmpct--;
-            if (tmpct == 0) {
+            if (tmpct == 0 && (ip == 0 || isSpChar(inbuf, ip - 1))) {
                 jp = i;
                 copyStrSnip(inbuf, ip + 1, jp, tmp[0]);
                 t = getVal(tmp[0], tmp[0]);
@@ -448,6 +448,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
     gvfexit:
     //if (dt == 0) {dt = 2; tmp[1][0] = '0'; tmp[1][1] = '\0';}
     copyStr(tmp[1], outbuf);
+    if (outbuf[0] == '\0') {outbuf[0] = '0'; outbuf[1] = '\0'; return 2;}
     return dt;
 }
 
@@ -467,6 +468,7 @@ bool solveargs() {
         argt[i] = getVal(tmpargs[i], tmpbuf);
         if (debug) printf("solveargs: argt[%d]: %d\n", i, argt[i]);
         if (argt[i] == 0) return false;
+        if (argt[i] == 255) {argt[i] = 0;}
         //arg[i] = (char*)realloc(arg[i], (strlen(tmpbuf) + 1) * sizeof(char));
         arg[i] = (char*)malloc((strlen(tmpbuf) + 1) * sizeof(char));
         copyStr(tmpbuf, arg[i]);
@@ -563,10 +565,8 @@ int runcmd() {
     // COMMANDS START
     #include "commands.c"
     // COMMANDS END
-    /*if (inProg) {printf("Line %u: ");}*/
-    if (debug) printf("cerr: %d\n", cerr);
     cmderr:
-    if (debug) printf("cerr: %d\n", cerr);
+    /*if (inProg) {printf("Line %u: ");}*/
     if (cerr != 0) {
         printf("ERROR %d: ", cerr);
         switch (cerr) {
