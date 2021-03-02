@@ -1,25 +1,26 @@
 C = gcc
 
-CFLAGS = -O2
+CFLAGS1 = -Wall -Wextra -O2
+CFLAGS2 = -lm -leditline -lncurses
 
 all:
 	rm -f ./clibasic
-	$(C) $(CFLAGS) clibasic.c -o clibasic -lm -lreadline
+	$(C) $(CFLAGS1) clibasic.c -o clibasic $(CFLAGS2)
 	chmod +x ./clibasic
 	./clibasic
 
 all32:
 	rm -f ./clibasic
-	$(C) $(CFLAGS) -m32 clibasic.c -o clibasic -lm -lreadline
+	$(C) $(CFLAGS1) -m32 clibasic.c -o clibasic $(CFLAGS2)
 	chmod +x ./clibasic
 	./clibasic
 
 build:
-	$(C) $(CFLAGS) clibasic.c -o clibasic -lm -lreadline
+	$(C) $(CFLAGS1) clibasic.c -o clibasic $(CFLAGS2)
 	chmod +x ./clibasic
 
 build32:
-	$(C) $(CFLAGS) -m32 clibasic.c -o clibasic -lm -lreadline
+	$(C) $(CFLAGS1) -m32 clibasic.c -o clibasic $(CFLAGS2)
 	chmod +x ./clibasic
 
 run:
