@@ -7,4 +7,4 @@ To build, use `make clean build`. <br>
 To build and run, use `make clean build run`. <br>
 To build and run while displaying debug info, use `make clean build debug`. <br>
 <br>
-Requred packages: `libedit-dev`, `ncurses-dev`
+Requred packages: `libeditline-dev`
