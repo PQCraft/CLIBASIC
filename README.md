@@ -5,7 +5,8 @@ To build, use `make clean build`. <br>
 To build and run, use `make clean build run`. <br>
 To build and run while displaying debug info, use `make clean build debug`. <br>
 <br>
-Requred packages: `libeditline-dev` <br>
+**Requred packages:** <br>
+Debian/Ubuntu: `libedit-dev` `libeditline-dev` <br>
 <br>
 **NOTES:** <br>
 The prompt prints \r before printing out the text as an editline bug workaround, <br>
