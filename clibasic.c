@@ -11,7 +11,7 @@
 #include <sys/time.h>
 #include <editline.h>
 
-char VER[] = "0.8.4";
+char VER[] = "0.8.5";
 
 FILE *prog;
 FILE *f[256];
@@ -299,7 +299,14 @@ uint8_t getVar(char* vn, char* varout) {
     if (vn[strlen(vn) - 1] == ')') {
         return getFunc(vn, varout);
     }
-    for (int i = 0; vn[i] != '\0'; i++) {if (!isValidVarChar(vn, i)) {cerr = 4; return 0;} if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] = vn[i] - 32;}
+    for (int i = 0; vn[i] != '\0'; i++) {
+        if (!isValidVarChar(vn, i)) {
+            cerr = 4;
+            fstr = realloc(fstr, (strlen(vn) + 1) * sizeof(char));
+            copyStr(vn, fstr);
+        }
+        if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] = vn[i] - 32;
+    }
     int v = -1;
     if (debug) printf("getVar: v: [%d]\n", v);
     for (int i = 0; i < varmaxct; i++) {
@@ -421,10 +428,13 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
     while (true) {
         if (debug) printf("getVal (1): ip: [%d], jp: [%d]\n", ip, jp);
         bool seenStr = false;
+        int pct = 0;
         while (true) {
             if (debug) printf("getVal (2): ip: [%d], jp: [%d]\n", ip, jp);
             if (inbuf[jp] == '"') {inStr = !inStr; if (seenStr && inStr) {cerr = 1; return 0;} seenStr = true;}
-            if ((isSpChar(inbuf, jp) && !inStr) || inbuf[jp] == '\0') goto gvbrk;
+            if (inbuf[jp] == '(') {pct++;}
+            if (inbuf[jp] == ')') {pct--;}
+            if ((isSpChar(inbuf, jp) && !inStr && pct == 0) || inbuf[jp] == '\0') goto gvbrk;
             jp++;
         }
         gvbrk:
@@ -455,25 +465,32 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
             copyStr(inbuf, tmp[0]);
             int p1, p2, p3;
             bool inStr = false;
+            pct = 0;
             while (true) {
                 numAct = 0;
                 p1 = 0, p2 = 0, p3 = 0;
                 if (debug) printf("checking for exp\n");
                 for (int i = 0; tmp[0][i] != '\0' && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '^' && !inStr) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 4;}
+                    if (tmp[0][i] == '(') {pct++;}
+                    if (tmp[0][i] == ')') {pct--;}
+                  if (tmp[0][i] == '^' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 4;}
                 }
                 if (debug) printf("checking for mlt/dvd\n");
                 for (int i = 0; tmp[0][i] != '\0' && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '*' && !inStr) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 2;}
-                    if (tmp[0][i] == '/' && !inStr) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 3;}
+                    if (tmp[0][i] == '(') {pct++;}
+                    if (tmp[0][i] == ')') {pct--;}
+                    if (tmp[0][i] == '*' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 2;}
+                    if (tmp[0][i] == '/' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 3;}
                 }
                 if (debug) printf("checking for add/sub\n");
                 for (int i = 0; tmp[0][i] != '\0' && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '+' && !inStr) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 0;}
-                    if (tmp[0][i] == '-' && !inStr) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 1;}
+                    if (tmp[0][i] == '(') {pct++;}
+                    if (tmp[0][i] == ')') {pct--;}
+                    if (tmp[0][i] == '+' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 0;}
+                    if (tmp[0][i] == '-' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 1;}
                 }
                 inStr = false;
                 if (debug) printf("getVal: p1: [%d], p2: [%d], p3: [%d]\n", p1, p2, p3);
