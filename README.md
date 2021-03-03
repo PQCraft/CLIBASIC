@@ -7,6 +7,8 @@ To build and run while displaying debug info, use `make clean build debug`. <br>
 <br>
 **Requred packages:** <br>
 Debian/Ubuntu: `libedit-dev` `libeditline-dev` <br>
+Apline: `libedit-dev` `editline-dev` <br>
+Arch: `libedit` `editline` <br>
 <br>
 **NOTES:** <br>
 The prompt prints \r before printing out the text as an editline bug workaround, <br>
