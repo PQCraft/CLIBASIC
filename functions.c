@@ -65,7 +65,7 @@ if (!strcmp(farg[0], "CINT")) {
     sprintf(outbuf, "%d", (int)dbl);
     goto fexit;
 }
-if (!strcmp(farg[0], "STR")) {
+if (!strcmp(farg[0], "STR$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 1) {cerr = 3; goto fexit;}
@@ -83,5 +83,19 @@ if (!strcmp(farg[0], "VAL")) {
     sprintf(outbuf, "%lf", dbl);
     ftype = getVal(outbuf, outbuf);
     if (ftype == 1) {cerr = 2; goto fexit;}
+    goto fexit;
+}
+if (!strcmp(farg[0], "FGC")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    sprintf(outbuf, "%d", (int)fgc);
+    goto fexit;
+}
+if (!strcmp(farg[0], "BGC")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    sprintf(outbuf, "%d", (int)fgc);
     goto fexit;
 }

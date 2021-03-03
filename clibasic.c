@@ -11,7 +11,7 @@
 #include <sys/time.h>
 #include <editline.h>
 
-char VER[] = "0.8.2";
+char VER[] = "0.8.3";
 
 FILE *prog;
 FILE *f[256];
@@ -382,10 +382,8 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
     double num2 = 0;
     double num3 = 0;
     int numAct;
-    if (inbuf[0] == '"') dt = 1;
     if (debug) printf("checking for syntax error\n");
     if ((isSpChar(inbuf, 0) && inbuf[0] != '-') || isSpChar(inbuf, strlen(inbuf) - 1)) {cerr = 1; return 0;}
-    if (inbuf[0] != '"' && (inbuf[0] == '-' && isSpChar(inbuf, 1))) {cerr = 1; return 0;}
     if (debug) printf("no syntax error detected\n");
     int tmpct = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = '"'; tmp[3][1] = 0;
