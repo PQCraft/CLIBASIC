@@ -64,6 +64,8 @@ int runcmd();
 int copyStr(char* str1, char* str2);
 void copyStrSnip(char* str1, int i, int j, char* str2);
 uint8_t getVal(char* inbuf, char* outbuf);
+int read_history (const char *filename);
+int write_history (const char *filename);
 
 int main(int argc, char *argv[]) {
     signal(SIGINT, cleanExit); 
@@ -73,7 +75,7 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
             printf("Command Line Interface BASIC version %s\n", VER);
-            printf("Copyright (C) PQCraft 2021\n");
+            printf("Copyright (C) 2021 PQCraft\n");
             exit = true;
         }
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
@@ -217,6 +219,7 @@ uint8_t getType(char* str) {
     if (str[0] == '"') {if (str[strlen(str) - 1] != '"') {return 0;} return 1/*STR*/;}
     bool p = false;
     for (int i = 0; str[i] != '\0'; i++) {
+        if (str[i] == '-') {} else
         if ((str[i] < '0' || str[i] > '9') && str[i] != '.') {return 255 /*VAR*/;} else
         if (str[i] == '.') {if (p) {return 0 /*ERR*/;} p = true;}
     }
@@ -287,10 +290,11 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
 
 uint8_t getVar(char* vn, char* varout) {
     if (debug) printf("getVar: vn: {%s}\n", vn);
+    if (vn[0] == '\0') return 0;
     if (vn[strlen(vn) - 1] == ')') {
         return getFunc(vn, varout);
     }
-    if (vn[0] == '\0') return 0;
+    for (int i = 0; vn[i] != '\0'; i++) {if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] = vn[i] - 32;}
     int v = -1;
     if (debug) printf("getVar: v: [%d]\n", v);
     for (int i = 0; i < varmaxct; i++) {
@@ -310,6 +314,7 @@ uint8_t getVar(char* vn, char* varout) {
 }
 
 void setVar(char* vn, char* val, uint8_t t) {
+    for (int i = 0; vn[i] != '\0'; i++) {if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] = vn[i] - 32;}
     if (debug) printf("setVar: vn: {%s}\n", vn);
     if (debug) printf("setVar: val: {%s}\n", val);
     int v = -1;
@@ -346,6 +351,23 @@ void setVar(char* vn, char* val, uint8_t t) {
     return;
 }
 
+bool gvchkchar(char* tmp, int i) {
+    if (isSpChar(tmp, i + 1)) {
+        if (tmp[i + 1] == '-') {
+            if (isSpChar(tmp, i + 2)) {
+                cerr = 1; return false;
+            }
+        } else {
+            cerr = 1; return false;
+        }
+    } else {
+        if (isSpChar(tmp, i - 1)) {
+            cerr = 1; return false;
+        }
+    }
+    return true;
+}
+
 uint8_t getVal(char* tmpinbuf, char* outbuf) {
     if (tmpinbuf[0] == '\0') {return 255;}
     char inbuf[32768];
@@ -360,8 +382,10 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
     double num2 = 0;
     double num3 = 0;
     int numAct;
+    if (inbuf[0] == '"') dt = 1;
     if (debug) printf("checking for syntax error\n");
-    if (isSpChar(inbuf, 0) || isSpChar(inbuf, strlen(inbuf) - 1)) {cerr = 1; return 0;}
+    if ((isSpChar(inbuf, 0) && inbuf[0] != '-') || isSpChar(inbuf, strlen(inbuf) - 1)) {cerr = 1; return 0;}
+    if (inbuf[0] != '"' && (inbuf[0] == '-' && isSpChar(inbuf, 1))) {cerr = 1; return 0;}
     if (debug) printf("no syntax error detected\n");
     int tmpct = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = '"'; tmp[3][1] = 0;
@@ -427,23 +451,28 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
         if (t == 2) {
             copyStr(inbuf, tmp[0]);
             int p1, p2, p3;
+            bool inStr = false;
             while (true) {
                 numAct = 0;
                 p1 = 0, p2 = 0, p3 = 0;
                 if (debug) printf("checking for exp\n");
                 for (int i = 0; tmp[0][i] != '\0' && p2 == 0; i++) {
-                    if (tmp[0][i] == '^') {p2 = i; numAct = 4;}
+                    if (tmp[0][i] == '"') inStr = !inStr;
+                    if (tmp[0][i] == '^' && !inStr) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 4;}
                 }
                 if (debug) printf("checking for mlt/dvd\n");
                 for (int i = 0; tmp[0][i] != '\0' && p2 == 0; i++) {
-                    if (tmp[0][i] == '*') {p2 = i; numAct = 2;}
-                    if (tmp[0][i] == '/') {p2 = i; numAct = 3;}
+                    if (tmp[0][i] == '"') inStr = !inStr;
+                    if (tmp[0][i] == '*' && !inStr) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 2;}
+                    if (tmp[0][i] == '/' && !inStr) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 3;}
                 }
                 if (debug) printf("checking for add/sub\n");
                 for (int i = 0; tmp[0][i] != '\0' && p2 == 0; i++) {
-                    if (tmp[0][i] == '+') {p2 = i; numAct = 0;}
-                    if (tmp[0][i] == '-') {p2 = i; numAct = 1;}
+                    if (tmp[0][i] == '"') inStr = !inStr;
+                    if (tmp[0][i] == '+' && !inStr) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 0;}
+                    if (tmp[0][i] == '-' && !inStr) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 1;}
                 }
+                inStr = false;
                 if (debug) printf("getVal: p1: [%d], p2: [%d], p3: [%d]\n", p1, p2, p3);
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 if (p2 == 0) {
@@ -457,10 +486,12 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                 }
                 tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
                 for (int i = p2 - 1; i > 0; i--) {
-                    if (isSpChar(tmp[0], i)) {p1 = i; break;}
+                    if (tmp[0][i] == '"') inStr = !inStr;
+                    if (isSpChar(tmp[0], i) && !inStr) {p1 = i; break;}
                 }
                 for (int i = p2 + 1; true; i++) {
-                    if (isSpChar(tmp[0], i) || tmp[0][i] == '\0') {p3 = i; break;}
+                    if (tmp[0][i] == '"') inStr = !inStr;
+                    if ((isSpChar(tmp[0], i) && i != p2 + 1 && !inStr) || tmp[0][i] == '\0') {p3 = i; break;}
                 }
                 copyStrSnip(tmp[0], p1, p2, tmp[2]);
                 t = getType(tmp[2]);
@@ -489,7 +520,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                 if (tmp[2][strlen(tmp[2]) - 1] == '.') {tmp[2][strlen(tmp[2]) - 1] = 0;}
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 copyStrSnip(tmp[0], p3, strlen(tmp[0]), tmp[3]);
-                if (p1 != 0) copyStrSnip(tmp[0], 0, p1 + 1, tmp[1]);
+                if (p1 != 0) copyStrSnip(tmp[0], 0, p1, tmp[1]);
                 copyStrApnd(tmp[2], tmp[1]);
                 copyStrApnd(tmp[3], tmp[1]);
                 copyStr(tmp[1], tmp[0]);

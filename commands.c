@@ -66,3 +66,17 @@ if (!strcmp(arg[0], "$PROMPT")) {
     copyStr(tmpargs[1], prompt);
     goto cmderr;
 }
+if (!strcmp(arg[0], "$SAVE_CMD_HST")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    write_history(arg[1]);
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$LOAD_CMD_HST")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    read_history(arg[1]);
+    goto cmderr;
+}
