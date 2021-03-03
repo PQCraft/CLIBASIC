@@ -11,7 +11,7 @@
 #include <sys/time.h>
 #include <editline.h>
 
-char VER[] = "0.8.3";
+char VER[] = "0.8.4";
 
 FILE *prog;
 FILE *f[256];
@@ -148,7 +148,11 @@ double randNum(double num1, double num2)
 }
 
 bool isSpChar(char* bfr, int pos) {
-    return (bfr[pos] == '+' || bfr[pos] == '-' || bfr[pos] == '*' || bfr[pos] == '/' || bfr[pos] == '^' || bfr[pos] == ',');
+    return (bfr[pos] == '+' || bfr[pos] == '-' || bfr[pos] == '*' || bfr[pos] == '/' || bfr[pos] == '^');
+}
+
+bool isValidVarChar(char* bfr, int pos) {
+    return ((bfr[pos] >= 'A' && bfr[pos] <= 'Z') || (bfr[pos] >= 'a' && bfr[pos] <= 'z') || bfr[pos] == '_' || bfr[pos] == '$' || bfr[pos] == '%' || bfr[pos] == '&' || bfr[pos] == '!' || bfr[pos] == '~');
 }
 
 int copyStr(char* str1, char* str2) {
@@ -272,6 +276,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
         if (debug) printf("getFunc: flen[%d]: [%d]\n", j, flen[j]);
         if (debug) printf("getFunc: farg[%d]: {%s}\n", j, farg[j]);
     }
+    if (debug) printf("getFunc: fargct: [%d]\n", fargct);
     outbuf[0] = 0;
     cerr = 127;
     #include "functions.c"
@@ -294,7 +299,7 @@ uint8_t getVar(char* vn, char* varout) {
     if (vn[strlen(vn) - 1] == ')') {
         return getFunc(vn, varout);
     }
-    for (int i = 0; vn[i] != '\0'; i++) {if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] = vn[i] - 32;}
+    for (int i = 0; vn[i] != '\0'; i++) {if (!isValidVarChar(vn, i)) {cerr = 4; return 0;} if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] = vn[i] - 32;}
     int v = -1;
     if (debug) printf("getVar: v: [%d]\n", v);
     for (int i = 0; i < varmaxct; i++) {
@@ -477,7 +482,9 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                     if (p3 == 0) {
                         t = getType(tmp[0]);
                         if (t == 0) {cerr = 1; return 0;} else
-                        if (t == 255) {t = getVar(tmp[0], tmp[0]); if (t != 2) {cerr = 2; return 0;}}
+                        if (t == 255) {t = getVar(tmp[0], tmp[0]);
+                        if (t == 0) {return 0;}
+                        if (t != 2) {cerr = 2; return 0;}}
                     }
                     if (debug) printf("no operations found\n");
                     copyStr(tmp[0], tmp[1]); goto gvfexit;
@@ -494,11 +501,11 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                 copyStrSnip(tmp[0], p1, p2, tmp[2]);
                 t = getType(tmp[2]);
                 if (t == 0) {cerr = 1; return 0;} else
-                if (t == 255) {t = getVar(tmp[2], tmp[2]); if (t != 2) {cerr = 2; return 0;}}
+                if (t == 255) {t = getVar(tmp[2], tmp[2]); if (t == 0) {return 0;} if (t != 2) {cerr = 2; return 0;}}
                 copyStrSnip(tmp[0], p2 + 1, p3, tmp[3]);
                 t = getType(tmp[3]);
                 if (t == 0) {cerr = 1; return 0;} else
-                if (t == 255) {t = getVar(tmp[3], tmp[3]); if (t != 2) {cerr = 2; return 0;}}
+                if (t == 255) {t = getVar(tmp[3], tmp[3]); if (t == 0) {return 0;} if (t != 2) {cerr = 2; return 0;}}
                 if (debug) printf("getVal: p1: [%d], p2: [%d], p3: [%d]\n", p1, p2, p3);
                 sscanf(tmp[2], "%lf", &num1);
                 sscanf(tmp[3], "%lf", &num2);
@@ -564,12 +571,15 @@ bool solveargs() {
 int getArgCt(char* inbuf) {
     int ct = 0;
     bool inStr = false;
+    int pct = 0;
     int j = 0;
     while (inbuf[j] == ' ') {j++;}
     for (int i = j; inbuf[i] != '\0'; i++) {
         if (ct == 0) ct = 1;
+        if (inbuf[i] == '(' && !inStr) {pct++;}
+        if (inbuf[i] == ')' && !inStr) {pct--;}
         if (inbuf[i] == '"') inStr = !inStr;
-        if (inbuf[i] == ',' && !inStr) ct++;
+        if (inbuf[i] == ',' && !inStr && pct == 0) ct++;
     }
     return ct;
 }
