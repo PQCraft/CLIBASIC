@@ -85,6 +85,14 @@ if (!strcmp(farg[0], "VAL")) {
     if (ftype == 1) {cerr = 2; goto fexit;}
     goto fexit;
 }
+if (!strcmp(farg[0], "~PROMPT$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    int tmpt = getVal(prompt, outbuf);
+    if (tmpt != 1) strcpy(outbuf, "CLIBASIC> ");
+    goto fexit;
+}
 if (!strcmp(farg[0], "FGC")) {
     cerr = 0;
     ftype = 2;

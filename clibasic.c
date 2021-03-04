@@ -2,8 +2,6 @@
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -11,7 +9,7 @@
 #include <sys/time.h>
 #include <editline.h>
 
-char VER[] = "0.8.5";
+char VER[] = "0.9";
 
 FILE *prog;
 FILE *f[256];

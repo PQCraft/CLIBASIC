@@ -12,10 +12,11 @@ if (!strcmp(arg[0], "EXIT") || !strcmp(arg[0], "QUIT")) {
     cleanExit();
 }
 if (!strcmp(arg[0], "EXEC") || !strcmp(arg[0], "SH")) {
-    cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    err = system(arg[1]);
+    cerr = system(arg[1]);
+    cerr = 0;
+    printf("\e[38;5;%um\e[48;5;%um", fgc, bgc);
     goto cmderr;
 }
 if (!strcmp(arg[0], "PRINT")) {
@@ -35,8 +36,7 @@ if (!strcmp(arg[0], "COLOR")) {
         else {bgc = (uint8_t)atoi(arg[2]);}
     }
     if (debug) printf("CMD[COLOR]: fgc: [%u], bgc: [%u]\n", fgc, bgc);
-    printf("\e[38;5;%um", fgc);
-    printf("\e[48;5;%um", bgc);
+    printf("\e[38;5;%um\e[48;5;%um", fgc, bgc);
     goto cmderr;
 }
 if (!strcmp(arg[0], "SET") || !strcmp(arg[0], "LET")) {
