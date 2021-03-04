@@ -12,4 +12,4 @@ Apline: `libedit-dev` `editline-dev` <br>
 <br>
 **NOTES:** <br>
 The prompt prints \r before printing out the text as an editline bug workaround, <br>
-when using `PRINT`, remember to add `"\n"` (eg.: `PRINT "text", "\n"`, `PRINT "text" + "\n"`). 
+when using `PRINT`, remember to add `"\n"` (eg.: `PRINT "text", "\n"`, `PRINT "text" + "\n"`, `PRINT "text\n"`). 
