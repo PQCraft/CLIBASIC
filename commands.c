@@ -54,7 +54,7 @@ if (!strcmp(arg[0], "CLS")) {
         if (argt[1] != 2) {cerr = 2; goto cmderr;}
         tbgc = (uint8_t)atoi(arg[1]);
     }
-    printf("\e[48;5;%um\e[0;0H\e[2J\e[48;5;%um", tbgc, bgc);
+    printf("\e[48;5;%um\e[H\e[2J\e[3J\e[48;5;%um", tbgc, bgc);
     goto cmderr;
 }
 if (!strcmp(arg[0], "$PROMPT")) {
