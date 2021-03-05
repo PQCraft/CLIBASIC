@@ -15,7 +15,6 @@ if (!strcmp(arg[0], "EXEC") || !strcmp(arg[0], "SH")) {
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     cerr = system(arg[1]);
     cerr = 0;
-    printf("\e[38;5;%um\e[48;5;%um", fgc, bgc);
     goto cmderr;
 }
 if (!strcmp(arg[0], "PRINT")) {
@@ -65,17 +64,77 @@ if (!strcmp(arg[0], "$PROMPT")) {
     copyStr(tmpargs[1], prompt);
     goto cmderr;
 }
-if (!strcmp(arg[0], "SAVECMDHST")) {
+if (!strcmp(arg[0], "$SAVECMDHST")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     write_history(arg[1]);
     goto cmderr;
 }
-if (!strcmp(arg[0], "LOADCMDHST")) {
+if (!strcmp(arg[0], "$LOADCMDHST")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     read_history(arg[1]);
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTRESET")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[0m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTBOLD")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[1m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTBOLD")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[1m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTDIM")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[2m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTITAL")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[3m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTUNDER")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[4m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTBLINK")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[5m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTREV")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[7m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTHIDE")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[8m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTSTRIKE")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[9m");
     goto cmderr;
 }

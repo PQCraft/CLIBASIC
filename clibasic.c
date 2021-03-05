@@ -9,7 +9,7 @@
 #include <sys/time.h>
 #include <editline.h>
 
-char VER[] = "0.10";
+char VER[] = "0.10.1";
 
 FILE *prog;
 FILE *f[256];
@@ -106,9 +106,7 @@ int main(int argc, char *argv[]) {
         }
     }
     if (exit) cleanExit();
-    printf("\e[0m");
-    printf("\e[38;5;%um", fgc);
-    printf("\e[48;5;%um", bgc);
+    printf("\e[0m\e[38;5;%um\e[48;5;%um", fgc, bgc);
     printf("Command Line Interface BASIC version %s\n", VER);
     if (debug) printf("Running in debug mode\n");
     strcpy(prompt, "\"CLIBASIC> \"");
@@ -121,6 +119,7 @@ int main(int argc, char *argv[]) {
         putc('\r', stdout);
         int tmpt = getVal(prompt, pstr);
         if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
+        printf("\e[38;5;%um\e[48;5;%um", fgc, bgc);
         while (tmpstr == NULL) {tmpstr = readline(pstr);}
         if (debug) printf("check for null:\n");
         if (tmpstr[0] == '\0') {free(tmpstr); goto brkproccmd;}

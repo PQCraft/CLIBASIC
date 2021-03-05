@@ -39,13 +39,11 @@ update:
 
 install:
 	if [ ! -f ./clibasic ]; then $(C) $(CFLAGS1) clibasic.c -o clibasic $(CFLAGS2); chmod +x ./clibasic; fi
-	sudo rm -f /usr/bin/clibasic
-	sudo cp ./clibasic /usr/bin/clibasic
+	sudo rm -f /usr/bin/clibasic; sudo cp ./clibasic /usr/bin/clibasic
 
 install32:
 	if [ ! -f ./clibasic ]; then $(C) $(CFLAGS1) -m32 clibasic.c -o clibasic $(CFLAGS2); chmod +x ./clibasic; fi
-	sudo rm -f /usr/bin/clibasic
-	sudo cp ./clibasic /usr/bin/clibasic
+	sudo rm -f /usr/bin/clibasic; sudo cp ./clibasic /usr/bin/clibasic
 
 run:
 	./clibasic
