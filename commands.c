@@ -1,4 +1,3 @@
-// '$' IS RESERVED FOR SYSTEM COMMANDS (COMMANDS THAT CHANGE CLIBASIC INTERNAL VARIABLES)
 if (!strcmp(arg[0], "FOO") || !strcmp(arg[0], "FOOBAR")) {
     cerr = 0;
     if (debug) printf("CMD[FOO/FOOBAR]: argct: [%d]\n", argct);
@@ -66,14 +65,14 @@ if (!strcmp(arg[0], "$PROMPT")) {
     copyStr(tmpargs[1], prompt);
     goto cmderr;
 }
-if (!strcmp(arg[0], "$SAVE_CMD_HST")) {
+if (!strcmp(arg[0], "SAVECMDHST")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     write_history(arg[1]);
     goto cmderr;
 }
-if (!strcmp(arg[0], "$LOAD_CMD_HST")) {
+if (!strcmp(arg[0], "LOADCMDHST")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
