@@ -85,6 +85,20 @@ if (!strcmp(farg[0], "VAL")) {
     if (ftype == 1) {cerr = 2; goto fexit;}
     goto fexit;
 }
+if (!strcmp(farg[0], "INPUT$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct > 1) {cerr = 3; goto fexit;}
+    if (fargct == 1 && fargt[1] != 1) {cerr = 2; goto fexit;}
+    char *tmp = NULL;
+    if (fargct == 1) {
+        while (tmp == NULL) {tmp = readline(farg[1]);}
+    } else {
+        while (tmp == NULL) {tmp = readline("?: ");}
+    }
+    copyStr(tmp, outbuf);
+    goto fexit;
+}
 if (!strcmp(farg[0], "$PROMPT$")) {
     cerr = 0;
     ftype = 1;

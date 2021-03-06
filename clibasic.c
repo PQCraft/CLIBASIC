@@ -12,32 +12,32 @@
 #include <editline.h>
 #include <readline/history.h>
 
-char VER[] = "0.11";
+char VER[] = "0.11.1";
 
 FILE *prog;
 FILE *f[256];
 
-int      err = 0;
-int         cerr;
+int err = 0;
+int cerr;
 
 bool inProg = false;
 char *progFilename;
 int progLine = 1;
 
-int      *varlen;
-char    **varstr;
-char   **varname;
-bool   *varinuse;
+int *varlen;
+char **varstr;
+char **varname;
+bool *varinuse;
 uint8_t *vartype;
-int     varmaxct;
+int varmaxct;
 
-char      *cmd;
-int       cmdl;
+char *cmd;
+int cmdl;
 char **tmpargs;
-char     **arg;
-uint8_t  *argt;
-int      *argl;
-int  argct = 0;
+char **arg;
+uint8_t *argt;
+int *argl;
+int argct = 0;
 
 int cmdpos;
 
@@ -75,18 +75,24 @@ bool cmdint = false;
 bool debug = false;
 bool runfile = false;
 
+bool textlock = false;
+struct termios term, restore;
+
 void forceExit() {
-    //printf("\n");
+    if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
     exit(0);
 }
 
 void getCurPos();
 
 void cleanExit() {
+    if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
     signal(SIGINT, forceExit);
     signal(SIGKILL, forceExit);
     signal(SIGTERM, forceExit);
     printf("\e[0m");
+    fflush(stdout);
+    fflush(stdin);
     getCurPos();
     if (curx != 1) printf("\n");
     exit(err);
@@ -108,6 +114,8 @@ int main(int argc, char *argv[]) {
     signal(SIGINT, cleanExit); 
     signal(SIGKILL, cleanExit); 
     signal(SIGTERM, cleanExit); 
+    getCurPos();
+    if (curx != 1) printf("\n");
     bool exit = false;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
@@ -155,7 +163,7 @@ int main(int argc, char *argv[]) {
     while (!exit) {
         for (int i = 0; i < 32768; i++) conbuf[i] = 0;
         if (!inProg) {
-            if (runfile) cleanExit();
+            if (runfile) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cleanExit();}
             char *tmpstr = NULL;
             int tmpt = getVal(prompt, pstr);
             if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
@@ -184,7 +192,7 @@ int main(int argc, char *argv[]) {
         progLine = 1;
         while (true) {
             if (!inProg) {
-                if (cmdint) {cmdint = false; goto brkproccmd;}
+                if (cmdint) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cmdint = false; goto brkproccmd;}
                 if (conbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((conbuf[cp] == ':' && !inStr) || conbuf[cp] == '\0') {
                     while ((conbuf[cp - cmdl] == ' ') && cmdl > 0) {cmdl--;}
@@ -205,6 +213,10 @@ int main(int argc, char *argv[]) {
                     if (fgrabc(prog, cp - cmdl - 1) == '\n' && !lockpl) {progLine++; if (debug) printf("found nl: [%ld]\n", cp);}
                     if (lockpl) lockpl = false;
                     while ((fgrabc(prog, cp - cmdl) == ' ' || (fgrabc(prog, cp) == '\r' && fgrabc(prog, cp - cmdl) == '\n')) && cmdl > 0) {cmdl--;}
+                    if (fgrabc(prog, cp - cmdl) == '\'') {
+                        while (fgrabc(prog, cp - cmdl) != '\r' && fgrabc(prog, cp - cmdl) != '\n' && fgrabc(prog, cp - cmdl) != -1 && fgrabc(prog, cp - cmdl) != 4 && fgrabc(prog, cp - cmdl) != 0) {cmdl--;} 
+                        if (fgrabc(prog, cp - cmdl) == '\r') {cmdl--;}
+                    }
                     cmd = realloc(cmd, (cmdl + 1) * sizeof(char));
                     cmdpos = cp - cmdl;
                     copyFileSnip(prog, cp - cmdl, cp, cmd);
@@ -219,7 +231,9 @@ int main(int argc, char *argv[]) {
         }
         brkproccmd:
         signal(SIGINT, cleanExit);
+        if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
     }
+    if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
     cleanExit();
     return 0;
 }
@@ -230,22 +244,23 @@ void getCurPos() {
     char ch;
     fflush(stdout);
     cury = 0; curx = 0;
-    struct termios term, restore;
-    tcgetattr(0, &term);
-    tcgetattr(0, &restore);
-    term.c_lflag &= ~(ICANON|ECHO);
-    tcsetattr(0, TCSANOW, &term);
+    if (!textlock) {
+        tcgetattr(0, &term);
+        tcgetattr(0, &restore);
+        term.c_lflag &= ~(ICANON|ECHO);
+        tcsetattr(0, TCSANOW, &term);
+    }
     while (write(1, "\e[6n", 4) == -1) {}
     for (i = 0, ch = 0; ch != 'R'; i++) {
         ret = read(1, &ch, 1);
         if (!ret) {
-            tcsetattr(0, TCSANOW, &restore);
+            if (!textlock) tcsetattr(0, TCSANOW, &restore);
             return;
         }
         buf[i] = ch;
     }
     if (i < 2) {
-        tcsetattr(0, TCSANOW, &restore);
+        if (!textlock) tcsetattr(0, TCSANOW, &restore);
         return;
     }
     for (i -= 2, pow = 1; buf[i] != ';'; i--, pow *= 10) {
@@ -254,7 +269,7 @@ void getCurPos() {
     for(i--, pow = 1; buf[i] != '['; i--, pow *= 10) {
         cury += (buf[i] - '0') * pow;
     }
-    tcsetattr(0, TCSANOW, &restore);
+    if (!textlock) tcsetattr(0, TCSANOW, &restore);
     return;
 }
 

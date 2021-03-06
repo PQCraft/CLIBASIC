@@ -139,10 +139,35 @@ if (!strcmp(arg[0], "$TXTITAL")) {
     printf("\e[3m");
     goto cmderr;
 }
-if (!strcmp(arg[0], "$TXTUNDER")) {
+if (!strcmp(arg[0], "$TXTUNDRLN")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[4m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTULCLR")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    printf("\e[58:5:%um", (uint8_t)atoi(arg[1]));
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTOVERLN")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[53m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTDBLUL")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[21m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTSQGUL")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    printf("\e[4:3m");
     goto cmderr;
 }
 if (!strcmp(arg[0], "$TXTBLINK")) {
@@ -167,5 +192,24 @@ if (!strcmp(arg[0], "$TXTSTRIKE")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[9m");
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTLOCK")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    if (!textlock) {
+        tcgetattr(0, &term);
+        tcgetattr(0, &restore);
+        term.c_lflag &= ~(ICANON|ECHO);
+        tcsetattr(0, TCSANOW, &term);
+    }
+    textlock = true;
+    goto cmderr;
+}
+if (!strcmp(arg[0], "$TXTUNLOCK")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    if (textlock) tcsetattr(0, TCSANOW, &restore);
+    textlock = false;
     goto cmderr;
 }
