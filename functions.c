@@ -107,3 +107,19 @@ if (!strcmp(farg[0], "BGC")) {
     sprintf(outbuf, "%d", (int)fgc);
     goto fexit;
 }
+if (!strcmp(farg[0], "CURX")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    getCurPos();
+    sprintf(outbuf, "%d", curx);
+    goto fexit;
+}
+if (!strcmp(farg[0], "CURY")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    getCurPos();
+    sprintf(outbuf, "%d", cury);
+    goto fexit;
+}

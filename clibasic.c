@@ -4,12 +4,15 @@
 #include <string.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <unistd.h>
 #include <stdbool.h>
+#include <termios.h>
 #include <inttypes.h>
 #include <sys/time.h>
 #include <editline.h>
+#include <readline/history.h>
 
-char VER[] = "0.10.2";
+char VER[] = "0.11";
 
 FILE *prog;
 FILE *f[256];
@@ -17,8 +20,9 @@ FILE *f[256];
 int      err = 0;
 int         cerr;
 
-char            *mem;
-uint32_t memsize = 0;
+bool inProg = false;
+char *progFilename;
+int progLine = 1;
 
 int      *varlen;
 char    **varstr;
@@ -38,9 +42,11 @@ int  argct = 0;
 int cmdpos;
 
 int dlstack[256];
+int dlpline[256];
 bool dldcmd[256];
 int dlstackp = -1;
 bool didloop = false;
+bool lockpl = false;
 
 bool itdcmd[256];
 int itstackp = -1;
@@ -59,22 +65,30 @@ char pstr[32768];
 uint8_t fgc = 15;
 uint8_t bgc = 0;
 
-int cp = 0;
+int curx;
+int cury;
+
+int64_t cp = 0;
 
 bool cmdint = false;
 
 bool debug = false;
+bool runfile = false;
 
 void forceExit() {
     //printf("\n");
     exit(0);
 }
 
+void getCurPos();
+
 void cleanExit() {
     signal(SIGINT, forceExit);
     signal(SIGKILL, forceExit);
     signal(SIGTERM, forceExit);
-    printf("\e[0m\r\n");
+    printf("\e[0m");
+    getCurPos();
+    if (curx != 1) printf("\n");
     exit(err);
 }
 
@@ -86,9 +100,9 @@ void cmdIntHndl() {
 void runcmd();
 int copyStr(char* str1, char* str2);
 void copyStrSnip(char* str1, int i, int j, char* str2);
+void copyFileSnip(FILE* file, int64_t i, int64_t j, char* str2);
 uint8_t getVal(char* inbuf, char* outbuf);
-int read_history (const char *filename);
-int write_history (const char *filename);
+int fgrabc(FILE* file, int64_t pos);
 
 int main(int argc, char *argv[]) {
     signal(SIGINT, cleanExit); 
@@ -97,19 +111,31 @@ int main(int argc, char *argv[]) {
     bool exit = false;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
+            if (argc > 2) {printf("Incorrent number of options passed.\n"); cleanExit();}
             printf("Command Line Interface BASIC version %s\n", VER);
             printf("Copyright (C) 2021 PQCraft\n");
             exit = true;
-        }
+        } else
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
-            printf("Usage: clibasic [options]\n");
+            if (argc > 2) {printf("Incorrent number of options passed.\n"); cleanExit();}
+            printf("Usage: clibasic [options] [file]\n");
             printf("\n");
             printf("--help      Shows the help screen.\n");
             printf("--version   Shows the version info.\n");
+            printf("--debug     Quick way to create a text wall.\n");
             exit = true;
-        }
+        } else
         if (!strcmp(argv[i], "--debug") || !strcmp(argv[i], "-d")) {
+            if (debug || argc > 3) {printf("Incorrent number of options passed.\n"); cleanExit();}
             debug = true;
+        } else {
+            if (runfile || argc > 3) {free(progFilename); printf("Incorrent number of options passed.\n"); cleanExit();}
+            inProg = true;
+            runfile = true;
+            prog = fopen(argv[i], "r");
+            progFilename = malloc(strlen(argv[i]));
+            copyStr(argv[i], progFilename);
+            if (prog == NULL) {printf("File not found: '%s'\n", progFilename); free(progFilename); cleanExit();}
         }
     }
     if (exit) cleanExit();
@@ -120,19 +146,30 @@ int main(int argc, char *argv[]) {
     errstr = malloc(0);
     cmd = malloc(0);
     srand(time(0));
+    if (!runfile) {
+        prog = fopen("AUTORUN.BAS", "r"); progFilename = malloc(12); strcpy(progFilename, "AUTORUN.BAS");
+        if (prog == NULL) {prog = fopen("autorun.bas", "r"); strcpy(progFilename, "autorun.bas");}
+        if (prog == NULL) {free(progFilename);}
+        else {inProg = true;}
+    }
     while (!exit) {
         for (int i = 0; i < 32768; i++) conbuf[i] = 0;
-        char *tmpstr = NULL;
-        putc('\r', stdout);
-        int tmpt = getVal(prompt, pstr);
-        if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
-        printf("\e[38;5;%um\e[48;5;%um", fgc, bgc);
-        while (tmpstr == NULL) {tmpstr = readline(pstr);}
-        if (tmpstr[0] == '\0') {free(tmpstr); goto brkproccmd;}
-        add_history(tmpstr);
-        copyStr(tmpstr, conbuf);
-        free(tmpstr);
+        if (!inProg) {
+            if (runfile) cleanExit();
+            char *tmpstr = NULL;
+            int tmpt = getVal(prompt, pstr);
+            if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
+            printf("\e[38;5;%um\e[48;5;%um", fgc, bgc);
+            getCurPos();
+            if (curx != 1) printf("\n");
+            while (tmpstr == NULL) {tmpstr = readline(pstr);}
+            if (tmpstr[0] == '\0') {free(tmpstr); goto brkproccmd;}
+            add_history(tmpstr);
+            copyStr(tmpstr, conbuf);
+            free(tmpstr);
+        }
         cp = 0;
+        cmdl = 0;
         dlstackp = -1;
         itstackp = -1;
         for (int i = 0; i < 256; i++) {
@@ -144,26 +181,86 @@ int main(int argc, char *argv[]) {
         didelse = false;
         bool inStr = false;
         signal(SIGINT, cmdIntHndl);
+        progLine = 1;
         while (true) {
-            if (cmdint) {cmdint = false; goto brkproccmd;}
-            if (conbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
-            if ((conbuf[cp] == ':' && !inStr) || conbuf[cp] == '\0') {
-                while (conbuf[cp - cmdl] == ' ') {cmdl--;}
-                cmd = realloc(cmd, (cmdl + 1) * sizeof(char));
-                cmdpos = cp - cmdl;
-                copyStrSnip(conbuf, cp - cmdl, cp, cmd);
-                cmdl = 0;
-                runcmd();
-                if (conbuf[cp] == '\0') goto brkproccmd;
-            } else
-            {cmdl++;}
-            if (!didloop) {cp++;} else {didloop = false;}
+            if (!inProg) {
+                if (cmdint) {cmdint = false; goto brkproccmd;}
+                if (conbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
+                if ((conbuf[cp] == ':' && !inStr) || conbuf[cp] == '\0') {
+                    while ((conbuf[cp - cmdl] == ' ') && cmdl > 0) {cmdl--;}
+                    cmd = realloc(cmd, (cmdl + 1) * sizeof(char));
+                    cmdpos = cp - cmdl;
+                    copyStrSnip(conbuf, cp - cmdl, cp, cmd);
+                    cmdl = 0;
+                    runcmd();
+                    if (cp == -1) goto brkproccmd;
+                    if (conbuf[cp] == '\0') goto brkproccmd;
+                } else
+                {cmdl++;}
+                if (!didloop) {cp++;} else {didloop = false;}
+            } else {
+                if (cmdint) {inProg = false; fclose(prog); free(progFilename); cmdint = false; goto brkproccmd;}
+                if (fgrabc(prog, cp) == '"') {inStr = !inStr; cmdl++;} else
+                if ((fgrabc(prog, cp) == ':' && !inStr) || fgrabc(prog, cp) == '\0' || fgrabc(prog, cp) == '\r' || fgrabc(prog, cp) == '\n' || fgrabc(prog, cp) == -1 || fgrabc(prog, cp) == 4 || fgrabc(prog, cp) == 0) {
+                    if (fgrabc(prog, cp - cmdl - 1) == '\n' && !lockpl) {progLine++; if (debug) printf("found nl: [%ld]\n", cp);}
+                    if (lockpl) lockpl = false;
+                    while ((fgrabc(prog, cp - cmdl) == ' ' || (fgrabc(prog, cp) == '\r' && fgrabc(prog, cp - cmdl) == '\n')) && cmdl > 0) {cmdl--;}
+                    cmd = realloc(cmd, (cmdl + 1) * sizeof(char));
+                    cmdpos = cp - cmdl;
+                    copyFileSnip(prog, cp - cmdl, cp, cmd);
+                    cmdl = 0;
+                    runcmd();
+                    if (cp == -1) {inProg = false; fclose(prog); free(progFilename); goto brkproccmd;}
+                    if (feof(prog) || fgrabc(prog, cp) == -1 || fgrabc(prog, cp) == 4 || fgrabc(prog, cp) == 0) {inProg = false; fclose(prog); free(progFilename); goto brkproccmd;}
+                } else
+                {cmdl++;}
+                if (!didloop) {cp++;} else {didloop = false;}
+            }
         }
         brkproccmd:
         signal(SIGINT, cleanExit);
     }
     cleanExit();
     return 0;
+}
+
+void getCurPos() {
+    char buf[16]={0};
+    int ret, i, pow;
+    char ch;
+    fflush(stdout);
+    cury = 0; curx = 0;
+    struct termios term, restore;
+    tcgetattr(0, &term);
+    tcgetattr(0, &restore);
+    term.c_lflag &= ~(ICANON|ECHO);
+    tcsetattr(0, TCSANOW, &term);
+    while (write(1, "\e[6n", 4) == -1) {}
+    for (i = 0, ch = 0; ch != 'R'; i++) {
+        ret = read(1, &ch, 1);
+        if (!ret) {
+            tcsetattr(0, TCSANOW, &restore);
+            return;
+        }
+        buf[i] = ch;
+    }
+    if (i < 2) {
+        tcsetattr(0, TCSANOW, &restore);
+        return;
+    }
+    for (i -= 2, pow = 1; buf[i] != ';'; i--, pow *= 10) {
+        curx += (buf[i] - '0') * pow;
+    }
+    for(i--, pow = 1; buf[i] != '['; i--, pow *= 10) {
+        cury += (buf[i] - '0') * pow;
+    }
+    tcsetattr(0, TCSANOW, &restore);
+    return;
+}
+
+int fgrabc(FILE* file, int64_t pos) {
+    fseek(file, pos, SEEK_SET);
+    return fgetc(file);
 }
 
 double randNum(double num1, double num2) 
@@ -191,6 +288,12 @@ int copyStr(char* str1, char* str2) {
 void copyStrSnip(char* str1, int i, int j, char* str2) {
     int i2 = 0;
     for (int i3 = i; i3 < j; i3++) {str2[i2] = str1[i3]; i2++;}
+    str2[i2] = 0;
+}
+
+void copyFileSnip(FILE* file, int64_t i, int64_t j, char* str2) {
+    int64_t i2 = 0;
+    for (int64_t i3 = i; i3 < j; i3++) {str2[i2] = fgrabc(file, i3); i2++;}
     str2[i2] = 0;
 }
 
@@ -658,6 +761,8 @@ uint8_t logictest(char* inbuf) {
     if (t1 != t2) {cerr = 2; return -1;}
     if (!strcmp(tmp[1], "=")) {
         return !strcmp(tmp[0], tmp[2]);
+    } else if (!strcmp(tmp[1], "<>")) {
+        return !!strcmp(tmp[0], tmp[2]);
     } else if (!strcmp(tmp[1], ">")) {
         if (t1 == 1) {cerr = 2; return -1;}
         double num1, num2;
@@ -722,8 +827,11 @@ bool runlogic() {
         if (itstackp > 0) {
             if (itdcmd[itstackp - 1]) {itdcmd[itstackp] = true; return true;}
         }
+        int p = j;
+        while (cmd[p] != '\0') {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
         dldcmd[dlstackp] = false;
         dlstack[dlstackp] = cmdpos;
+        dlpline[dlstackp] = progLine;
         return true;
     }
     if (!strcmp(tmp[0], "DOWHILE")) {
@@ -738,6 +846,8 @@ bool runlogic() {
         copyStrSnip(cmd, j + 1, strlen(cmd), tmp[1]);
         uint8_t testval = logictest(tmp[1]);
         if (testval != 1 && testval != 0) return true;
+        if (testval == 1) dlpline[dlstackp] = progLine;
+        if (testval == 1) dlstack[dlstackp] = cmdpos;
         dldcmd[dlstackp] = (bool)testval;
         dldcmd[dlstackp] = !dldcmd[dlstackp];
         return true;
@@ -747,8 +857,15 @@ bool runlogic() {
         if (itstackp > -1) {
             if (itdcmd[itstackp]) return true;
         }
+        if (dlstackp > -1) {
+            if (dldcmd[dlstackp]) return true;
+        }
         cp = dlstack[dlstackp];
+        progLine = dlpline[dlstackp];
+        lockpl = true;
         dlstackp--;
+        int p = j;
+        while (cmd[p] != '\0') {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
         didloop = true;
         return true;
     }
@@ -758,9 +875,12 @@ bool runlogic() {
             if (itdcmd[itstackp]) return true;
         }
         copyStrSnip(cmd, j + 1, strlen(cmd), tmp[1]);
+        if (dlstackp > -1) {
+            if (dldcmd[dlstackp]) return true;
+        }
         uint8_t testval = logictest(tmp[1]);
         if (testval != 1 && testval != 0) return true;
-        if (testval == 1) cp = dlstack[dlstackp];
+        if (testval == 1) {cp = dlstack[dlstackp]; progLine = dlpline[dlstackp]; lockpl = true;}
         dlstackp--;
         didloop = true;
         return true;
@@ -805,7 +925,7 @@ bool runlogic() {
 }
 
 void runcmd() {
-    if (cmd[0] == '\0' || cmd[0] == '\'') return;
+    if (cmd[0] == '\0') return;
     bool lgc = runlogic();
     if (lgc) goto cmderr;
     cerr = 255;
@@ -821,9 +941,11 @@ void runcmd() {
     #include "commands.c"
     // COMMANDS END
     cmderr:
-    /*if (inProg) {printf("Line %u: ");}*/
     if (cerr != 0) {
-        printf("ERROR %d: ", cerr);
+        getCurPos();
+        if (curx != 1) printf("\n");
+        if (inProg) {printf("Error %d on line %d of %s: '%s': ", cerr, progLine, progFilename, cmd);}
+        else {printf("Error %d: ", cerr);}
         switch (cerr) {
             default:
                 printf("\b\b  \b\b");
@@ -832,13 +954,13 @@ void runcmd() {
                 printf("Syntax");
                 break;
             case 2:
-                printf("Type Mismatch");
+                printf("Type mismatch");
                 break;
             case 3:
-                printf("Agument Count Mismatch");
+                printf("Agument count mismatch");
                 break;
             case 4:
-                printf("Invalid Variable Name: %s", errstr);
+                printf("Invalid variable name: '%s'", errstr);
                 break;
             case 5:
                 printf("Divide by zero");
@@ -870,15 +992,21 @@ void runcmd() {
             case 14:
                 printf("Reached FOR limit");
                 break;
+            case 15:
+                printf("File not found: '%s'", errstr);
+                break;
+            case 16:
+                printf("Data range exceded");
+                break;
             case 127:
-                printf("Not a Function: %s", errstr);
+                printf("Not a function: '%s'", errstr);
                 break;
             case 255:
-                printf("Not a Command: %s", arg[0]);
+                printf("Not a command: '%s'", arg[0]);
                 break;
         }
         putc('\n', stdout);
-        cp = strlen(conbuf);
+        cp = -1;
     }
     if (lgc) return;
     for (int i = 0; i <= argct; i++) {
