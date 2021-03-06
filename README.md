@@ -8,10 +8,7 @@ To update the code files, use `make update`. <br>
 To install clibasic as a command, use `sudo make clean build install`. <br>
 <br>
 **Requred packages:** <br>
-Debian/Ubuntu: `libedit-dev` `libeditline-dev` <br>
-Arch: `libedit` `editline` <br>
-Apline: `libedit-dev` `editline-dev` <br>
+Debian/Ubuntu: `libedit-dev` `libeditline-dev` `libreadline-dev` <br>
+Arch: `libedit` `editline` `readline` <br>
+Apline: `libedit-dev` `editline-dev` `readline-dev` <br>
 <br>
-**NOTES:** <br>
-The prompt prints \r before printing out the text as an editline bug workaround, <br>
-when using `PRINT`, remember to add `"\n"` (eg.: `PRINT "text", "\n"`, `PRINT "text" + "\n"`, `PRINT "text\n"`). 
