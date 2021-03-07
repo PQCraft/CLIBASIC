@@ -12,7 +12,7 @@
 #include <editline.h>
 #include <readline/history.h>
 
-char VER[] = "0.11.1";
+char VER[] = "0.11.2";
 
 FILE *prog;
 FILE *f[256];
@@ -75,8 +75,11 @@ bool cmdint = false;
 bool debug = false;
 bool runfile = false;
 
-bool textlock = false;
 struct termios term, restore;
+bool textlock = false;
+
+struct timeval time1, time2;
+uint64_t t_start;
 
 void forceExit() {
     if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
@@ -109,6 +112,7 @@ void copyStrSnip(char* str1, int i, int j, char* str2);
 void copyFileSnip(FILE* file, int64_t i, int64_t j, char* str2);
 uint8_t getVal(char* inbuf, char* outbuf);
 int fgrabc(FILE* file, int64_t pos);
+void resetTimer();
 
 int main(int argc, char *argv[]) {
     signal(SIGINT, cleanExit); 
@@ -160,6 +164,7 @@ int main(int argc, char *argv[]) {
         if (prog == NULL) {free(progFilename);}
         else {inProg = true;}
     }
+    resetTimer();
     while (!exit) {
         for (int i = 0; i < 32768; i++) conbuf[i] = 0;
         if (!inProg) {
@@ -236,6 +241,19 @@ int main(int argc, char *argv[]) {
     if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
     cleanExit();
     return 0;
+}
+
+uint64_t time_us() {
+    gettimeofday(&time1, NULL);
+    return time1.tv_sec * 1000000 + time1.tv_usec;
+}
+
+uint64_t timer() {
+    return time_us() - t_start;
+}
+
+void resetTimer() {
+    t_start = time_us();
 }
 
 void getCurPos() {

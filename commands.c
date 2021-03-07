@@ -1,8 +1,3 @@
-if (!strcmp(arg[0], "FOO") || !strcmp(arg[0], "FOOBAR")) {
-    cerr = 0;
-    if (debug) printf("CMD[FOO/FOOBAR]: argct: [%d]\n", argct);
-    goto cmderr;
-}
 if (!strcmp(arg[0], "EXIT") || !strcmp(arg[0], "QUIT")) {
     cerr = 0;
     if (argct == 1) err = atoi(arg[1]); 
@@ -10,45 +5,11 @@ if (!strcmp(arg[0], "EXIT") || !strcmp(arg[0], "QUIT")) {
     if (inProg) {cmdint = true; goto cmderr;}
     cleanExit();
 }
-if (!strcmp(arg[0], "EXEC") || !strcmp(arg[0], "SH")) {
-    cerr = 0;
-    if (argct != 1) {cerr = 3; goto cmderr;}
-    if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    cerr = system(arg[1]);
-    cerr = 0;
-    goto cmderr;
-}
-if (!strcmp(arg[0], "RUN")) {
-    cerr = 0;
-    if (argct != 1) {cerr = 3; goto cmderr;}
-    if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    prog = fopen(arg[1], "r");
-    if (prog == NULL) {errstr = realloc(errstr, (argl[1] + 1) * sizeof(char)); copyStr(arg[1], errstr); cerr = 15; goto cmderr;}
-    progFilename = malloc(argl[1] + 1);
-    copyStr(arg[1], progFilename);
-    inProg = true;
-}
-if (!strcmp(arg[0], "PRINT")) {
+if (!strcmp(arg[0], "PRINT") || !strcmp(arg[0], "?")) {
     cerr = 0;
     for (int i = 1; i <= argct; i++) {getStr(arg[i], arg[i]); printf("%s", arg[i]);}
     fflush(stdout);
     goto cmderr;
-}
-if (!strcmp(arg[0], "LOCATE")) {
-    cerr = 0;
-    if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
-    if (argt[1] == 0) {} else
-    if (argt[1] != 2) {cerr = 2; goto cmderr;}
-    else {cury = atoi(arg[1]);}
-    if (argct > 1) {
-        if (argt[2] == 0) {} else
-        if (argt[2] != 2) {cerr = 2; goto cmderr;}
-        else {curx = atoi(arg[2]);}
-    }
-    if (curx < 0) {getCurPos(); cerr = 16; goto cmderr;}
-    if (cury < 0) {getCurPos(); cerr = 16; goto cmderr;}
-    printf("\e[%d;%dH", cury, curx);
-    fflush(stdout);
 }
 if (!strcmp(arg[0], "COLOR")) {
     cerr = 0;
@@ -70,10 +31,30 @@ if (!strcmp(arg[0], "SET") || !strcmp(arg[0], "LET")) {
     cerr = 0;
     if (argt[1] == 0) {cerr = 3; goto cmderr;}
     if (argct != 2) {cerr = 3; goto cmderr;}
-    if (argt[1] != argt[2]) {cerr = 2; goto cmderr;}
+    int v = -1;
+    for (int i = 0; i < varmaxct; i++) {
+        if (varinuse[i] && !strcmp(arg[1], varname[i])) {v = i; break;}
+    }
+    if (argt[1] != argt[2] && v != -1) {cerr = 2; goto cmderr;}
     if (getType(tmpargs[1]) != 255) {cerr = 3; goto cmderr;}
     setVar(tmpargs[1], arg[2], argt[2]);
     goto cmderr;
+}
+if (!strcmp(arg[0], "LOCATE")) {
+    cerr = 0;
+    if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
+    if (argt[1] == 0) {} else
+    if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    else {cury = atoi(arg[1]);}
+    if (argct > 1) {
+        if (argt[2] == 0) {} else
+        if (argt[2] != 2) {cerr = 2; goto cmderr;}
+        else {curx = atoi(arg[2]);}
+    }
+    if (curx < 0) {getCurPos(); cerr = 16; goto cmderr;}
+    if (cury < 0) {getCurPos(); cerr = 16; goto cmderr;}
+    printf("\e[%d;%dH", cury, curx);
+    fflush(stdout);
 }
 if (!strcmp(arg[0], "CLS")) {
     cerr = 0;
@@ -85,6 +66,30 @@ if (!strcmp(arg[0], "CLS")) {
     }
     printf("\e[48;5;%um\e[H\e[2J\e[3J\e[48;5;%um", tbgc, bgc);
     fflush(stdout);
+    goto cmderr;
+}
+if (!strcmp(arg[0], "EXEC") || !strcmp(arg[0], "SH")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    cerr = system(arg[1]);
+    cerr = 0;
+    goto cmderr;
+}
+if (!strcmp(arg[0], "RUN")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    prog = fopen(arg[1], "r");
+    if (prog == NULL) {errstr = realloc(errstr, (argl[1] + 1) * sizeof(char)); copyStr(arg[1], errstr); cerr = 15; goto cmderr;}
+    progFilename = malloc(argl[1] + 1);
+    copyStr(arg[1], progFilename);
+    inProg = true;
+}
+if (!strcmp(arg[0], "RESETTIMER")) {
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    resetTimer();
     goto cmderr;
 }
 if (!strcmp(arg[0], "$PROMPT")) {

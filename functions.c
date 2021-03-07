@@ -41,17 +41,18 @@ if (!strcmp(farg[0], "RND") || !strcmp(farg[0], "RAND")) {
     sprintf(outbuf, "%lf", randNum(min, max));
     goto fexit;
 }
-if (!strcmp(farg[0], "INT")) {
+if (!strcmp(farg[0], "TIMER")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 1) {cerr = 3; goto fexit;}
-    if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%d", (int)dbl);
-    int i;
-    for (i = 0; outbuf[i] != '.' && outbuf[i] != '\0'; i++) {}
-    outbuf[i] = 0;
+    if (fargct != 0) {cerr = 3; goto fexit;} 
+    sprintf(outbuf, "%lu", timer());
+    goto fexit;
+}
+if (!strcmp(farg[0], "TIME")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;} 
+    sprintf(outbuf, "%lu", time_us());
     goto fexit;
 }
 if (!strcmp(farg[0], "CINT")) {
@@ -63,6 +64,19 @@ if (!strcmp(farg[0], "CINT")) {
     sscanf(farg[1], "%lf", &dbl);
     dbl = round(dbl);
     sprintf(outbuf, "%d", (int)dbl);
+    goto fexit;
+}
+if (!strcmp(farg[0], "INT")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    double dbl;
+    sscanf(farg[1], "%lf", &dbl);
+    sprintf(outbuf, "%d", (int)dbl);
+    int i;
+    for (i = 0; outbuf[i] != '.' && outbuf[i] != '\0'; i++) {}
+    outbuf[i] = 0;
     goto fexit;
 }
 if (!strcmp(farg[0], "STR$")) {
@@ -85,6 +99,22 @@ if (!strcmp(farg[0], "VAL")) {
     if (ftype == 1) {cerr = 2; goto fexit;}
     goto fexit;
 }
+if (!strcmp(farg[0], "CURX")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    getCurPos();
+    sprintf(outbuf, "%d", curx);
+    goto fexit;
+}
+if (!strcmp(farg[0], "CURY")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    getCurPos();
+    sprintf(outbuf, "%d", cury);
+    goto fexit;
+}
 if (!strcmp(farg[0], "INPUT$")) {
     cerr = 0;
     ftype = 1;
@@ -97,14 +127,6 @@ if (!strcmp(farg[0], "INPUT$")) {
         while (tmp == NULL) {tmp = readline("?: ");}
     }
     copyStr(tmp, outbuf);
-    goto fexit;
-}
-if (!strcmp(farg[0], "$PROMPT$")) {
-    cerr = 0;
-    ftype = 1;
-    if (fargct != 0) {cerr = 3; goto fexit;}
-    int tmpt = getVal(prompt, outbuf);
-    if (tmpt != 1) strcpy(outbuf, "CLIBASIC> ");
     goto fexit;
 }
 if (!strcmp(farg[0], "FGC")) {
@@ -121,19 +143,18 @@ if (!strcmp(farg[0], "BGC")) {
     sprintf(outbuf, "%d", (int)fgc);
     goto fexit;
 }
-if (!strcmp(farg[0], "CURX")) {
+if (!strcmp(farg[0], "$PROMPT$")) {
     cerr = 0;
-    ftype = 2;
+    ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
-    getCurPos();
-    sprintf(outbuf, "%d", curx);
+    int tmpt = getVal(prompt, outbuf);
+    if (tmpt != 1) strcpy(outbuf, "CLIBASIC> ");
     goto fexit;
 }
-if (!strcmp(farg[0], "CURY")) {
+if (!strcmp(farg[0], "$VER$")) {
     cerr = 0;
-    ftype = 2;
+    ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
-    getCurPos();
-    sprintf(outbuf, "%d", cury);
+    copyStr(VER, outbuf);
     goto fexit;
 }
