@@ -12,7 +12,7 @@
 #include <editline.h>
 #include <readline/history.h>
 
-char VER[] = "0.11.2";
+char VER[] = "0.11.3";
 
 FILE *prog;
 FILE *f[256];
@@ -465,8 +465,16 @@ uint8_t getVar(char* vn, char* varout) {
     return 0;
 }
 
-void setVar(char* vn, char* val, uint8_t t) {
-    for (int i = 0; vn[i] != '\0'; i++) {if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] = vn[i] - 32;}
+bool setVar(char* vn, char* val, uint8_t t) {
+    for (int i = 0; vn[i] != '\0'; i++) {
+        if (!isValidVarChar(vn, i)) {
+            cerr = 4;
+            errstr = realloc(errstr, (strlen(vn) + 1) * sizeof(char));
+            copyStr(vn, errstr);
+            return false;
+        }
+        if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] -= 32;
+    }
     int v = -1;
     for (int i = 0; i < varmaxct; i++) {
         if (!strcmp(vn, varname[i])) {v = i; break;}
@@ -489,7 +497,7 @@ void setVar(char* vn, char* val, uint8_t t) {
         varmaxct++;
     }
     copyStr(val, varstr[v]);
-    return;
+    return true;
 }
 
 bool gvchkchar(char* tmp, int i) {
