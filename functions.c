@@ -99,6 +99,14 @@ if (!strcmp(farg[0], "VAL")) {
     if (ftype == 1) {cerr = 2; goto fexit;}
     goto fexit;
 }
+if (!strcmp(farg[0], "LEN")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    sprintf(outbuf, "%lu", strlen(farg[1]));
+    goto fexit;
+}
 if (!strcmp(farg[0], "CURX")) {
     cerr = 0;
     ftype = 2;

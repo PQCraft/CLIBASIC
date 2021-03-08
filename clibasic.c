@@ -12,7 +12,7 @@
 #include <editline.h>
 #include <readline/history.h>
 
-char VER[] = "0.11.3";
+char VER[] = "0.11.4";
 
 FILE *prog;
 FILE *f[256];
@@ -193,7 +193,7 @@ int main(int argc, char *argv[]) {
         didloop = false;
         didelse = false;
         bool inStr = false;
-        signal(SIGINT, cmdIntHndl);
+        if (!inProg) signal(SIGINT, cmdIntHndl);
         progLine = 1;
         while (true) {
             if (!inProg) {
@@ -899,7 +899,7 @@ bool runlogic() {
             if (itdcmd[itstackp]) return true;
         }
         if (dlstackp > -1) {
-            if (dldcmd[dlstackp]) return true;
+            if (dldcmd[dlstackp]) {dlstackp--; return true;}
         }
         cp = dlstack[dlstackp];
         progLine = dlpline[dlstackp];
@@ -915,10 +915,10 @@ bool runlogic() {
         if (itstackp > -1) {
             if (itdcmd[itstackp]) return true;
         }
-        copyStrSnip(cmd, j + 1, strlen(cmd), tmp[1]);
         if (dlstackp > -1) {
-            if (dldcmd[dlstackp]) return true;
+            if (dldcmd[dlstackp]) {dlstackp--; return true;}
         }
+        copyStrSnip(cmd, j + 1, strlen(cmd), tmp[1]);
         uint8_t testval = logictest(tmp[1]);
         if (testval != 1 && testval != 0) return true;
         if (testval == 1) {cp = dlstack[dlstackp]; progLine = dlpline[dlstackp]; lockpl = true;}
