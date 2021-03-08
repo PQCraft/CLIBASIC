@@ -68,6 +68,36 @@ if (!strcmp(arg[0], "CLS")) {
     fflush(stdout);
     goto cmderr;
 }
+if (!strcmp(arg[0], "WAIT")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    uint64_t d;
+    sscanf(arg[1], "%lu", &d);
+    uint64_t t = d * 1000000 + time_us();
+    while (t > time_us()) {}
+    goto cmderr;
+}    
+if (!strcmp(arg[0], "WAITMS")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    uint64_t d;
+    sscanf(arg[1], "%lu", &d);
+    uint64_t t = d * 1000 + time_us();
+    while (t > time_us()) {}
+    goto cmderr;
+}    
+if (!strcmp(arg[0], "WAITUS")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    uint64_t d;
+    sscanf(arg[1], "%lu", &d);
+    uint64_t t = d + time_us();
+    while (t > time_us()) {}
+    goto cmderr;
+}    
 if (!strcmp(arg[0], "EXEC") || !strcmp(arg[0], "SH")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}

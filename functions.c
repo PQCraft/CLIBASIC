@@ -17,7 +17,7 @@ if (!strcmp(farg[0], "ASC")) {
         if (fargt[2] != 2) {cerr = 2; goto fexit;}
         pos = (int)atoi(farg[2]);
         if (pos < 0) pos = 0;
-        if (pos > flen[2] + 1) pos = flen[2] + 1;
+        if (pos > (int)strlen(farg[1])) pos = strlen(farg[1]);
     }
     sprintf(outbuf, "%d", farg[1][pos]);
     goto fexit;
@@ -105,6 +105,26 @@ if (!strcmp(farg[0], "LEN")) {
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     sprintf(outbuf, "%lu", strlen(farg[1]));
+    goto fexit;
+}
+if (!strcmp(farg[0], "INKEY$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    enableRawMode();
+    int obp = -1;
+    int tmp = -1;
+    while (tmp == -1) {
+        obp++;
+        tmp = read(1, &outbuf[obp], 1);
+        if (tmp == 0) {outbuf[obp] = 0; break;}
+        if (tmp == -1) {outbuf[obp] = 0; break;}
+        if (outbuf[obp] == 3) {outbuf[obp] = 0; cmdint = true; break;}
+    }
+    obp++;
+    outbuf[obp] = 0;
+    if (!textlock) tcsetattr(0, TCSANOW, &restore);
+    disableRawMode();
     goto fexit;
 }
 if (!strcmp(farg[0], "CURX")) {

@@ -12,7 +12,7 @@
 #include <editline.h>
 #include <readline/history.h>
 
-char VER[] = "0.11.4";
+char VER[] = "0.11.5";
 
 FILE *prog;
 FILE *f[256];
@@ -76,6 +76,7 @@ bool debug = false;
 bool runfile = false;
 
 struct termios term, restore;
+static struct termios orig_termios;
 bool textlock = false;
 
 struct timeval time1, time2;
@@ -102,7 +103,7 @@ void cleanExit() {
 }
 
 void cmdIntHndl() {
-    signal(SIGINT, cleanExit);
+    if (cmdint) signal(SIGINT, cleanExit);
     cmdint = true;
 }
 
@@ -193,11 +194,12 @@ int main(int argc, char *argv[]) {
         didloop = false;
         didelse = false;
         bool inStr = false;
-        if (!inProg) signal(SIGINT, cmdIntHndl);
+        if (!runfile) signal(SIGINT, cmdIntHndl);
         progLine = 1;
         while (true) {
             if (!inProg) {
                 if (cmdint) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cmdint = false; goto brkproccmd;}
+                if (debug) printf("conbuf: {%s}\n", conbuf);
                 if (conbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((conbuf[cp] == ':' && !inStr) || conbuf[cp] == '\0') {
                     while ((conbuf[cp - cmdl] == ' ') && cmdl > 0) {cmdl--;}
@@ -205,7 +207,9 @@ int main(int argc, char *argv[]) {
                     cmdpos = cp - cmdl;
                     copyStrSnip(conbuf, cp - cmdl, cp, cmd);
                     cmdl = 0;
+                    if (debug) printf("calling runcmd()\n");
                     runcmd();
+                    if (cmdint) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cmdint = false; goto brkproccmd;}
                     if (cp == -1) goto brkproccmd;
                     if (conbuf[cp] == '\0') goto brkproccmd;
                 } else
@@ -227,6 +231,7 @@ int main(int argc, char *argv[]) {
                     copyFileSnip(prog, cp - cmdl, cp, cmd);
                     cmdl = 0;
                     runcmd();
+                    if (cmdint) {inProg = false; fclose(prog); free(progFilename); cmdint = false; goto brkproccmd;}
                     if (cp == -1) {inProg = false; fclose(prog); free(progFilename); goto brkproccmd;}
                     if (feof(prog) || fgrabc(prog, cp) == -1 || fgrabc(prog, cp) == 4 || fgrabc(prog, cp) == 0) {inProg = false; fclose(prog); free(progFilename); goto brkproccmd;}
                 } else
@@ -235,6 +240,8 @@ int main(int argc, char *argv[]) {
             }
         }
         brkproccmd:
+        
+        if (debug) printf("conbuf: {%s}\n", conbuf);
         signal(SIGINT, cleanExit);
         if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
     }
@@ -289,6 +296,25 @@ void getCurPos() {
     }
     if (!textlock) tcsetattr(0, TCSANOW, &restore);
     return;
+}
+
+void enableRawMode() {
+    struct termios raw;
+    if (!isatty(STDIN_FILENO)) exit(EXIT_FAILURE);
+    if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) exit(EXIT_FAILURE);
+    raw = orig_termios;
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    raw.c_oflag &= ~(OPOST);
+    raw.c_cflag |= (CS8);
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 1;
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0) exit(EXIT_FAILURE);
+    return;
+}
+
+void disableRawMode() {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
 }
 
 int fgrabc(FILE* file, int64_t pos) {
@@ -970,8 +996,10 @@ void runcmd() {
     bool lgc = runlogic();
     if (lgc) goto cmderr;
     cerr = 255;
+    if (debug) printf("testing logic...\n");
     if (dlstackp > -1) {if (dldcmd[dlstackp] == 1) return;}
     if (itstackp > -1) {if (itdcmd[itstackp] == 1) return;}
+    if (debug) printf("passed\n");
     if (!mkargs()) goto cmderr;
     for (int i = 0; i < argl[0]; i++) {
         if (arg[0][i] >= 'a' && arg[0][i] <= 'z') {
