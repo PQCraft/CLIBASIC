@@ -73,7 +73,7 @@ if (!strcmp(arg[0], "WAIT")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
-    sscanf(arg[1], "%lu", &d);
+    sscanf(arg[1], "%llu", (long long unsigned *)&d);
     uint64_t t = d * 1000000 + time_us();
     while (t > time_us()) {}
     goto cmderr;
@@ -83,7 +83,7 @@ if (!strcmp(arg[0], "WAITMS")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
-    sscanf(arg[1], "%lu", &d);
+    sscanf(arg[1], "%llu", (long long unsigned *)&d);
     uint64_t t = d * 1000 + time_us();
     while (t > time_us()) {}
     goto cmderr;
@@ -93,7 +93,7 @@ if (!strcmp(arg[0], "WAITUS")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
-    sscanf(arg[1], "%lu", &d);
+    sscanf(arg[1], "%llu", (long long unsigned *)&d);
     uint64_t t = d + time_us();
     while (t > time_us()) {}
     goto cmderr;

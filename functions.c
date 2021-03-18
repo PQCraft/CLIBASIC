@@ -39,20 +39,21 @@ if (!strcmp(farg[0], "RND") || !strcmp(farg[0], "RAND")) {
         goto fexit;
     }
     sprintf(outbuf, "%lf", randNum(min, max));
+    if (debug) printf("1: outbuf: {%s}\n", outbuf);
     goto fexit;
 }
 if (!strcmp(farg[0], "TIMER")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;} 
-    sprintf(outbuf, "%lu", timer());
+    sprintf(outbuf, "%llu", (long long unsigned)timer());
     goto fexit;
 }
 if (!strcmp(farg[0], "TIME")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;} 
-    sprintf(outbuf, "%lu", time_us());
+    sprintf(outbuf, "%llu", (long long unsigned)time_us());
     goto fexit;
 }
 if (!strcmp(farg[0], "CINT")) {
@@ -61,9 +62,11 @@ if (!strcmp(farg[0], "CINT")) {
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
     double dbl;
+    if (debug) printf("farg[1]: {%s}\n", farg[1]);
     sscanf(farg[1], "%lf", &dbl);
     dbl = round(dbl);
     sprintf(outbuf, "%d", (int)dbl);
+    if (debug) printf("outbuf: {%s}\n", outbuf);
     goto fexit;
 }
 if (!strcmp(farg[0], "INT")) {
@@ -104,7 +107,7 @@ if (!strcmp(farg[0], "LEN")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
-    sprintf(outbuf, "%lu", strlen(farg[1]));
+    sprintf(outbuf, "%lu", (long unsigned)strlen(farg[1]));
     goto fexit;
 }
 if (!strcmp(farg[0], "INKEY$")) {
