@@ -3,24 +3,26 @@ C = gcc
 CFLAGS1 = -Wall -Wextra -O2
 CFLAGS2 = -lm -ledit
 
+CBITS = $(shell getconf LONG_BIT)
+
 all:
 	rm -f ./clibasic
-	$(C) $(CFLAGS1) clibasic.c -o clibasic $(CFLAGS2)
+	$(C) $(CFLAGS1) -D B$(CBITS) clibasic.c -o clibasic $(CFLAGS2)
 	chmod +x ./clibasic
 	./clibasic
 
 all32:
 	rm -f ./clibasic
-	$(C) $(CFLAGS1) -m32 clibasic.c -o clibasic $(CFLAGS2)
+	$(C) $(CFLAGS1) -m32 -D B32 clibasic.c -o clibasic $(CFLAGS2)
 	chmod +x ./clibasic
 	./clibasic
 
 build:
-	$(C) $(CFLAGS1) clibasic.c -o clibasic $(CFLAGS2)
+	$(C) $(CFLAGS1) -D B$(CBITS) clibasic.c -o clibasic $(CFLAGS2)
 	chmod +x ./clibasic
 
 build32:
-	$(C) $(CFLAGS1) -m32 clibasic.c -o clibasic $(CFLAGS2)
+	$(C) $(CFLAGS1) -m32 -D B32 clibasic.c -o clibasic $(CFLAGS2)
 	chmod +x ./clibasic
 
 update:
@@ -38,11 +40,11 @@ update:
 	mv .tmp Makefile
 
 install:
-	if [ ! -f ./clibasic ]; then $(C) $(CFLAGS1) clibasic.c -o clibasic $(CFLAGS2); chmod +x ./clibasic; fi
+	if [ ! -f ./clibasic ]; then $(C) $(CFLAGS1) -D B$(CBITS) clibasic.c -o clibasic $(CFLAGS2); chmod +x ./clibasic; fi
 	sudo rm -f /usr/bin/clibasic; sudo cp ./clibasic /usr/bin/clibasic
 
 install32:
-	if [ ! -f ./clibasic ]; then $(C) $(CFLAGS1) -m32 clibasic.c -o clibasic $(CFLAGS2); chmod +x ./clibasic; fi
+	if [ ! -f ./clibasic ]; then $(C) $(CFLAGS1) -m32 -D B32 clibasic.c -o clibasic $(CFLAGS2); chmod +x ./clibasic; fi
 	sudo rm -f /usr/bin/clibasic; sudo cp ./clibasic /usr/bin/clibasic
 
 run:
@@ -50,9 +52,6 @@ run:
 
 debug:
 	./clibasic --debug
-
-cls:
-	clear
 
 clean:
 	rm -f clibasic

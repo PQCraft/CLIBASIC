@@ -12,7 +12,15 @@
 #include <editline.h>
 #include <readline/history.h>
 
-char VER[] = "0.11.6";
+char VER[] = "0.11.7";
+
+#ifdef B32
+    char BVER[] = "32";
+#elif B64
+    char BVER[] = "64";
+#else
+    char BVER[] = "?";
+#endif
 
 FILE *prog;
 FILE *f[256];
@@ -125,7 +133,7 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
             if (argc > 2) {printf("Incorrent number of options passed.\n"); cleanExit();}
-            printf("Command Line Interface BASIC version %s\n", VER);
+            printf("Command Line Interface BASIC version %s (%s-bit)\n", VER, BVER);
             printf("Copyright (C) 2021 PQCraft\n");
             exit = true;
         } else
@@ -153,7 +161,7 @@ int main(int argc, char *argv[]) {
     }
     if (exit) cleanExit();
     printf("\e[0m\e[38;5;%um\e[48;5;%um", fgc, bgc);
-    printf("Command Line Interface BASIC version %s\n", VER);
+    if (!runfile) printf("Command Line Interface BASIC version %s (%s-bit)\n", VER, BVER);
     if (debug) printf("Running in debug mode\n");
     strcpy(prompt, "\"CLIBASIC> \"");
     errstr = malloc(0);
