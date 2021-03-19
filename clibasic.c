@@ -12,7 +12,7 @@
 #include <editline.h>
 #include <readline/history.h>
 
-char VER[] = "0.11.7";
+char VER[] = "0.11.8";
 
 #ifdef B32
     char BVER[] = "32";
@@ -37,7 +37,7 @@ char **varstr;
 char **varname;
 bool *varinuse;
 uint8_t *vartype;
-int varmaxct;
+int varmaxct = 0;
 
 char *cmd;
 int cmdl;
@@ -207,7 +207,6 @@ int main(int argc, char *argv[]) {
         while (true) {
             if (!inProg) {
                 if (cmdint) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cmdint = false; goto brkproccmd;}
-                //if (debug) printf("conbuf: {%s}\n", conbuf);
                 if (conbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((conbuf[cp] == ':' && !inStr) || conbuf[cp] == '\0') {
                     while ((conbuf[cp - cmdl] == ' ') && cmdl > 0) {cmdl--;}
@@ -238,6 +237,7 @@ int main(int argc, char *argv[]) {
                     cmdpos = cp - cmdl;
                     copyFileSnip(prog, cp - cmdl, cp, cmd);
                     cmdl = 0;
+                    if (debug) printf("conbuf: {%s}\n", conbuf);
                     runcmd();
                     if (cmdint) {inProg = false; fclose(prog); free(progFilename); cmdint = false; goto brkproccmd;}
                     if (cp == -1) {inProg = false; fclose(prog); free(progFilename); goto brkproccmd;}
@@ -248,7 +248,6 @@ int main(int argc, char *argv[]) {
             }
         }
         brkproccmd:
-        //if (debug) printf("conbuf: {%s}\n", conbuf);
         signal(SIGINT, cleanExit);
         if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
     }
@@ -341,7 +340,8 @@ bool isSpChar(char* bfr, int pos) {
 }
 
 bool isValidVarChar(char* bfr, int pos) {
-    return ((bfr[pos] >= 'A' && bfr[pos] <= 'Z') || (bfr[pos] >= 'a' && bfr[pos] <= 'z') || (bfr[pos] >= '0' && bfr[pos] <= '9') || bfr[pos] == '_' || bfr[pos] == '$' || bfr[pos] == '%' || bfr[pos] == '&' || bfr[pos] == '!' || bfr[pos] == '~');
+    return ((bfr[pos] >= 'A' && bfr[pos] <= 'Z') || (bfr[pos] >= 'a' && bfr[pos] <= 'z') || (bfr[pos] >= '0' && bfr[pos] <= '9')
+    || bfr[pos] == '_' || bfr[pos] == '$' || bfr[pos] == '%' || bfr[pos] == '&' || bfr[pos] == '!' || bfr[pos] == '~');
 }
 
 int copyStr(char* str1, char* str2) {
@@ -428,11 +428,13 @@ int getArg(int num, char* inbuf, char* outbuf);
 int getArgCt(char* inbuf);
 
 uint8_t getFunc(char* inbuf, char* outbuf) {
+    if (debug) printf("getFunc(\"%s\", \"%s\");\n", inbuf, outbuf);
     char tmp[2][32768];
     char **farg;
     uint8_t *fargt;
     int *flen;
     int fargct;
+    int ftmpct = 0;
     int ftype = 0;
     int i;
     for (i = 0; inbuf[i] != '('; i++) {if (inbuf[i] >= 'a' && inbuf[i] <= 'z') inbuf[i] = inbuf[i] - 32;}
@@ -444,28 +446,33 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     for (int j = 0; j <= fargct; j++) {
         if (j == 0) {
             flen[0] = i;
-            farg[0] = (char *)malloc((flen[0] + 1) * sizeof(char));
+            farg[0] = (char*)malloc((flen[0] + 1) * sizeof(char));
             errstr = realloc(errstr, (flen[0] + 1) * sizeof(char));
             copyStrSnip(inbuf, 0, i, farg[0]);
             copyStrSnip(inbuf, 0, i, errstr);
         } else {
-            flen[j] = getArg(j - 1, tmp[0], tmp[1]);
-            farg[j] = (char *)malloc((flen[j] + 1) * sizeof(char));
-            fargt[j] = getVal(tmp[1], farg[j]);
+            getArg(j - 1, tmp[0], tmp[1]);
+            fargt[j] = getVal(tmp[1], tmp[1]);
             if (fargt[j] == 0) goto fexit;
             if (fargt[j] == 255) fargt[j] = 0;
+            flen[j] = strlen(tmp[1]);
+            farg[j] = (char*)malloc((flen[j] + 1) * sizeof(char));
+            copyStr(tmp[1], farg[j]);
+            if (debug) printf("farg[%d]: {%s}\n", j, farg[j]);
+            ftmpct++;
         }
     }
     outbuf[0] = 0;
     cerr = 127;
     #include "functions.c"
     fexit:
-    for (int j = 0; j <= fargct; j++) {
+    for (int j = 0; j <= ftmpct; j++) {
         free(farg[j]);
     }
     free(farg);
     free(flen);
     free(fargt);
+    if (debug) printf("output: getFunc(\"%s\", \"%s\");\n", inbuf, outbuf);
     if (cerr != 0) return 0;
     return ftype;
 }
@@ -488,20 +495,25 @@ uint8_t getVar(char* vn, char* varout) {
         }
     }
     int v = -1;
+    if (debug) printf("varmaxct: [%d]\n", varmaxct);
     for (int i = 0; i < varmaxct; i++) {
-        if (varinuse[i] && !strcmp(vn, varname[i])) {v = i; break;}
+        if (debug) printf("varname[%d]: {%s}\n", i, varname[i]);
+        if (varinuse[i]) {if (!strcmp(vn, varname[i])) {v = i; break;}}
     }
+    if (debug) printf("getVar: v: [%d]\n", v);
     if (v == -1) {
         if (vn[strlen(vn) - 1] == '$') {varout[0] = 0; return 1;}
         else {varout[0] = '0'; varout[1] = 0; return 2;}
     } else {
         copyStr(varstr[v], varout);
+        if (debug) printf("varout: {%s}\n", varout);
         return vartype[v];
     }
     return 0;
 }
 
 bool setVar(char* vn, char* val, uint8_t t) {
+    if (debug) printf("setVar(\"%s\", \"%s\", %d);\n", vn, val, (int)t);
     for (int i = 0; vn[i] != '\0'; i++) {
         if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] -= 32;
     }
@@ -527,20 +539,23 @@ bool setVar(char* vn, char* val, uint8_t t) {
         v = varmaxct;
         varstr = realloc(varstr, (v + 1) * sizeof(char*));
         varname = realloc(varname, (v + 1) * sizeof(char*));
-        varlen = (int*)realloc(varlen, (v + 1) * sizeof(int));
+        varlen = realloc(varlen, (v + 1) * sizeof(int));
         varinuse = (bool*)realloc(varinuse, (v + 1) * sizeof(bool));
         varinuse[v] = true;
         vartype = (uint8_t*)realloc(vartype, (v + 1) * sizeof(uint8_t));
         varlen[v] = strlen(val);
-        varstr[v] = malloc(0);
-        varstr[v] = (char *)realloc(varstr[v], (varlen[v] + 1) * sizeof(char));
-        varname[v] = malloc(0);
-        varname[v] = (char *)realloc(varname[v], (strlen(vn) + 1) * sizeof(char));
+        varstr[v] = (char*)malloc((varlen[v] + 1) * sizeof(char));
+        varname[v] = (char*)malloc((strlen(vn) + 1) * sizeof(char));
         copyStr(vn, varname[v]);
+        copyStr(val, varstr[v]);
         vartype[v] = t;
         varmaxct++;
+    } else {
+        if (t != vartype[v]) {cerr = 2; return false;}
+        varlen[v] = strlen(val);
+        varstr[v] = (char*)realloc(varstr[v], (varlen[v] + 1) * sizeof(char));
+        copyStr(val, varstr[v]);
     }
-    copyStr(val, varstr[v]);
     return true;
 }
 
@@ -562,9 +577,11 @@ bool gvchkchar(char* tmp, int i) {
 }
 
 uint8_t getVal(char* tmpinbuf, char* outbuf) {
+    if (debug) printf("getVal(\"%s\", \"%s\");\n", tmpinbuf, outbuf);
     if (tmpinbuf[0] == '\0') {return 255;}
     char inbuf[32768];
     copyStr(tmpinbuf, inbuf);
+    outbuf[0] = 0;
     int ip = 0, jp = 0;
     char tmp[4][32768];
     uint8_t t = 0;
@@ -585,12 +602,10 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                 jp = i;
                 copyStrSnip(inbuf, ip + 1, jp, tmp[0]);
                 t = getVal(tmp[0], tmp[0]);
-                if (debug) printf("t: %d\n", t);
                 if (t == 0) return 0;
                 if (dt == 0) dt = t;
                 if (t == 255) {t = 1; dt = 1;}
                 if (t != dt) {cerr = 2; return 0;}
-                if (debug) printf("dt: %d\n", dt);
                 copyStrSnip(inbuf, 0, ip, tmp[1]);
                 copyStrApnd(tmp[1], tmp[2]);
                 if (t == 1) copyStrApnd(tmp[3], tmp[2]);
@@ -675,9 +690,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                     }
                     copyStr(tmp[0], tmp[1]); goto gvfexit;
                 }
-                if (debug) printf("1: tmp[0]: {%s} tmp[1]: {%s} tmp[2]: {%s} tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
-                if (debug) printf("2: tmp[0]: {%s} tmp[1]: {%s} tmp[2]: {%s} tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 for (int i = p2 - 1; i > 0; i--) {
                     if (tmp[0][i] == '"') inStr = !inStr;
                     if (isSpChar(tmp[0], i) && !inStr) {p1 = i; break;}
@@ -688,16 +701,13 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                 }
                 if (tmp[0][p1] == '+') p1++;
                 copyStrSnip(tmp[0], p1, p2, tmp[2]);
-                if (debug) printf("3: tmp[0]: {%s} tmp[1]: {%s} tmp[2]: {%s} tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 t = getType(tmp[2]);
                 if (t == 0) {cerr = 1; return 0;} else
                 if (t == 255) {t = getVar(tmp[2], tmp[2]); if (t == 0) {return 0;} if (t != 2) {cerr = 2; return 0;}}
                 copyStrSnip(tmp[0], p2 + 1, p3, tmp[3]);
-                if (debug) printf("4: tmp[0]: {%s} tmp[1]: {%s} tmp[2]: {%s} tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 t = getType(tmp[3]);
                 if (t == 0) {cerr = 1; return 0;} else
                 if (t == 255) {t = getVar(tmp[3], tmp[3]); if (t == 0) {return 0;} if (t != 2) {cerr = 2; return 0;}}
-                if (debug) printf("5: tmp[0]: {%s} tmp[1]: {%s} tmp[2]: {%s} tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 sscanf(tmp[2], "%lf", &num1);
                 sscanf(tmp[3], "%lf", &num2);
                 switch (numAct) {
@@ -707,7 +717,6 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                     case 3: if (num2 == 0) {cerr = 5; return 0;} num3 = num1 / num2; break;
                     case 4: num3 = pow(num1, num2); break;
                 }
-                if (debug) printf("num1: [%lf] num2: [%lf] num3: [%lf] \n", num1, num2, num3);
                 tmp[1][0] = 0;
                 sprintf(tmp[2], "%lf", num3);
                 if (dt == 2) {
@@ -738,7 +747,8 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
     }
     copyStr(tmp[1], outbuf);
     if (outbuf[0] == '\0' && dt != 1) {outbuf[0] = '0'; outbuf[1] = '\0'; return 2;}
-    return dt;
+    if (debug) printf("output: getVal(\"%s\", \"%s\");\n", inbuf, outbuf);
+    return (uint8_t)dt;
 }
 
 bool solveargs() {
@@ -747,12 +757,15 @@ bool solveargs() {
     char tmpbuf[32768];
     argt[0] = 0;
     arg[0] = tmpargs[0];
+    argl[0] = strlen(arg[0]);
     for (int i = 1; i <= argct; i++) {arg[i] = malloc(1);}
     for (int i = 1; i <= argct; i++) {
         argt[i] = 0;
         for (int p = 0; p < 32767; p++) {tmpbuf[p] = 0;}
-        if (debug) printf("getting val...\n");
-        argt[i] = getVal(tmpargs[i], tmpbuf);
+        int bruh;
+        bruh = (int)getVal(tmpargs[i], tmpbuf);
+        argt[i] = bruh;
+        argl[i] = strlen(tmpbuf);
         arg[i] = malloc((argl[i] + 1) * sizeof(char));
         copyStr(tmpbuf, arg[i]);
         argl[i] = strlen(arg[i]);
@@ -800,8 +813,24 @@ bool mkargs() {
     int j = 0;
     while (cmd[j] == ' ') {j++;}
     int h = j;
-    while (cmd[h] != ' ' && cmd[h] != '\0') {h++;}
+    while (cmd[h] != ' ' && cmd[h] != '=' && cmd[h] != '\0') {h++;}
     copyStrSnip(cmd, h + 1, strlen(cmd), tmpbuf[0]);
+    int tmph = h;
+    while (cmd[tmph] == ' ' && cmd[tmph] != '\0') {tmph++;}
+    if (cmd[tmph] == '=') {
+        strcpy(tmpbuf[1], "SET ");
+        cmd[tmph] = ',';
+        copyStrApnd(cmd, tmpbuf[1]);
+        cmd = realloc(cmd, (strlen(tmpbuf[1]) + 1) * sizeof(char));
+        copyStr(tmpbuf[1], cmd);
+        copyStr(tmpbuf[1], tmpbuf[0]);
+        tmpbuf[1][0] = '\0';
+        h = 3;
+        j = 0;
+    }
+    if (debug) printf("cmd: {%s}\n", cmd);
+    if (debug) printf("tmpbuf[0]: {%s}\n", tmpbuf[0]);
+    if (debug) printf("tmpbuf[1]: {%s}\n", tmpbuf[1]);
     argct = getArgCt(tmpbuf[0]);
     tmpargs = malloc((argct + 1) * sizeof(char*));
     argl = malloc((argct + 1) * sizeof(int));
@@ -810,14 +839,11 @@ bool mkargs() {
         if (i == 0) {
             copyStrSnip(cmd, j, h, tmpbuf[0]);
             argl[i] = strlen(tmpbuf[0]);
-            if (debug) printf("length of arg[%d]: %d\n", i, argl[i]);
             tmpargs[i] = malloc((argl[i] + 1) * sizeof(char));
             copyStr(tmpbuf[0], tmpargs[i]);            
             copyStrSnip(cmd, h + 1, strlen(cmd), tmpbuf[0]);
         } else {
-            if (debug) printf("getting arg[%d]...\n", i);
             argl[i] = getArg(i - 1, tmpbuf[0], tmpbuf[1]);
-            if (debug) printf("length of arg[%d]: %d\n", i, argl[i]);
             tmpargs[i] = malloc((argl[i] + 1) * sizeof(char));
             copyStr(tmpbuf[1], tmpargs[i]);
         }
@@ -831,6 +857,7 @@ bool mkargs() {
 }
 
 uint8_t logictest(char* inbuf) {
+    if (debug) printf("logictest(\"%s\");\n", inbuf);
     char tmp[3][32768];
     int tmpp = 0;
     uint8_t t1 = 0;
@@ -864,9 +891,13 @@ uint8_t logictest(char* inbuf) {
         {tmp[2][tmpp] = inbuf[i]; tmpp++;}
     }
     tmp[2][tmpp] = '\0';
+    if (debug) printf("getting tmp[0]... current: {%s}\n", tmp[0]);
     t1 = getVal(tmp[0], tmp[0]);
+    if (debug) printf("DONE: {%s}\n", tmp[0]);
     if (t1 == 0) return -1;
+    if (debug) printf("getting tmp[2]... current: {%s}\n", tmp[2]);
     t2 = getVal(tmp[2], tmp[2]);
+    if (debug) printf("DONE: {%s}\n", tmp[2]);
     if (t2 == 0) return -1;
     if (t1 != t2) {cerr = 2; return -1;}
     if (!strcmp(tmp[1], "=")) {
@@ -934,8 +965,8 @@ bool runlogic() {
         if (dlstackp > 0) {
             if (dldcmd[dlstackp - 1]) {dldcmd[dlstackp] = true; return true;}
         }
-        if (itstackp > 0) {
-            if (itdcmd[itstackp - 1]) {dldcmd[dlstackp] = true; return true;}
+        if (itstackp > -1) {
+            if (itdcmd[itstackp]) {dldcmd[dlstackp] = true; return true;}
         }
         int p = j;
         while (cmd[p] != '\0') {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
@@ -951,7 +982,7 @@ bool runlogic() {
             if (dldcmd[dlstackp - 1]) {dldcmd[dlstackp] = true; return true;}
         }
         if (itstackp > -1) {
-            if (itdcmd[itstackp - 1]) {dldcmd[dlstackp] = true; return true;}
+            if (itdcmd[itstackp]) {dldcmd[dlstackp] = true; return true;}
         }
         copyStrSnip(cmd, j + 1, strlen(cmd), tmp[1]);
         uint8_t testval = logictest(tmp[1]);
@@ -1003,8 +1034,8 @@ bool runlogic() {
         if (itstackp > 0) {
             if (itdcmd[itstackp - 1]) {itdcmd[itstackp] = true; return true;}
         }
-        if (dlstackp > 0) {
-            if (dldcmd[dlstackp - 1]) {itdcmd[itstackp] = true; return true;}
+        if (dlstackp > -1) {
+            if (dldcmd[dlstackp]) {itdcmd[itstackp] = true; return true;}
         }
         copyStrSnip(cmd, j + 1, strlen(cmd), tmp[1]);
         uint8_t testval = logictest(tmp[1]);
@@ -1013,21 +1044,28 @@ bool runlogic() {
         return true;
     }
     if (!strcmp(tmp[0], "ELSE")) {
+        if (debug) printf("ELSE (1): itdcmd[%d]: [%d]\n", (int)itdcmd[itstackp], (int)itstackp);
         if (itstackp <= -1) {cerr = 8; goto lexit;}
         if (itstackp > 0) {
+            if (debug) printf("ELSE: checking itdcmd[itstackp - 1]: [%d]\n", (int)itdcmd[itstackp - 1]);
             if (itdcmd[itstackp - 1]) return true;
+            if (debug) printf("ELSE: passed\n");
         }
-        if (dlstackp > 0) {
-            if (dldcmd[dlstackp - 1]) return true;
+        if (dlstackp > -1) {
+            if (debug) printf("ELSE: checking dldcmd[dlstackp]: [%d]\n", (int)dldcmd[dlstackp]);
+            if (dldcmd[dlstackp]) return true;
+            if (debug) printf("ELSE: passed\n");
         }
         if (didelse) {cerr = 11; return true;}
         didelse = true;
         itdcmd[itstackp] = !itdcmd[itstackp];
+        if (debug) printf("ELSE (2): itdcmd[%d]: [%d]\n", (int)itdcmd[itstackp], (int)itstackp);
         return true;
     }
     if (!strcmp(tmp[0], "ENDIF")) {
         if (itstackp <= -1) {cerr = 7; goto lexit;}
         itdcmd[itstackp] = false;
+        didelse = false;
         itstackp--;
         return true;
     }
@@ -1038,20 +1076,26 @@ bool runlogic() {
 
 void runcmd() {
     if (cmd[0] == '\0') return;
+    cerr = 0;
     bool lgc = runlogic();
     if (lgc) goto cmderr;
-    cerr = 255;
     if (debug) printf("testing logic...\n");
     if (dlstackp > -1) {if (dldcmd[dlstackp] == 1) return;}
     if (itstackp > -1) {if (itdcmd[itstackp] == 1) return;}
     if (debug) printf("passed\n");
     if (debug) printf("making args...\n");
     if (!mkargs()) goto cmderr;
+    if (debug) printf("running command...\n");
     for (int i = 0; i < argl[0]; i++) {
         if (arg[0][i] >= 'a' && arg[0][i] <= 'z') {
             arg[0][i] -= 32;
         }
     }
+    if (debug) printf("C [%d]: {%s}\n", 0, arg[0]);
+    for (int i = 1; i <= argct; i++) {
+        if (debug) printf("A [%d]: {%s}\n", i, arg[i]);
+    }
+    cerr = 255;
     // COMMANDS START
     #include "commands.c"
     // COMMANDS END

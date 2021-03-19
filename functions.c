@@ -158,6 +158,8 @@ if (!strcmp(farg[0], "INPUT$")) {
         while (tmp == NULL) {tmp = readline("?: ");}
     }
     copyStr(tmp, outbuf);
+    free(tmp);
+    if (debug) printf("input output: {%s}\n", outbuf);
     goto fexit;
 }
 if (!strcmp(farg[0], "FGC")) {
@@ -187,5 +189,12 @@ if (!strcmp(farg[0], "$VER$")) {
     ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
     copyStr(VER, outbuf);
+    goto fexit;
+}
+if (!strcmp(farg[0], "$BVER$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    copyStr(BVER, outbuf);
     goto fexit;
 }

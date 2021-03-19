@@ -37,7 +37,7 @@ if (!strcmp(arg[0], "SET") || !strcmp(arg[0], "LET")) {
     }
     if (argt[1] != argt[2] && v != -1) {cerr = 2; goto cmderr;}
     if (getType(tmpargs[1]) != 255) {cerr = 3; goto cmderr;}
-    if (setVar(tmpargs[1], arg[2], argt[2]) == false) goto cmderr;
+    if (!setVar(tmpargs[1], arg[2], argt[2])) goto cmderr;
     goto cmderr;
 }
 if (!strcmp(arg[0], "LOCATE")) {
