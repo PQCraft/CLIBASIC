@@ -1,8 +1,7 @@
 # CLIBASIC
 <!----> <br>
-### **C**ommand **L**ine **I**nterface **B**eginners **A**ll-purpose **S**ymbolic **I**nstruction **C**ode <br>
+### <ins>C</ins>ommand <ins>L</ins>ine <ins>I</ins>nterface <ins>B</ins>eginners <ins>A</ins>ll-purpose <ins>S</ins>ymbolic <ins>I</ins>nstruction <ins>C</ins>ode <br>
 <!----> <br>
----
 #### Building/Running:
 To build, use `make clean build`. <br>
 To build and run, use `make clean build run`. <br>
