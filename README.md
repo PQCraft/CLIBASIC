@@ -1,6 +1,6 @@
 # CLIBASIC
-<br>**C**ommand **L**ine **I**nterface **B**eginners **A**ll-purpose **S**ymbolic **I**nstruction **C**ode <br>
-<br>
+<!----> <br>
+<b>C<i>ommand </i>L<i>ine </i>I<i>nterface </i>B<i>eginners </i>A<i>ll-purpose </i>S<i>ymbolic </i>I<i>nstruction </i>Code</b> <br>
 To build, use `make clean build`. <br>
 To build and run, use `make clean build run`. <br>
 To build and run while displaying debug info, use `make clean build debug`. <br>
