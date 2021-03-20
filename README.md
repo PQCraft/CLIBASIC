@@ -10,7 +10,7 @@ To update the code files, use `make update`. <br>
 To install clibasic as a command, use `sudo make clean build install`. <br>
 <br>
 #### Required Packages: <br>
-Debian/Ubuntu: `libedit-dev` `libeditline-dev` `libreadline-dev` <br>
-Arch: `libedit` `editline` `readline` <br>
-Apline: `libedit-dev` `editline-dev` `readline-dev` <br>
+Debian/Ubuntu: `libreadline-dev` <br>
+Arch: `readline` <br>
+Apline: `readline-dev` <br>
 <br>
