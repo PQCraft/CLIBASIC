@@ -106,8 +106,16 @@ if (!strcmp(arg[0], "RUN")) {
     if (prog == NULL) {errstr = realloc(errstr, (argl[1] + 1) * sizeof(char)); copyStr(arg[1], errstr); cerr = 15; goto cmderr;}
     progFilename = malloc(argl[1] + 1);
     copyStr(arg[1], progFilename);
-    inProg = true;
+    chkinProg = true;
 }
+if (!strcmp(arg[0], "SRAND") || !strcmp(arg[0], "SRND")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    double rs;
+    sscanf(arg[1], "%lf", &rs);
+    srand(rs);
+}    
 if (!strcmp(arg[0], "RESETTIMER")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
