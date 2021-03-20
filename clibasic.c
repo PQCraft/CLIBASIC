@@ -1,7 +1,6 @@
 #include <math.h>
 #include <time.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
@@ -9,10 +8,10 @@
 #include <termios.h>
 #include <inttypes.h>
 #include <sys/time.h>
-#include <editline.h>
+#include <readline/readline.h>
 #include <readline/history.h>
 
-char VER[] = "0.11.8";
+char VER[] = "0.11.9";
 
 #ifdef B32
     char BVER[] = "32";
@@ -204,7 +203,7 @@ int main(int argc, char *argv[]) {
         bool inStr = false;
         if (!runfile) signal(SIGINT, cmdIntHndl);
         progLine = 1;
-        while (true) {
+        while (1) {
             if (!inProg) {
                 if (cmdint) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cmdint = false; goto brkproccmd;}
                 if (conbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
@@ -1096,9 +1095,7 @@ void runcmd() {
         if (debug) printf("A [%d]: {%s}\n", i, arg[i]);
     }
     cerr = 255;
-    // COMMANDS START
     #include "commands.c"
-    // COMMANDS END
     cmderr:
     if (cerr != 0) {
         getCurPos();
