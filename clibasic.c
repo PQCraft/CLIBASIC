@@ -11,7 +11,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-char VER[] = "0.11.9";
+char VER[] = "0.11.10";
 
 #ifdef B32
     char BVER[] = "32";
@@ -28,6 +28,7 @@ int err = 0;
 int cerr;
 
 bool inProg = false;
+bool chkinProg = false;
 char *progFilename;
 int progLine = 1;
 
@@ -66,6 +67,7 @@ int fnstackp = -1;
 char *errstr;
 
 char conbuf[32768];
+char lastcb[32768];
 char prompt[32768];
 char pstr[32768];
 
@@ -174,7 +176,11 @@ int main(int argc, char *argv[]) {
     }
     resetTimer();
     while (!exit) {
-        for (int i = 0; i < 32768; i++) conbuf[i] = 0;
+        //for (int i = 0; i < 32768; i++) conbuf[i] = 0;
+        fchkint:
+        conbuf[0] = 0;
+        inProg = chkinProg;
+        chkinProg = false;
         if (!inProg) {
             if (runfile) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cleanExit();}
             char *tmpstr = NULL;
@@ -184,9 +190,10 @@ int main(int argc, char *argv[]) {
             getCurPos();
             if (curx != 1) printf("\n");
             while (tmpstr == NULL) {tmpstr = readline(pstr);}
-            if (tmpstr[0] == '\0') {free(tmpstr); goto brkproccmd;}
+            if (tmpstr[0] == '\0' || !strcmp(tmpstr, lastcb)) {free(tmpstr); goto brkproccmd;}
             add_history(tmpstr);
             copyStr(tmpstr, conbuf);
+            copyStr(tmpstr, lastcb);
             free(tmpstr);
         }
         cp = 0;
@@ -215,6 +222,7 @@ int main(int argc, char *argv[]) {
                     cmdl = 0;
                     if (debug) printf("calling runcmd()\n");
                     runcmd();
+                    if (chkinProg) goto fchkint;
                     if (cmdint) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cmdint = false; goto brkproccmd;}
                     if (cp == -1) goto brkproccmd;
                     if (conbuf[cp] == '\0') goto brkproccmd;
@@ -228,10 +236,6 @@ int main(int argc, char *argv[]) {
                     if (fgrabc(prog, cp - cmdl - 1) == '\n' && !lockpl) {progLine++; if (debug) printf("found nl: [%lld]\n", (long long int)cp);}
                     if (lockpl) lockpl = false;
                     while ((fgrabc(prog, cp - cmdl) == ' ' || (fgrabc(prog, cp) == '\r' && fgrabc(prog, cp - cmdl) == '\n')) && cmdl > 0) {cmdl--;}
-                    if (fgrabc(prog, cp - cmdl) == '\'') {
-                        while (fgrabc(prog, cp - cmdl) != '\r' && fgrabc(prog, cp - cmdl) != '\n' && fgrabc(prog, cp - cmdl) != -1 && fgrabc(prog, cp - cmdl) != 4 && fgrabc(prog, cp - cmdl) != 0) {cmdl--;} 
-                        if (fgrabc(prog, cp - cmdl) == '\r') {cmdl--;}
-                    }
                     cmd = realloc(cmd, (cmdl + 1) * sizeof(char));
                     cmdpos = cp - cmdl;
                     copyFileSnip(prog, cp - cmdl, cp, cmd);
@@ -760,12 +764,10 @@ bool solveargs() {
     for (int i = 1; i <= argct; i++) {arg[i] = malloc(1);}
     for (int i = 1; i <= argct; i++) {
         argt[i] = 0;
-        for (int p = 0; p < 32767; p++) {tmpbuf[p] = 0;}
-        int bruh;
-        bruh = (int)getVal(tmpargs[i], tmpbuf);
-        argt[i] = bruh;
-        argl[i] = strlen(tmpbuf);
-        arg[i] = malloc((argl[i] + 1) * sizeof(char));
+        tmpbuf[0] = 0;
+        argt[i] = getVal(tmpargs[i], tmpbuf);
+        free(arg[i]);
+        arg[i] = malloc((strlen(tmpbuf) + 1) * sizeof(char));
         copyStr(tmpbuf, arg[i]);
         argl[i] = strlen(arg[i]);
         if (argt[i] == 0) return false;
@@ -847,7 +849,7 @@ bool mkargs() {
             copyStr(tmpbuf[1], tmpargs[i]);
         }
         if (debug) printf("length of arg[%d]: %d\n", i, argl[i]);
-        tmpargs[i][argl[i]] = '\0';
+        tmpargs[i][argl[i]] = 0;
     }
     if (argct == 1 && tmpargs[1][0] == '\0') {argct = 0;}
     for (int i = 0; i <= argct; i++) {tmpargs[i][argl[i]] = '\0';}
@@ -861,7 +863,7 @@ uint8_t logictest(char* inbuf) {
     int tmpp = 0;
     uint8_t t1 = 0;
     uint8_t t2 = 0;
-    int p = 0; /*   VAR   =   0   */
+    int p = 0;
     bool inStr = false;
     int pct = 0;
     while (inbuf[p] == ' ') {p++;}
@@ -958,6 +960,7 @@ bool runlogic() {
         }
     }
     cerr = 0;
+    if (!strcmp(tmp[0], "REM")) return true;
     if (!strcmp(tmp[0], "DO")) {
         if (dlstackp >= 255) {cerr = 12; goto lexit;}
         dlstackp++;
@@ -1165,15 +1168,16 @@ void runcmd() {
         cp = -1;
     }
     if (lgc) return;
+    if (debug) printf("freeing stuff...\n");
     for (int i = 0; i <= argct; i++) {
-        if (tmpargs[i] != NULL) free(tmpargs[i]);
+        free(tmpargs[i]);
     }
     for (int i = 1; i <= argct; i++) {
-        if (arg[i] != NULL) free(arg[i]);
+        free(arg[i]);
     }
-    if (tmpargs != NULL) free(tmpargs);
-    if (argl != NULL) free(argl);
-    if (argt != NULL) free(argt);
-    if (arg != NULL) free(arg);
+    free(tmpargs);
+    free(argl);
+    free(argt);
+    free(arg);
     return;
 }
