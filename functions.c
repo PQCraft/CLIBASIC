@@ -167,12 +167,6 @@ if (!strcmp(farg[0], "$PROMPT$")) {
     int tmpt = getVal(prompt, outbuf);
     if (tmpt != 1) strcpy(outbuf, "CLIBASIC> ");
 }
-if (!strcmp(farg[0], "$DEBUG")) {
-    cerr = 0;
-    ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;}
-    sprintf(outbuf, "%d", (int)debug);
-}
 if (!strcmp(farg[0], "$VER$")) {
     cerr = 0;
     ftype = 1;
