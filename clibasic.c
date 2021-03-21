@@ -11,7 +11,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-char VER[] = "0.11.10";
+char VER[] = "0.11.11";
 
 #ifdef B32
     char BVER[] = "32";
@@ -179,8 +179,7 @@ int main(int argc, char *argv[]) {
         //for (int i = 0; i < 32768; i++) conbuf[i] = 0;
         fchkint:
         conbuf[0] = 0;
-        inProg = chkinProg;
-        chkinProg = false;
+        if (chkinProg) {inProg = true; chkinProg = false;}
         if (!inProg) {
             if (runfile) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cleanExit();}
             char *tmpstr = NULL;
@@ -190,8 +189,8 @@ int main(int argc, char *argv[]) {
             getCurPos();
             if (curx != 1) printf("\n");
             while (tmpstr == NULL) {tmpstr = readline(pstr);}
-            if (tmpstr[0] == '\0' || !strcmp(tmpstr, lastcb)) {free(tmpstr); goto brkproccmd;}
-            add_history(tmpstr);
+            if (tmpstr[0] == '\0') {free(tmpstr); goto brkproccmd;}
+            if (strcmp(tmpstr, lastcb)) add_history(tmpstr);
             copyStr(tmpstr, conbuf);
             copyStr(tmpstr, lastcb);
             free(tmpstr);
@@ -960,7 +959,7 @@ bool runlogic() {
         }
     }
     cerr = 0;
-    if (!strcmp(tmp[0], "REM")) return true;
+    if (!strcmp(tmp[0], "REM") || tmp[0][0] == '\'') return true;
     if (!strcmp(tmp[0], "DO")) {
         if (dlstackp >= 255) {cerr = 12; goto lexit;}
         dlstackp++;
@@ -1166,6 +1165,7 @@ void runcmd() {
         }
         putc('\n', stdout);
         cp = -1;
+        chkinProg = inProg = false;
     }
     if (lgc) return;
     if (debug) printf("freeing stuff...\n");
