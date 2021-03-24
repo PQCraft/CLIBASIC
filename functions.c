@@ -1,12 +1,13 @@
-if (!strcmp(farg[0], "CHR$")) {
+if (!qstrcmp(farg[0], "CHR$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
     outbuf[0] = (char)atoi(farg[1]);
     outbuf[1] = 0;
+    goto fexit;
 }
-if (!strcmp(farg[0], "ASC")) {
+if (!qstrcmp(farg[0], "ASC")) {
     cerr = 0;
     ftype = 2;
     int pos = 0;
@@ -20,7 +21,7 @@ if (!strcmp(farg[0], "ASC")) {
     }
     sprintf(outbuf, "%d", farg[1][pos]);
 }
-if (!strcmp(farg[0], "RND") || !strcmp(farg[0], "RAND")) {
+if (!qstrcmp(farg[0], "RND") || !qstrcmp(farg[0], "RAND")) {
     cerr = 0;
     ftype = 2;
     double min = 0;
@@ -39,19 +40,43 @@ if (!strcmp(farg[0], "RND") || !strcmp(farg[0], "RAND")) {
     sprintf(outbuf, "%lf", randNum(min, max));
     if (debug) printf("1: outbuf: {%s}\n", outbuf);
 }
-if (!strcmp(farg[0], "TIMER")) {
+if (!qstrcmp(farg[0], "TIMER")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;} 
+    sprintf(outbuf, "%llu", (long long unsigned)timer() / 1000000);
+}
+if (!qstrcmp(farg[0], "TIMERMS")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;} 
+    sprintf(outbuf, "%llu", (long long unsigned)timer() / 1000);
+}
+if (!qstrcmp(farg[0], "TIMERUS")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;} 
     sprintf(outbuf, "%llu", (long long unsigned)timer());
 }
-if (!strcmp(farg[0], "TIME")) {
+if (!qstrcmp(farg[0], "TIME")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;} 
+    sprintf(outbuf, "%llu", (long long unsigned)time_us() / 1000000);
+}
+if (!qstrcmp(farg[0], "TIMEMS")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;} 
+    sprintf(outbuf, "%llu", (long long unsigned)time_us() / 1000);
+}
+if (!qstrcmp(farg[0], "TIMEUS")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;} 
     sprintf(outbuf, "%llu", (long long unsigned)time_us());
 }
-if (!strcmp(farg[0], "CINT")) {
+if (!qstrcmp(farg[0], "CINT")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
@@ -63,7 +88,7 @@ if (!strcmp(farg[0], "CINT")) {
     sprintf(outbuf, "%d", (int)dbl);
     if (debug) printf("outbuf: {%s}\n", outbuf);
 }
-if (!strcmp(farg[0], "INT")) {
+if (!qstrcmp(farg[0], "INT")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
@@ -75,14 +100,14 @@ if (!strcmp(farg[0], "INT")) {
     for (i = 0; outbuf[i] != '.' && outbuf[i] != '\0'; i++) {}
     outbuf[i] = 0;
 }
-if (!strcmp(farg[0], "STR$")) {
+if (!qstrcmp(farg[0], "STR$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
     copyStr(farg[1], outbuf);
 }
-if (!strcmp(farg[0], "VAL")) {
+if (!qstrcmp(farg[0], "VAL")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
@@ -93,14 +118,14 @@ if (!strcmp(farg[0], "VAL")) {
     ftype = getVal(outbuf, outbuf);
     if (ftype == 1) {cerr = 2; goto fexit;}
 }
-if (!strcmp(farg[0], "LEN")) {
+if (!qstrcmp(farg[0], "LEN")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     sprintf(outbuf, "%lu", (long unsigned)strlen(farg[1]));
 }
-if (!strcmp(farg[0], "INKEY$")) {
+if (!qstrcmp(farg[0], "INKEY$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
@@ -119,21 +144,21 @@ if (!strcmp(farg[0], "INKEY$")) {
     if (!textlock) tcsetattr(0, TCSANOW, &restore);
     disableRawMode();
 }
-if (!strcmp(farg[0], "CURX")) {
+if (!qstrcmp(farg[0], "CURX")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;}
     getCurPos();
     sprintf(outbuf, "%d", curx);
 }
-if (!strcmp(farg[0], "CURY")) {
+if (!qstrcmp(farg[0], "CURY")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;}
     getCurPos();
     sprintf(outbuf, "%d", cury);
 }
-if (!strcmp(farg[0], "INPUT$")) {
+if (!qstrcmp(farg[0], "INPUT$")) {
     cerr = 0;
     ftype = 1;
     if (fargct > 1) {cerr = 3; goto fexit;}
@@ -148,38 +173,38 @@ if (!strcmp(farg[0], "INPUT$")) {
     free(tmp);
     if (debug) printf("input output: {%s}\n", outbuf);
 }
-if (!strcmp(farg[0], "FGC")) {
+if (!qstrcmp(farg[0], "FGC")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;}
     sprintf(outbuf, "%d", (int)fgc);
 }
-if (!strcmp(farg[0], "BGC")) {
+if (!qstrcmp(farg[0], "BGC")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;}
-    sprintf(outbuf, "%d", (int)fgc);
+    sprintf(outbuf, "%d", (int)bgc);
 }
-if (!strcmp(farg[0], "$PROMPT$")) {
+if (!qstrcmp(farg[0], "$PROMPT$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
     int tmpt = getVal(prompt, outbuf);
     if (tmpt != 1) strcpy(outbuf, "CLIBASIC> ");
 }
-if (!strcmp(farg[0], "$DEBUG")) {
+if (!qstrcmp(farg[0], "$DEBUG")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;}
     sprintf(outbuf, "%d", (int)debug);
 }
-if (!strcmp(farg[0], "$VER$")) {
+if (!qstrcmp(farg[0], "$VER$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
     copyStr(VER, outbuf);
 }
-if (!strcmp(farg[0], "$BVER$")) {
+if (!qstrcmp(farg[0], "$BVER$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
