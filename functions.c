@@ -132,7 +132,8 @@ if (!qstrcmp(farg[0], "INKEY$")) {
     enableRawMode();
     int obp = -1;
     int tmp = -1;
-    while (tmp == -1) {
+    outbuf[0] = 0;
+    while ((outbuf[0] == 27 && tmp != 0) || outbuf[0] == 0) {
         obp++;
         tmp = read(1, &outbuf[obp], 1);
         if (tmp == 0) {outbuf[obp] = 0; break;}
@@ -141,7 +142,6 @@ if (!qstrcmp(farg[0], "INKEY$")) {
     }
     obp++;
     outbuf[obp] = 0;
-    if (!textlock) tcsetattr(0, TCSANOW, &restore);
     disableRawMode();
 }
 if (!qstrcmp(farg[0], "CURX")) {

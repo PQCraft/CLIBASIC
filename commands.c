@@ -12,49 +12,71 @@ if (!qstrcmp(arg[0], "PRINT") || !qstrcmp(arg[0], "?")) {
 }
 if (!qstrcmp(arg[0], "COLOR")) {
     cerr = 0;
+    int tmp = 0;
     if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
     if (argt[1] == 0) {} else
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
-    else {fgc = (uint8_t)atoi(arg[1]);}
+    else {
+        tmp = atoi(arg[1]);
+        if (tmp < 0 || tmp > 255) {cerr = 16; goto cmderr;}
+        fgc = (uint8_t)tmp;
+        printf("\e[38;5;%um", fgc);
+    }
     if (argct > 1) {
         if (!solvearg(2)) goto cmderr;
         if (argt[2] == 0) {} else
         if (argt[2] != 2) {cerr = 2; goto cmderr;}
-        else {bgc = (uint8_t)atoi(arg[2]);}
+        else {
+            tmp = atoi(arg[2]);
+            if (tmp < 0 || tmp > 255) {cerr = 16; goto cmderr;}
+            fgc = (uint8_t)tmp;
+            printf("\e[48;5;%um", bgc);
+        }
     }
-    if (debug) printf("CMD[COLOR]: fgc: [%u], bgc: [%u]\n", fgc, bgc);
-    printf("\e[38;5;%um\e[48;5;%um", fgc, bgc);
     fflush(stdout);
 }
 if (!qstrcmp(arg[0], "SET") || !qstrcmp(arg[0], "LET")) {
     cerr = 0;
     if (argct != 2) {cerr = 3; goto cmderr;}
+    solvearg(1);
     if (!solvearg(2)) goto cmderr;
-    if (tmpargs[0][0] == 0 || tmpargs[0][0] == ' ') {cerr = 1; goto cmderr;}
+    if (argt[1] == 0 || argt[2] == 0) {cerr = 1; goto cmderr;}
     int v = -1;
     for (int i = 0; i < varmaxct; i++) {
         if (varinuse[i] && !qstrcmp(arg[1], varname[i])) {v = i; break;}
     }
     if (argt[1] != argt[2] && v != -1) {cerr = 2; goto cmderr;}
-    if (getType(tmpargs[1]) != 255) {cerr = 3; goto cmderr;}
+    if (getType(tmpargs[1]) != 255) {
+        cerr = 4;
+        errstr = realloc(errstr, (strlen(tmpargs[1]) + 1) * sizeof(char));
+        copyStr(tmpargs[1], errstr);
+        goto cmderr;
+    }
     if (!setVar(tmpargs[1], arg[2], argt[2])) goto cmderr;
 }
 if (!qstrcmp(arg[0], "LOCATE")) {
     cerr = 0;
+    int tmp = 0;
     if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
-    if (!solvearg(2)) goto cmderr;
     if (argt[1] == 0) {} else
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
-    else {cury = atoi(arg[1]);}
+    else {
+        tmp = atoi(arg[1]);
+        if (tmp < 0) {cerr = 16; goto cmderr;}
+        curx = tmp;
+    }
     if (argct > 1) {
+        if (!solvearg(2)) goto cmderr;
         if (argt[2] == 0) {} else
         if (argt[2] != 2) {cerr = 2; goto cmderr;}
-        else {curx = atoi(arg[2]);}
+        else {
+            tmp = atoi(arg[2]);
+            if (tmp < 0) {cerr = 16; goto cmderr;}
+            cury = tmp;
+        }
     }
-    if (curx < 0) {getCurPos(); cerr = 16; goto cmderr;}
-    if (cury < 0) {getCurPos(); cerr = 16; goto cmderr;}
     printf("\e[%d;%dH", cury, curx);
     fflush(stdout);
 }
@@ -141,6 +163,7 @@ if (!qstrcmp(arg[0], "RESETTIMER")) {
     resetTimer();
 }
 if (!qstrcmp(arg[0], "$PROMPT")) {
+    if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -148,6 +171,7 @@ if (!qstrcmp(arg[0], "$PROMPT")) {
     copyStr(tmpargs[1], prompt);
 }
 if (!qstrcmp(arg[0], "$SAVECMDHST")) {
+    if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -155,6 +179,7 @@ if (!qstrcmp(arg[0], "$SAVECMDHST")) {
     write_history(arg[1]);
 }
 if (!qstrcmp(arg[0], "$LOADCMDHST")) {
+    if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -251,13 +276,15 @@ if (!qstrcmp(arg[0], "$TXTUNLOCK")) {
     if (textlock) tcsetattr(0, TCSANOW, &restore);
     textlock = false;
 }
-if (!inProg && !qstrcmp(arg[0], "$DEBUGON")) {
+if (!qstrcmp(arg[0], "$DEBUGON")) {
+    if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     if (!debug) printf("Enabled debug mode.\n");
     debug = true;
 }
-if (!inProg && !qstrcmp(arg[0], "$DEBUGOFF")) {
+if (!qstrcmp(arg[0], "$DEBUGOFF")) {
+    if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     if (debug) printf("Disabled debug mode.\n");

@@ -11,7 +11,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-char VER[] = "0.12";
+char VER[] = "0.12.1";
 
 #ifdef B32
     char BVER[] = "32";
@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
         conbuf[0] = 0;
         if (chkinProg) {inProg = true; chkinProg = false;}
         if (!inProg) {
-            if (runfile) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cleanExit();}
+            if (runfile) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} err = cerr; cleanExit();}
             char *tmpstr = NULL;
             int tmpt = getVal(prompt, pstr);
             if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
@@ -346,7 +346,7 @@ void loadProg() {
         if (tmpc == '"') inStr = !inStr;
         if (tmpc == '\'' && !inStr) comment = true;
         if (tmpc == '\n') comment = false;
-        if (tmpc == '\r') tmpc = ' ';
+        if (tmpc == '\r' || tmpc == '\t') tmpc = ' ';
         if (!comment) {progbuf[j] = (char)tmpc; j++;}
     }
     if (j == 0) j = 1;
@@ -698,6 +698,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                     if (tmp[0][i] == '-' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 1;}
                 }
                 inStr = false;
+                if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 if (p2 == 0) {
                     if (p3 == 0) {
                         t = getType(tmp[0]);
@@ -727,17 +728,27 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                 t = getType(tmp[3]);
                 if (t == 0) {cerr = 1; return 0;} else
                 if (t == 255) {t = getVar(tmp[3], tmp[3]); if (t == 0) {return 0;} if (t != 2) {cerr = 2; return 0;}}
+                if (debug) printf("getVal: p1: [%d], p2: [%d], p3: [%d]\n", p1, p2, p3);
+                if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 sscanf(tmp[2], "%lf", &num1);
                 sscanf(tmp[3], "%lf", &num2);
+                if (debug) printf("num1: [%lf], num2: [%lf], num3: [%lf]\n", num1, num2, num3);
                 switch (numAct) {
                     case 0: num3 = num1 + num2; break;
                     case 1: num3 = num1 - num2; break;
                     case 2: num3 = num1 * num2; break;
                     case 3: if (num2 == 0) {cerr = 5; return 0;} num3 = num1 / num2; break;
-                    case 4: num3 = pow(num1, num2); break;
+                    case 4:
+                        if (num1 == 0) {if (num2 == 0) {cerr = 5; return 0;} num3 = 0; break;}
+                        if (num2 == 0) {num3 = 1; break;}
+                        num3 = pow(num1, num2);
+                        if (num1 < 0 && num3 > 0) {num3 *= -1;}
+                        break;
                 }
+                if (debug) printf("num1: [%lf], num2: [%lf], num3: [%lf]\n", num1, num2, num3);
                 tmp[1][0] = 0;
                 sprintf(tmp[2], "%lf", num3);
+                if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 if (dt == 2) {
                     bool dp = false;
                     int i = 0;
@@ -763,8 +774,12 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
         while (tmp[1][i] != 0) {if (tmp[1][i] == '.') {dp = true;} i++;}
         while (dp && tmp[1][strlen(tmp[1]) - 1] == '0') {tmp[1][strlen(tmp[1]) - 1] = 0;}
         if (dp && tmp[1][strlen(tmp[1]) - 1] == '.') {tmp[1][strlen(tmp[1]) - 1] = 0;}
+        i = 0;
+        while (tmp[1][i] == '0' && tmp[1][i + 1] != 0) {i++;}
+        copyStrSnip(tmp[1], i, strlen(tmp[1]), outbuf);
+    } else {
+        copyStr(tmp[1], outbuf);
     }
-    copyStr(tmp[1], outbuf);
     if (outbuf[0] == 0 && dt != 1) {outbuf[0] = '0'; outbuf[1] = 0; return 2;}
     if (debug) printf("output: getVal(\"%s\", \"%s\");\n", inbuf, outbuf);
     return (uint8_t)dt;
@@ -914,8 +929,6 @@ uint8_t logictest(char* inbuf) {
     if (t1 != t2) {cerr = 2; return -1;}
     if (!qstrcmp(tmp[1], "=")) {
         return (uint8_t)(bool)!qstrcmp(tmp[0], tmp[2]);
-    } else if (!qstrcmp(tmp[1], "!=")) {
-        return (uint8_t)(bool)qstrcmp(tmp[0], tmp[2]);
     } else if (!qstrcmp(tmp[1], "<>")) {
         return (uint8_t)(bool)qstrcmp(tmp[0], tmp[2]);
     } else if (!qstrcmp(tmp[1], ">")) {
@@ -1005,14 +1018,14 @@ void runcmd() {
     #include "commands.c"
     if (debug) printf("cerr: [%d]\n", cerr);
     cmderr:
-    if (cerr != 0) {
+    if (cerr) {
         getCurPos();
         if (curx != 1) printf("\n");
         if (inProg) {printf("Error %d on line %d of %s: '%s': ", cerr, progLine, progFilename, cmd);}
         else {printf("Error %d: ", cerr);}
         switch (cerr) {
             default:
-                printf("\b\b  \b\b");
+                printf("\b\b \b");
                 break;
             case 1:
                 printf("Syntax");
@@ -1027,7 +1040,7 @@ void runcmd() {
                 printf("Invalid variable name: '%s'", errstr);
                 break;
             case 5:
-                printf("Divide by zero");
+                printf("Operation results in undefined");
                 break;
             case 6:
                 printf("LOOP without DO");
@@ -1064,6 +1077,12 @@ void runcmd() {
                 break;
             case 127:
                 printf("Not a function: '%s'", errstr);
+                break;
+            case 253:
+                printf("Command not valid in command-line: '%s'", arg[0]);
+                break;
+            case 254:
+                printf("Command not valid in program: '%s'", arg[0]);
                 break;
             case 255:
                 printf("Not a command: '%s'", arg[0]);
