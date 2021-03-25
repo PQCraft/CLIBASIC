@@ -1,6 +1,7 @@
+$txtlock
 do
   k$ = inkey$()
   if asc(k$) <> 0
-    print k$, "\n"
+    print k$
   endif
 loop

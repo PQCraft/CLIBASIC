@@ -9,9 +9,9 @@ dowhile e = 0
     if c$ = "n": set e, 2: endif
     if c$ = "N": set e, 2: endif
 loop
-print "You have chosen...\n"
+print "You have chosen..."
 if e = 1
-    print "Sending nukes..."
+    print "Sending nukes...";
     wait 3
     print "\nDone."
 else

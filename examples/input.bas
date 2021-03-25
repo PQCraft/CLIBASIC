@@ -1,16 +1,16 @@
 $txtlock
-? "Press Ctrl+C to exit...\n"
+put "Press Ctrl+C to exit...\n"
 do
     k$ = inkey$()
     l = len(k$)
     if asc(k$) <> 0
         p = 0
-        ? "[", len(k$), "]"
+        put "[", len(k$), "]"
         dowhile p < l
-            ? ", ", asc(k$, p)
+            put ", ", asc(k$, p)
             p = p + 1
         loop
-        ? "\n"
+        put "\n"
     endif
 loop
 'run "examples/input.bas"

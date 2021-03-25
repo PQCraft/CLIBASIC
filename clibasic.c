@@ -11,7 +11,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-char VER[] = "0.12.1";
+char VER[] = "0.12.2";
 
 #ifdef B32
     char BVER[] = "32";
@@ -167,9 +167,8 @@ int main(int argc, char *argv[]) {
     }
     if (exit) cleanExit();
     printf("\e[0m\e[38;5;%um\e[48;5;%um", fgc, bgc);
-    if (!runfile) printf("Command Line Interface BASIC version %s (%s-bit)\n", VER, BVER);
+    if (!runfile) {printf("Command Line Interface BASIC version %s (%s-bit)\n", VER, BVER); strcpy(prompt, "\"CLIBASIC> \"");}
     if (debug) printf("Running in debug mode\n");
-    strcpy(prompt, "\"CLIBASIC> \"");
     progbuf = malloc(0);
     errstr = malloc(0);
     cmd = malloc(0);
@@ -220,7 +219,6 @@ int main(int argc, char *argv[]) {
         progLine = 1;
         while (1) {
             if (!inProg) {
-                //if (cmdint) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cmdint = false; goto brkproccmd;}
                 if (conbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((conbuf[cp] == ':' && !inStr) || conbuf[cp] == 0) {
                     while (conbuf[cp - cmdl] == ' ' && cmdl > 0) {cmdl--;}

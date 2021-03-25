@@ -1,12 +1,12 @@
 'clibasic test program
 
-print "test\n"
+print "test"
 color 21
-print "blue\n"
+print "blue"
 $txtbold
 
 set E, 0
 do
 set E, E+1
-print E, "\t"
+print E, ""
 loopwhile e < 256

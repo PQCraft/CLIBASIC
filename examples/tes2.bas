@@ -1,4 +1,5 @@
+'testwo
 do
-    if 0 = 0: print "bruh1\n": else: print "bruh2\n": endif
+    if cint(rand(1)) = 0: print "bruh1": else: print "bruh2": endif
     waitms 500
 loop
