@@ -174,7 +174,7 @@ if (!qstrcmp(arg[0], "SRAND") || !qstrcmp(arg[0], "SRND")) {
     srand(rs);
     goto cmderr;
 }    
-if (!qstrcmp(arg[0], "$PROMPT")) {
+if (!qstrcmp(arg[0], "_PROMPT")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
@@ -183,7 +183,7 @@ if (!qstrcmp(arg[0], "$PROMPT")) {
     copyStr(tmpargs[1], prompt);
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$SAVECMDHST")) {
+if (!qstrcmp(arg[0], "_SAVECMDHST")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
@@ -192,7 +192,7 @@ if (!qstrcmp(arg[0], "$SAVECMDHST")) {
     write_history(arg[1]);
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$LOADCMDHST")) {
+if (!qstrcmp(arg[0], "_LOADCMDHST")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
@@ -201,7 +201,7 @@ if (!qstrcmp(arg[0], "$LOADCMDHST")) {
     read_history(arg[1]);
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTLOCK")) {
+if (!qstrcmp(arg[0], "_TXTLOCK")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     if (!textlock) {
@@ -213,51 +213,51 @@ if (!qstrcmp(arg[0], "$TXTLOCK")) {
     textlock = true;
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTUNLOCK")) {
+if (!qstrcmp(arg[0], "_TXTUNLOCK")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     if (textlock) tcsetattr(0, TCSANOW, &restore);
     textlock = false;
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTRESET")) {
+if (!qstrcmp(arg[0], "_TXTRESET")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[0m\e[38;5;%um\e[48;5;%um", fgc, bgc);
     fflush(stdout);
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTBOLD")) {
+if (!qstrcmp(arg[0], "_TXTBOLD")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[1m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTBOLD")) {
+if (!qstrcmp(arg[0], "_TXTBOLD")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[1m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTDIM")) {
+if (!qstrcmp(arg[0], "_TXTDIM")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[2m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTITAL")) {
+if (!qstrcmp(arg[0], "_TXTITAL")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[3m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTUNDRLN")) {
+if (!qstrcmp(arg[0], "_TXTUNDRLN")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[4m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTULCLR")) {
+if (!qstrcmp(arg[0], "_TXTULCLR")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -265,49 +265,49 @@ if (!qstrcmp(arg[0], "$TXTULCLR")) {
     printf("\e[58:5:%um", (uint8_t)atoi(arg[1]));
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTOVERLN")) {
+if (!qstrcmp(arg[0], "_TXTOVERLN")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[53m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTDBLUL")) {
+if (!qstrcmp(arg[0], "_TXTDBLUL")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[21m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTSQGUL")) {
+if (!qstrcmp(arg[0], "_TXTSQGUL")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[4:3m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTBLINK")) {
+if (!qstrcmp(arg[0], "_TXTBLINK")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[5m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTREV")) {
+if (!qstrcmp(arg[0], "_TXTREV")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[7m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTHIDE")) {
+if (!qstrcmp(arg[0], "_TXTHIDE")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[8m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$TXTSTRIKE")) {
+if (!qstrcmp(arg[0], "_TXTSTRIKE")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     printf("\e[9m");
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$DEBUGON")) {
+if (!qstrcmp(arg[0], "_DEBUGON")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
@@ -315,7 +315,7 @@ if (!qstrcmp(arg[0], "$DEBUGON")) {
     debug = true;
     goto cmderr;
 }
-if (!qstrcmp(arg[0], "$DEBUGOFF")) {
+if (!qstrcmp(arg[0], "_DEBUGOFF")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}

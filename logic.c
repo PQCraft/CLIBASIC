@@ -6,11 +6,11 @@ if (!qstrcmp(tmp[0], "PRINT") || !qstrcmp(tmp[0], "?")) {
     if (itstackp > -1) {
         if (itdcmd[itstackp]) return true;
     }
+    if (cmd[i] == 0) {printf("%c", '\n'); return true;}
     bool inStr = false;
     int pct = 0;
     int ptr = 0;
     int i = j;
-    if (cmd[i] == 0) {printf("%c", '\n'); return true;}
     while (cmd[i] != 0) {
         i++;
         if (cmd[i] == '(' && !inStr) {pct++;}
@@ -44,7 +44,7 @@ if (!qstrcmp(tmp[0], "DO")) {
         if (dldcmd[dlstackp - 1]) {dldcmd[dlstackp] = true; return true;}
     }
     int p = j;
-    while (cmd[p] != '\0') {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
+    while (cmd[p] != 0) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
     dldcmd[dlstackp] = false;
     dlstack[dlstackp] = cmdpos;
     dlpline[dlstackp] = progLine;
@@ -82,7 +82,7 @@ if (!qstrcmp(tmp[0], "LOOP")) {
     dldcmd[dlstackp] = false;
     dlstackp--;
     int p = j;
-    while (cmd[p] != '\0') {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
+    while (cmd[p] != 0) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
     didloop = true;
     return true;
 }

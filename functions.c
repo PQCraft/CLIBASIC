@@ -106,7 +106,7 @@ if (!qstrcmp(farg[0], "INT")) {
     sscanf(farg[1], "%lf", &dbl);
     sprintf(outbuf, "%d", (int)dbl);
     int i;
-    for (i = 0; outbuf[i] != '.' && outbuf[i] != '\0'; i++) {}
+    for (i = 0; outbuf[i] != '.' && outbuf[i] != 0; i++) {}
     outbuf[i] = 0;
     goto fexit;
 }
@@ -127,6 +127,32 @@ if (!qstrcmp(farg[0], "STR$")) {
     ftype = 1;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    copyStr(farg[1], outbuf);
+    goto fexit;
+}
+if (!qstrcmp(farg[0], "UCASE$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    for (int i = 0; i < flen[1]; i++) {
+        if (farg[1][i] >= 'a' && farg[1][i] <= 'z') {
+            farg[1][i] -= 32;
+        }
+    }
+    copyStr(farg[1], outbuf);
+    goto fexit;
+}
+if (!qstrcmp(farg[0], "LCASE$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    for (int i = 0; i < flen[1]; i++) {
+        if (farg[1][i] >= 'A' && farg[1][i] <= 'Z') {
+            farg[1][i] += 32;
+        }
+    }
     copyStr(farg[1], outbuf);
     goto fexit;
 }
@@ -204,7 +230,7 @@ if (!qstrcmp(farg[0], "INPUT$")) {
     if (debug) printf("input output: {%s}\n", outbuf);
     goto fexit;
 }
-if (!qstrcmp(farg[0], "$PROMPT$")) {
+if (!qstrcmp(farg[0], "_PROMPT$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
@@ -212,24 +238,31 @@ if (!qstrcmp(farg[0], "$PROMPT$")) {
     if (tmpt != 1) strcpy(outbuf, "CLIBASIC> ");
     goto fexit;
 }
-if (!qstrcmp(farg[0], "$DEBUG")) {
+if (!qstrcmp(farg[0], "_DEBUG")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;}
     sprintf(outbuf, "%d", (int)debug);
     goto fexit;
 }
-if (!qstrcmp(farg[0], "$VER$")) {
+if (!qstrcmp(farg[0], "_VER$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
     copyStr(VER, outbuf);
     goto fexit;
 }
-if (!qstrcmp(farg[0], "$BVER$")) {
+if (!qstrcmp(farg[0], "_BITS$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
     copyStr(BVER, outbuf);
+    goto fexit;
+}
+if (!qstrcmp(farg[0], "_OS$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    copyStr(OSVER, outbuf);
     goto fexit;
 }

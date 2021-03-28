@@ -5,13 +5,50 @@
 #include <signal.h>
 #include <unistd.h>
 #include <stdbool.h>
-#include <termios.h>
 #include <inttypes.h>
 #include <sys/time.h>
-#include <readline/readline.h>
-#include <readline/history.h>
 
-char VER[] = "0.12.2";
+#ifdef __unix__
+    #include <termios.h>
+    #include <readline/readline.h>
+    #include <readline/history.h>
+#endif
+
+char VER[] = "0.12.3";
+
+#ifdef __linux__
+    char OSVER[] = "Linux";
+#elif BSD
+    char OSVER[] = "BSD";
+#elif __unix__
+    char OSVER[] = "*NIX";
+#elif _WIN32
+    char OSVER[] = "Windows";
+    #include "termios_win.h"
+    #define SIGKILL 9
+    char *rlptr;
+    void cleanExit();
+    char *readline(char *prompt) {
+        printf(prompt);
+        fflush(stdout);
+        char buf[32768];
+        scanf("%[^\n]s", &buf);
+        int tmpc = 0;
+        read(1, &tmpc, 1);
+        if (tmpc == 3) cleanExit();
+        while (getchar() != '\n') {}
+        rlptr = malloc(strlen(buf) + 1);
+        strcpy(rlptr, buf);
+        return rlptr;
+    }
+    void add_history(char *str) {}
+    void read_history(char *str) {}
+    void write_history(char *str) {}
+#elif __APPLE__
+    char OSVER[] = "Apple"
+#else
+    char OSVER[] = "?";
+#endif
 
 #ifdef B32
     char BVER[] = "32";
@@ -139,7 +176,7 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         if (!qstrcmp(argv[i], "--version") || !qstrcmp(argv[i], "-v")) {
             if (argc > 2) {printf("Incorrent number of options passed.\n"); cleanExit();}
-            printf("Command Line Interface BASIC version %s (%s-bit)\n", VER, BVER);
+            printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
             printf("Copyright (C) 2021 PQCraft\n");
             exit = true;
         } else
@@ -167,7 +204,10 @@ int main(int argc, char *argv[]) {
     }
     if (exit) cleanExit();
     printf("\e[0m\e[38;5;%um\e[48;5;%um", fgc, bgc);
-    if (!runfile) {printf("Command Line Interface BASIC version %s (%s-bit)\n", VER, BVER); strcpy(prompt, "\"CLIBASIC> \"");}
+    if (!runfile) {
+        printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
+        strcpy(prompt, "\"CLIBASIC> \"");
+    }
     if (debug) printf("Running in debug mode\n");
     progbuf = malloc(0);
     errstr = malloc(0);
@@ -279,6 +319,11 @@ void resetTimer() {
 }
 
 void getCurPos() {
+    #ifdef _WIN32
+        curx = 1;
+        cury = 1;
+        return;
+    #endif
     char buf[16]={0};
     int ret, i, pow;
     char ch;
