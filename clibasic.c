@@ -8,30 +8,43 @@
 #include <inttypes.h>
 #include <sys/time.h>
 
-#ifdef __unix__
+#if !defined(_WIN32)
     #include <termios.h>
     #include <readline/readline.h>
     #include <readline/history.h>
 #endif
 
-char VER[] = "0.12.3";
+char VER[] = "0.12.4";
 
-#ifdef __linux__
+#ifndef BUFSIZE
+    #define BUFSIZE 32768
+#endif
+
+#if defined(__linux__)
     char OSVER[] = "Linux";
-#elif BSD
+#elif defined(BSD)
     char OSVER[] = "BSD";
-#elif __unix__
-    char OSVER[] = "*NIX";
+#elif defined(__unix__)
+    char OSVER[] = "UNIX";
 #elif _WIN32
     char OSVER[] = "Windows";
+    //(https://pbs.twimg.com/media/CRcU7BKWwAEQZIE.jpg)
     #include "termios_win.h"
+    #include <windows.h>
     #define SIGKILL 9
     char *rlptr;
     void cleanExit();
+    void setcsr() {
+        COORD coord;
+        coord.X = 0;
+        coord.Y = 0;
+        SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
+    }
     char *readline(char *prompt) {
+        //(https://theenglishfarm.com/sites/default/files/styles/featured_image/public/harold_2.jpg?itok=uo6h4hz4)
         printf(prompt);
         fflush(stdout);
-        char buf[32768];
+        char buf[BUFSIZE];
         scanf("%[^\n]s", &buf);
         int tmpc = 0;
         read(1, &tmpc, 1);
@@ -44,8 +57,9 @@ char VER[] = "0.12.3";
     void add_history(char *str) {}
     void read_history(char *str) {}
     void write_history(char *str) {}
+    //(https://i.kym-cdn.com/entries/icons/original/000/027/746/crying.jpg)
 #elif __APPLE__
-    char OSVER[] = "Apple"
+    char OSVER[] = "MacOS"
 #else
     char OSVER[] = "?";
 #endif
@@ -104,10 +118,10 @@ int fnstackp = -1;
 */
 char *errstr;
 
-char conbuf[32768];
-char lastcb[32768];
-char prompt[32768];
-char pstr[32768];
+char conbuf[BUFSIZE];
+char lastcb[BUFSIZE];
+char prompt[BUFSIZE];
+char pstr[BUFSIZE];
 
 uint8_t fgc = 15;
 uint8_t bgc = 0;
@@ -319,16 +333,19 @@ void resetTimer() {
 }
 
 void getCurPos() {
+    fflush(stdout);
+    cury = 0; curx = 0;
     #ifdef _WIN32
-        curx = 1;
-        cury = 1;
-        return;
-    #endif
+    CONSOLE_SCREEN_BUFFER_INFO con;
+    HANDLE hcon = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hcon != INVALID_HANDLE_VALUE && GetConsoleScreenBufferInfo(hcon, &con)) {
+        curx = con.dwCursorPosition.X + 1;
+        cury = con.dwCursorPosition.Y + 1;
+    }
+    #else
     char buf[16]={0};
     int ret, i, pow;
     char ch;
-    fflush(stdout);
-    cury = 0; curx = 0;
     if (!textlock) {
         tcgetattr(0, &term);
         tcgetattr(0, &restore);
@@ -356,6 +373,7 @@ void getCurPos() {
     }
     if (!textlock) tcsetattr(0, TCSANOW, &restore);
     return;
+    #endif
 }
 
 void enableRawMode() {
@@ -439,7 +457,7 @@ void copyStrApnd(char* str1, char* str2) {
 }
 
 void getStr(char* str1, char* str2) {
-    char buf[32768];
+    char buf[BUFSIZE];
     int j = 0, i;
     for (i = 0; str1[i] != 0; i++) {
         char c = str1[i];
@@ -491,7 +509,7 @@ int getArgCt(char* inbuf);
 
 uint8_t getFunc(char* inbuf, char* outbuf) {
     if (debug) printf("getFunc(\"%s\", \"%s\");\n", inbuf, outbuf);
-    char tmp[2][32768];
+    char tmp[2][BUFSIZE];
     char **farg;
     uint8_t *fargt;
     int *flen;
@@ -641,11 +659,11 @@ bool gvchkchar(char* tmp, int i) {
 uint8_t getVal(char* tmpinbuf, char* outbuf) {
     if (debug) printf("getVal(\"%s\", \"%s\");\n", tmpinbuf, outbuf);
     if (tmpinbuf[0] == 0) {return 255;}
-    char inbuf[32768];
+    char inbuf[BUFSIZE];
     copyStr(tmpinbuf, inbuf);
     outbuf[0] = 0;
     int ip = 0, jp = 0;
-    char tmp[4][32768];
+    char tmp[4][BUFSIZE];
     uint8_t t = 0;
     uint8_t dt = 0;
     bool inStr = false;
@@ -829,7 +847,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
 }
 
 bool solvearg(int i) {
-    char tmpbuf[32768];
+    char tmpbuf[BUFSIZE];
     if (i == 0) {
         argt[0] = 0;
         arg[0] = tmpargs[0];
@@ -881,7 +899,7 @@ int getArg(int num, char* inbuf, char* outbuf) {
 }
 
 void mkargs() {
-    char tmpbuf[2][32768];
+    char tmpbuf[2][BUFSIZE];
     int j = 0;
     while (cmd[j] == ' ') {j++;}
     int h = j;
@@ -928,7 +946,7 @@ void mkargs() {
 
 uint8_t logictest(char* inbuf) {
     if (debug) printf("logictest(\"%s\");\n", inbuf);
-    char tmp[3][32768];
+    char tmp[3][BUFSIZE];
     int tmpp = 0;
     uint8_t t1 = 0;
     uint8_t t2 = 0;
@@ -1016,7 +1034,7 @@ uint8_t logictest(char* inbuf) {
 }
 
 bool runlogic() {
-    char tmp[2][32768];
+    char tmp[2][BUFSIZE];
     tmp[0][0] = 0; tmp[1][0] = 0;
     int i = 0;
     while (cmd[i] == ' ') {i++;}

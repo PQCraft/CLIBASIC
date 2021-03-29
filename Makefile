@@ -34,6 +34,9 @@ update:
 	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/functions.c > .tmp
 	rm -f functions.c
 	mv .tmp functions.c
+	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/termios_win.h > .tmp
+	rm -f termios_win.h
+	mv .tmp termios_win.h
 	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/Makefile > .tmp
 	rm -f Makefile
 	mv .tmp Makefile
