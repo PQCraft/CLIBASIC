@@ -1,0 +1,37 @@
+C = gcc
+
+CFLAGS = -Werror -O2 -ffreestanding -lm
+
+all:
+	del /q /f ./clibasic.exe
+	$(C) clibasic.c -m64 $(CFLAGS) -D B64 -o clibasic.exe
+	./clibasic.exe
+
+all32:
+	del /q /f ./clibasic.exe
+	$(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic.exe
+	./clibasic.exe
+
+build:
+	$(C) clibasic.c -m64 $(CFLAGS) -D B64 -o clibasic.exe
+
+build32:
+	$(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic.exe
+
+#update:
+	
+
+#install:
+	
+
+#install32:
+	
+
+run:
+	./clibasic.exe
+
+debug:
+	./clibasic.exe --debug
+
+clean:
+	del /q /f clibasic.exe
