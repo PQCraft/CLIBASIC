@@ -9,7 +9,7 @@ To build, use `make build`. <br>
 To run, use `make run` or `./clibasic`. <br>
 To build then run, use `make` (this is the same as `make all`). <br>
 #### Windows <br>
-***IMPORTANT:*** *Please use Windows Terminal* <br>
+***IMPORTANT:*** *Please use Windows Terminal or run in CMD as admin* <br>
 To build, use `make -f Makefile-Windows build`. <br>
 To run, use `make -f Makefile-Windows run` or `./clibasic`. <br>
 To build then run, use `make -f Makefile-Windows` (this is the same as `make -f Makefile-Windows all`). <br>
@@ -21,4 +21,10 @@ Arch: `readline` <br>
 Apline: `readline-dev` <br>
 #### Windows <br>
 Wimdows NT-10: [`MinGW`](http://mingw-w64.org/), [`Make for Windows`](http://gnuwin32.sourceforge.net/packages/make.htm) <br>
+<br>
+### Notes <br>
+- On Windows please use Windows Terminal or execute the command below in CMD as Admin to enable ANSI escape sequnces on CMD 
+```
+reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f
+```
 <br>
