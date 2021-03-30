@@ -1,6 +1,6 @@
 C = gcc
 
-CFLAGS = -Werror -O2 -ffreestanding -lm
+CFLAGS = -Werror -O2 -ffreestanding -lm --std=c99
 
 all:
 	del /q /f ./clibasic.exe
