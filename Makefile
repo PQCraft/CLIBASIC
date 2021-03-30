@@ -34,6 +34,9 @@ update:
 	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/functions.c > .tmp
 	rm -f functions.c
 	mv .tmp functions.c
+	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/logic.c > .tmp
+	rm -f logic.c
+	mv .tmp logic.c
 	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/Makefile > .tmp
 	rm -f Makefile
 	mv .tmp Makefile
