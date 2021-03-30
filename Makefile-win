@@ -1,0 +1,52 @@
+C = x86_64-w64-mingw32-gcc
+C32 = i686-w64-mingw32-gcc
+
+CFLAGS = -Werror -O2 -ffreestanding -lm
+
+CBITS = $(shell getconf LONG_BIT)
+
+all:
+	rm -f ./clibasic.exe
+	$(C) clibasic.c $(CFLAGS) -D B$(CBITS) -o clibasic.exe
+	chmod +x ./clibasic.exe
+	wine clibasic.exe
+
+all32:
+	rm -f ./clibasic.exe
+	$(C32) clibasic.c $(CFLAGS) -D B32 -o clibasic.exe
+	chmod +x ./clibasic.exe
+	wine clibasic.exe
+
+build:
+	$(C) clibasic.c $(CFLAGS) -D B$(CBITS) -o clibasic.exe
+	chmod +x ./clibasic.exe
+
+build32:
+	$(C32) clibasic.c $(CFLAGS) -D B32 -o clibasic.exe
+	chmod +x ./clibasic.exe
+
+update:
+	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/clibasic.c > .tmp
+	rm -f clibasic.c
+	mv .tmp clibasic.c
+	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/commands.c > .tmp
+	rm -f commands.c
+	mv .tmp commands.c
+	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/functions.c > .tmp
+	rm -f functions.c
+	mv .tmp functions.c
+	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/termios_win.h > .tmp
+	rm -f termios_win.h
+	mv .tmp termios_win.h
+	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/Makefile > .tmp
+	rm -f Makefile
+	mv .tmp Makefile
+
+run:
+	wine clibasic.exe
+
+debug:
+	wine clibasic.exe --debug
+
+clean:
+	rm -f clibasic.exe

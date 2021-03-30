@@ -1,4 +1,4 @@
-$txtlock
+_txtlock
 do
   k$ = inkey$()
   if asc(k$) <> 0

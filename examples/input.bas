@@ -1,4 +1,4 @@
-$txtlock
+_txtlock
 put "Press Ctrl+C to exit...\n"
 do
     k$ = inkey$()

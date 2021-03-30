@@ -15,7 +15,7 @@
     #include <readline/history.h>
 #endif
 
-char VER[] = "0.12.5";
+char VER[] = "0.12.6";
 
 #ifndef BUFSIZE
     #define BUFSIZE 32768
@@ -47,7 +47,8 @@ char VER[] = "0.12.5";
         fflush(stdout);
         char buf[BUFSIZE];
         buf[0] = 0;
-        scanf("%[^\n]s", &buf);
+        int inct = scanf("%[^\n]s", &buf);
+        if (inct != 1 && inct != 0) cleanExit();
         int tmpc = 0;
         read(1, &tmpc, 1);
         if (tmpc == 3) cleanExit();

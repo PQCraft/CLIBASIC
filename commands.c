@@ -283,6 +283,7 @@ if (chkCmd(1, arg[0], "_TXTATTRIB")) {
             val = atoi(arg[2]);
             if (val < 0 || val > 255) {cerr = 16; goto cmderr;}
         } else {
+            if (argt[2] == 0) {cerr = 3; goto cmderr;}
             if (argt[2] == 1) {
                 upCase(arg[2]);
                 if (!qstrcmp(arg[2], "ON") || !qstrcmp(arg[2], "TRUE") || !qstrcmp(arg[2], "YES")) val = 1; else
