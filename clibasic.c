@@ -15,11 +15,13 @@
     #include <readline/history.h>
 #endif
 
-char VER[] = "0.12.6";
+char VER[] = "0.12.7";
 
 #ifndef BUFSIZE
     #define BUFSIZE 32768
 #endif
+
+bool cmdint = false;
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -41,6 +43,8 @@ char VER[] = "0.12.6";
         coord.Y = 0;
         SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
     }
+    void pthread_kill(int thread, int sig);
+    int pthread_self();
     char* readline(char* prompt) {
         //(https://theenglishfarm.com/sites/default/files/styles/featured_image/public/harold_2.jpg?itok=uo6h4hz4)
         printf(prompt);
@@ -48,10 +52,10 @@ char VER[] = "0.12.6";
         char buf[BUFSIZE];
         buf[0] = 0;
         int inct = scanf("%[^\n]s", &buf);
-        if (inct != 1 && inct != 0) cleanExit();
+        if (inct != 1 && inct != 0) raise(SIGINT); //pthread_kill(pthread_self(), SIGINT);
         int tmpc = 0;
         read(1, &tmpc, 1);
-        if (tmpc == 3) cleanExit();
+        if (tmpc == 3) raise(SIGINT); //pthread_kill(pthread_self(), SIGINT);
         while (getchar() != '\n') {}
         rlptr = malloc(strlen(buf) + 1);
         strcpy(rlptr, buf);
@@ -133,8 +137,6 @@ int curx;
 int cury;
 
 int64_t cp = 0;
-
-bool cmdint = false;
 
 bool debug = false;
 bool runfile = false;
