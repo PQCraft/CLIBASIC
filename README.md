@@ -15,13 +15,13 @@ To build then run, use `make -f Makefile-Windows` (this is the same as `make -f 
 <br>
 ### Required Packages/Programs <br>
 #### Linux <br>
-Debian/Ubuntu (`apt`): `libreadline-dev` <br>
-Arch (`pacman`): `readline` <br>
-Apline (`apk`): `readline-dev` <br>
+Debian/Ubuntu (`apt`): `build-essential`, `libreadline-dev` <br>
+Arch (`pacman`): `base-devel`, `readline` <br>
+Apline (`apk`): `build-base`, `readline-dev` <br>
 #### Windows <br>
 Wimdows NT-10 (website): [`MinGW`](http://mingw-w64.org/), [`Make for Windows`](http://gnuwin32.sourceforge.net/packages/make.htm) <br>
 #### MacOS <br>
-MacOS (`brew`): `readline` <br>
+MacOS (`brew`): `gcc`, `readline` <br>
 <br>
 ### Notes <br>
 - On Windows please use Windows Terminal or execute the folowing command in CMD as Admin to enable ANSI escape sequnces on CMD: ```reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f``` <br>
