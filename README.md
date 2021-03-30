@@ -9,9 +9,8 @@ To build, use `make build`. <br>
 To run, use `make run` or `./clibasic`. <br>
 To build then run, use `make` (this is the same as `make all`). <br>
 #### Windows <br>
-***IMPORTANT:*** *Please use Windows Terminal or run in CMD as admin* <br>
 To build, use `make -f Makefile-Windows build`. <br>
-To run, use `make -f Makefile-Windows run` or `./clibasic`. <br>
+To run, use `make -f Makefile-Windows run` or `.\clibasic.exe`. <br>
 To build then run, use `make -f Makefile-Windows` (this is the same as `make -f Makefile-Windows all`). <br>
 <br>
 ### Required Packages/Programs <br>
