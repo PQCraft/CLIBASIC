@@ -41,8 +41,6 @@ char VER[] = "0.12.7";
         coord.Y = 0;
         SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
     }
-    void pthread_kill(int thread, int sig);
-    int pthread_self();
     char* readline(char* prompt) {
         //(https://theenglishfarm.com/sites/default/files/styles/featured_image/public/harold_2.jpg?itok=uo6h4hz4)
         printf(prompt);
@@ -83,8 +81,6 @@ FILE *f[256];
 
 int err = 0;
 int cerr;
-
-bool cmdint = false;
 
 bool inProg = false;
 bool chkinProg = false;
@@ -137,6 +133,8 @@ int curx;
 int cury;
 
 int64_t cp = 0;
+
+bool cmdint = false;
 
 bool debug = false;
 bool runfile = false;
