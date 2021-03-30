@@ -6,7 +6,7 @@ if (!qstrcmp(tmp[0], "PRINT") || !qstrcmp(tmp[0], "?")) {
     if (itstackp > -1) {
         if (itdcmd[itstackp]) return true;
     }
-    if (cmd[i] == 0) {printf("%c", '\n'); return true;}
+    if (cmd[i] == 0) {putc('\n', stdout); return true;}
     bool inStr = false;
     int pct = 0;
     int ptr = 0;
@@ -24,9 +24,9 @@ if (!qstrcmp(tmp[0], "PRINT") || !qstrcmp(tmp[0], "?")) {
             if (debug) printf(">tmp[1]: {%s}\n", tmp[1]);
             if (!(tmpt = getVal(tmp[1], tmp[1]))) return true;
             if (debug) printf(">tmp[1]: {%s}\n", tmp[1]);
-            if (cmd[j] == ',' && tmpt != 255) printf("%c", '\t');
+            if (cmd[j] == ',' && tmpt != 255) putc('\t', stdout);
             printf("%s", tmp[1]);
-            if (cmd[i] == 0 && len > 0) printf("%c", '\n');
+            if (cmd[i] == 0 && len > 0) putc('\n', stdout);
             j = i;
         } else
         {tmp[1][ptr] = cmd[i]; ptr++; if (debug) printf("tmp[1]: {%s}\n", tmp[1]);}

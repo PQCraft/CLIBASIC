@@ -2,7 +2,7 @@ do
     set e, cint(rand(31, 126))
     set c, cint(rand(1))
     color c*8+2
-    if cint(rand(1)) = 0: $txtbold: else: $txtreset: endif
+    _txtattrib 1, cint(rand(1)):
     if cint(rand(3)) = 0:
         color ,0: put "\t"
         if cint(rand(15)) = 0: color ,15: endif

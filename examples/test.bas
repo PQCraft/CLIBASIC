@@ -3,10 +3,10 @@
 print "test"
 color 21
 print "blue"
-$txtbold
+_txtattrib 1, 1
 
 set E, 0
 do
 set E, E+1
-print E, ""
+print E, "";
 loopwhile e < 256

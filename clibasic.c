@@ -2,6 +2,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <signal.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -14,7 +15,7 @@
     #include <readline/history.h>
 #endif
 
-char VER[] = "0.12.4";
+char VER[] = "0.12.5";
 
 #ifndef BUFSIZE
     #define BUFSIZE 32768
@@ -32,7 +33,7 @@ char VER[] = "0.12.4";
     #include "termios_win.h"
     #include <windows.h>
     #define SIGKILL 9
-    char *rlptr;
+    char* rlptr;
     void cleanExit();
     void setcsr() {
         COORD coord;
@@ -40,11 +41,12 @@ char VER[] = "0.12.4";
         coord.Y = 0;
         SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
     }
-    char *readline(char *prompt) {
+    char* readline(char* prompt) {
         //(https://theenglishfarm.com/sites/default/files/styles/featured_image/public/harold_2.jpg?itok=uo6h4hz4)
         printf(prompt);
         fflush(stdout);
         char buf[BUFSIZE];
+        buf[0] = 0;
         scanf("%[^\n]s", &buf);
         int tmpc = 0;
         read(1, &tmpc, 1);
@@ -54,9 +56,9 @@ char VER[] = "0.12.4";
         strcpy(rlptr, buf);
         return rlptr;
     }
-    void add_history(char *str) {}
-    void read_history(char *str) {}
-    void write_history(char *str) {}
+    void add_history(char* str) {}
+    void read_history(char* str) {}
+    void write_history(char* str) {}
     //(https://i.kym-cdn.com/entries/icons/original/000/027/746/crying.jpg)
 #elif __APPLE__
     char OSVER[] = "MacOS"
@@ -73,7 +75,7 @@ char VER[] = "0.12.4";
 #endif
 
 FILE *prog;
-char *progbuf;
+char* progbuf;
 FILE *f[256];
 
 int err = 0;
@@ -81,22 +83,22 @@ int cerr;
 
 bool inProg = false;
 bool chkinProg = false;
-char *progFilename;
+char* progFilename;
 int progLine = 1;
 
-int *varlen;
-char **varstr;
-char **varname;
+int* varlen;
+char** varstr;
+char** varname;
 bool *varinuse;
 uint8_t *vartype;
 int varmaxct = 0;
 
-char *cmd;
+char* cmd;
 int cmdl;
-char **tmpargs;
-char **arg;
+char** tmpargs;
+char** arg;
 uint8_t *argt;
-int *argl;
+int* argl;
 int argct = 0;
 
 int cmdpos;
@@ -116,7 +118,7 @@ int fnstack[256];
 bool fndcmd[256];
 int fnstackp = -1;
 */
-char *errstr;
+char* errstr;
 
 char conbuf[BUFSIZE];
 char lastcb[BUFSIZE];
@@ -135,6 +137,23 @@ bool cmdint = false;
 
 bool debug = false;
 bool runfile = false;
+
+bool sh_silent = false;
+bool sh_clearAttrib = true;
+bool sh_restoreAttrib = true;
+
+bool txt_bold = false;
+bool txt_italic = false;
+bool txt_underln = false;
+bool txt_underlndbl = false;
+bool txt_underlnsqg = false;
+bool txt_strike = false;
+bool txt_overln = false;
+bool txt_dim = false;
+bool txt_blink = false;
+bool txt_hidden = false;
+bool txt_reverse = false;
+int  txt_underlncolor = 0;
 
 struct termios term, restore;
 static struct termios orig_termios;
@@ -162,7 +181,6 @@ void cleanExit() {
     signal(SIGTERM, forceExit);
     printf("\e[0m");
     fflush(stdout);
-    fflush(stdin);
     getCurPos();
     if (curx != 1) printf("\n");
     exit(err);
@@ -179,8 +197,9 @@ void copyStrSnip(char* str1, int i, int j, char* str2);
 uint8_t getVal(char* inbuf, char* outbuf);
 void resetTimer();
 void loadProg();
+void updateTxtAttrib();
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     signal(SIGINT, cleanExit); 
     signal(SIGKILL, cleanExit); 
     signal(SIGTERM, cleanExit); 
@@ -198,9 +217,9 @@ int main(int argc, char *argv[]) {
             if (argc > 2) {printf("Incorrent number of options passed.\n"); cleanExit();}
             printf("Usage: clibasic [options] [file]\n");
             printf("\n");
-            printf("--help      Shows the help screen.\n");
-            printf("--version   Shows the version info.\n");
-            printf("--debug     Quick way to create a text wall.\n");
+            printf("  -h, --help      Shows the help screen.\n");
+            printf("  -v, --version   Shows the version info.\n");
+            printf("  -d, --debug     Quick way to create a text wall.\n");
             exit = true;
         } else
         if (!qstrcmp(argv[i], "--debug") || !qstrcmp(argv[i], "-d")) {
@@ -217,7 +236,7 @@ int main(int argc, char *argv[]) {
         }
     }
     if (exit) cleanExit();
-    printf("\e[0m\e[38;5;%um\e[48;5;%um", fgc, bgc);
+    updateTxtAttrib();
     if (!runfile) {
         printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
         strcpy(prompt, "\"CLIBASIC> \"");
@@ -244,10 +263,10 @@ int main(int argc, char *argv[]) {
         if (chkinProg) {inProg = true; chkinProg = false;}
         if (!inProg) {
             if (runfile) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} err = cerr; cleanExit();}
-            char *tmpstr = NULL;
+            char* tmpstr = NULL;
             int tmpt = getVal(prompt, pstr);
             if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
-            printf("\e[38;5;%um\e[48;5;%um", fgc, bgc);
+            updateTxtAttrib();
             getCurPos();
             if (curx != 1) printf("\n");
             while (tmpstr == NULL) {tmpstr = readline(pstr);}
@@ -414,11 +433,31 @@ void loadProg() {
     progbuf[j - 1] = 0;
 }
 
-double randNum(double num1, double num2) 
-{
+double randNum(double num1, double num2) {
     double range = num2 - num1;
     double div = RAND_MAX / range;
     return num1 + (rand() / div);
+}
+
+bool chkCmd(int ct, ...) {
+    va_list args;
+    va_start(args, ct);
+    char* str0 = va_arg(args, char*);
+    bool match = false;
+    for (int i = 0; i < ct; i++) {
+        char* str1 = str0;
+        char* str2 = va_arg(args, char*);
+        while (1) {
+            if (!*str1 && !*str2) break;
+            if (*str1 != *str2) goto nmatch;
+            str1++;
+            str2++;
+        }
+        match = true;
+        nmatch:
+        if (match) return true;
+    }
+    return false;
 }
 
 bool isSpChar(char* bfr, int pos) {
@@ -454,6 +493,36 @@ void copyStrApnd(char* str1, char* str2) {
     int j = 0, i = 0;
     for (i = strlen(str2); str1[j] != 0; i++) {str2[i] = str1[j]; j++;}
     str2[i] = 0;
+}
+
+void upCase(char* str) {
+    for (int i = 0; str[i] != 0; i++) {
+        if (str[i] >= 'a' && str[i] <= 'z') str[i] -= 32;
+    }
+}
+
+void lowCase(char* str) {
+    for (int i = 0; str[i] != 0; i++) {
+        if (str[i] >= 'A' && str[i] <= 'Z') str[i] += 32;
+    }
+}
+
+void updateTxtAttrib() {
+    fputs("\e[0m", stdout);
+    printf("\e[0m\e[38;5;%um\e[48;5;%um", fgc, bgc);
+    if (txt_bold) fputs("\e[1m", stdout);
+    if (txt_italic) fputs("\e[3m", stdout);
+    if (txt_underln) fputs("\e[4m", stdout);
+    if (txt_underlndbl) fputs("\e[21m", stdout);
+    if (txt_underlnsqg) fputs("\e[4:3m", stdout);
+    if (txt_strike) fputs("\e[9m", stdout);
+    if (txt_overln) fputs("\e[53m", stdout);
+    if (txt_dim) fputs("\e[2m", stdout);
+    if (txt_blink) fputs("\e[5m", stdout);
+    if (txt_hidden) fputs("\e[8m", stdout);
+    if (txt_reverse) fputs("\e[7m", stdout);
+    if (txt_underlncolor) printf("\e[58:5:%um", txt_underlncolor);
+    fflush(stdout);
 }
 
 void getStr(char* str1, char* str2) {
@@ -510,9 +579,9 @@ int getArgCt(char* inbuf);
 uint8_t getFunc(char* inbuf, char* outbuf) {
     if (debug) printf("getFunc(\"%s\", \"%s\");\n", inbuf, outbuf);
     char tmp[2][BUFSIZE];
-    char **farg;
+    char** farg;
     uint8_t *fargt;
-    int *flen;
+    int* flen;
     int fargct;
     int ftmpct = 0;
     int ftype = 0;
@@ -563,9 +632,7 @@ uint8_t getVar(char* vn, char* varout) {
     if (vn[strlen(vn) - 1] == ')') {
         return getFunc(vn, varout);
     }
-    for (int i = 0; vn[i] != 0; i++) {
-        if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] -= 32;
-    }
+    upCase(vn);
     for (int i = 0; vn[i] != 0; i++) {
         if (!isValidVarChar(vn, i)) {
             cerr = 4;
@@ -594,9 +661,7 @@ uint8_t getVar(char* vn, char* varout) {
 
 bool setVar(char* vn, char* val, uint8_t t) {
     if (debug) printf("setVar(\"%s\", \"%s\", %d);\n", vn, val, (int)t);
-    for (int i = 0; vn[i] != 0; i++) {
-        if (vn[i] >= 'a' && vn[i] <= 'z') vn[i] -= 32;
-    }
+    upCase(vn);
     for (int i = 0; vn[i] != 0; i++) {
         if (!isValidVarChar(vn, i)) {
             cerr = 4;
@@ -1041,11 +1106,7 @@ bool runlogic() {
     int j = i;
     while (cmd[j] != ' ' && cmd[j] != 0) {j++;}
     copyStrSnip(cmd, i, j, tmp[0]);
-    for (int h = 0; tmp[0][h] != 0; h++) {
-        if (tmp[0][h] >= 'a' && tmp[0][h] <= 'z') {
-            tmp[0][h] -= 32;
-        }
-    }
+    upCase(tmp[0]);
     cerr = 0;
     #include "logic.c"
     return false;
@@ -1069,11 +1130,7 @@ void runcmd() {
     for (int i = 1; i <= argct; i++) {arg[i] = malloc(0);}
     if (debug) printf("running command...\n");
     solvearg(0);
-    for (int i = 0; i < argl[0]; i++) {
-        if (arg[0][i] >= 'a' && arg[0][i] <= 'z') {
-            arg[0][i] -= 32;
-        }
-    }
+    upCase(arg[0]);
     if (debug) printf("C [%d]: {%s}\n", 0, arg[0]);
     cerr = 255;
     #include "commands.c"
@@ -1086,55 +1143,55 @@ void runcmd() {
         else {printf("Error %d: ", cerr);}
         switch (cerr) {
             default:
-                printf("\b\b \b");
+                fputs("\b\b \b", stdout);
                 break;
             case 1:
-                printf("Syntax");
+                fputs("Syntax", stdout);
                 break;
             case 2:
-                printf("Type mismatch");
+                fputs("Type mismatch", stdout);
                 break;
             case 3:
-                printf("Agument count mismatch");
+                fputs("Agument count mismatch", stdout);
                 break;
             case 4:
                 printf("Invalid variable name: '%s'", errstr);
                 break;
             case 5:
-                printf("Operation results in undefined");
+                fputs("Operation results in undefined", stdout);
                 break;
             case 6:
-                printf("LOOP without DO");
+                fputs("LOOP without DO", stdout);
                 break;
             case 7:
-                printf("ENDIF without IF");
+                fputs("ENDIF without IF", stdout);
                 break;
             case 8:
-                printf("ELSE without IF");
+                fputs("ELSE without IF", stdout);
                 break;
             case 9:
-                printf("NEXT without FOR");
+                fputs("NEXT without FOR", stdout);
                 break;
             case 10:
-                printf("Expected expression");
+                fputs("Expected expression", stdout);
                 break;
             case 11:
-                printf("Unexpected ELSE");
+                fputs("Unexpected ELSE", stdout);
                 break;
             case 12:
-                printf("Reached DO limit");
+                fputs("Reached DO limit", stdout);
                 break;
             case 13:
-                printf("Reached IF limit");
+                fputs("Reached IF limit", stdout);
                 break;
             case 14:
-                printf("Reached FOR limit");
+                fputs("Reached FOR limit", stdout);
                 break;
             case 15:
                 printf("File not found: '%s'", errstr);
                 break;
             case 16:
-                printf("Data range exceded");
+                fputs("Invalid data or data range exceded", stdout);
                 break;
             case 127:
                 printf("Not a function: '%s'", errstr);
