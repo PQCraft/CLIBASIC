@@ -21,8 +21,6 @@ char VER[] = "0.12.7";
     #define BUFSIZE 32768
 #endif
 
-bool cmdint = false;
-
 #if defined(__linux__)
     char OSVER[] = "Linux";
 #elif defined(BSD)
@@ -52,10 +50,10 @@ bool cmdint = false;
         char buf[BUFSIZE];
         buf[0] = 0;
         int inct = scanf("%[^\n]s", &buf);
-        if (inct != 1 && inct != 0) raise(SIGINT); //pthread_kill(pthread_self(), SIGINT);
+        if (inct != 1 && inct != 0) raise(SIGINT);
         int tmpc = 0;
         read(1, &tmpc, 1);
-        if (tmpc == 3) raise(SIGINT); //pthread_kill(pthread_self(), SIGINT);
+        if (tmpc == 3) raise(SIGINT);
         while (getchar() != '\n') {}
         rlptr = malloc(strlen(buf) + 1);
         strcpy(rlptr, buf);
@@ -85,6 +83,8 @@ FILE *f[256];
 
 int err = 0;
 int cerr;
+
+bool cmdint = false;
 
 bool inProg = false;
 bool chkinProg = false;
