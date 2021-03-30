@@ -22,8 +22,6 @@ Apline: `readline-dev` <br>
 Wimdows NT-10: [`MinGW`](http://mingw-w64.org/), [`Make for Windows`](http://gnuwin32.sourceforge.net/packages/make.htm) <br>
 <br>
 ### Notes <br>
-- On Windows please use Windows Terminal or execute the command below in CMD as Admin to enable ANSI escape sequnces on CMD 
-```
-reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f
-```
+- On Windows please use Windows Terminal or execute the folowing command in CMD as Admin to enable ANSI escape sequnces on CMD: ```reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f``` <br>
+- Pressing <kbd>Ctrl</kbd>+<kbd>C</kbd> on Windows will for some reason, not work while scanf() is reading from the command-line (during `INPUT$()` and the `CLIBASIC> ` prompt). Pressing <kbd>Ctrl</kbd>+<kbd>C</kbd> and then <kbd>Enter</kbd> will fix the issue.
 <br>
