@@ -7,19 +7,19 @@ CLIBASIC is a version of BASIC designed to run in the command line or terminal
 #### Linux/MacOS <br>
 To build, use `make build`. <br>
 To run, use `make run` or `./clibasic`. <br>
-To build then run, use `make` (this is the same as `make all`). <br>
+To build then run, use `make` (same as `make all`). <br>
 #### Windows <br>
 To build, use `make -f Makefile-Windows build`. <br>
 To run, use `make -f Makefile-Windows run` or `.\clibasic.exe`. <br>
-To build then run, use `make -f Makefile-Windows` (this is the same as `make -f Makefile-Windows all`). <br>
+To build then run, use `make -f Makefile-Windows` (same as `make -f Makefile-Windows all`). <br>
 <br>
 ### Required Packages/Programs <br>
 #### Linux <br>
-Debian/Ubuntu (`apt`): `build-essential`, `libreadline-dev` <br>
+Debian (`apt`): `build-essential`, `libreadline-dev` <br>
 Arch (`pacman`): `base-devel`, `readline` <br>
 Apline (`apk`): `build-base`, `readline-dev` <br>
 #### Windows <br>
-Wimdows NT-10 (website): [`MinGW`](http://mingw-w64.org/), [`Make for Windows`](http://gnuwin32.sourceforge.net/packages/make.htm) <br>
+Wimdows NT-10 (download): [`MinGW`](http://mingw-w64.org/), [`Make for Windows`](http://gnuwin32.sourceforge.net/packages/make.htm) <br>
 #### MacOS <br>
 MacOS (`brew`): `gcc`, `make`, `readline` <br>
 <br>
