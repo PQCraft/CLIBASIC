@@ -20,6 +20,7 @@ Arch (`pacman`): `base-devel`, `readline` <br>
 Apline (`apk`): `build-base`, `readline-dev` <br>
 #### Windows <br>
 Wimdows NT-10 (download): [`MinGW`](http://mingw-w64.org/doku.php/download/mingw-builds), [`Make for Windows`](http://gnuwin32.sourceforge.net/packages/make.htm) <br>
+Windows 7-10 (`choco`): `mingw`, `make`
 #### MacOS <br>
 MacOS Mojave-Big Sur (`brew`): `gcc`, `make`, `readline` <br>
 <br>
