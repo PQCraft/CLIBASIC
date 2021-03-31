@@ -25,4 +25,3 @@ MacOS (`brew`): `gcc`, `make`, `readline` <br>
 <br>
 ### Notes <br>
 - On Windows please use Windows Terminal or execute the folowing command in CMD as Admin to enable ANSI escape sequnces on CMD: ```reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f``` <br>
-<br>
