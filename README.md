@@ -4,7 +4,7 @@
 CLIBASIC is a version of BASIC designed to run in the command line or terminal
 <!----> <br>
 ### Building and Running <br>
-#### Linux <br>
+#### Linux/MacOS <br>
 To build, use `make build`. <br>
 To run, use `make run` or `./clibasic`. <br>
 To build then run, use `make` (this is the same as `make all`). <br>
@@ -21,7 +21,7 @@ Apline (`apk`): `build-base`, `readline-dev` <br>
 #### Windows <br>
 Wimdows NT-10 (website): [`MinGW`](http://mingw-w64.org/), [`Make for Windows`](http://gnuwin32.sourceforge.net/packages/make.htm) <br>
 #### MacOS <br>
-MacOS (`brew`): `gcc`, `readline` <br>
+MacOS (`brew`): `gcc`, `make`, `readline` <br>
 <br>
 ### Notes <br>
 - On Windows please use Windows Terminal or execute the folowing command in CMD as Admin to enable ANSI escape sequnces on CMD: ```reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f``` <br>
