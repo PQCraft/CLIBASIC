@@ -1,5 +1,5 @@
-if (!qstrcmp(tmp[0], "REM")) return true;
-if (!qstrcmp(tmp[0], "PRINT") || !qstrcmp(tmp[0], "?")) {
+if (chkCmd(1, tmp[0], "REM")) return true;
+if (chkCmd(2, tmp[0], "PRINT", "?")) {
     if (dlstackp > -1) {
         if (dldcmd[dlstackp]) return true;
     }
@@ -15,7 +15,7 @@ if (!qstrcmp(tmp[0], "PRINT") || !qstrcmp(tmp[0], "?")) {
         i++;
         if (cmd[i] == '(' && !inStr) {pct++;}
         if (cmd[i] == ')' && !inStr) {pct--;}
-        if (cmd[i] == '"') {inStr = !inStr;}        
+        if (cmd[i] == '"') {inStr = !inStr;}
         if (cmd[i] == ' ' && !inStr) {} else
         if ((cmd[i] == ',' || cmd[i] == ';' || cmd[i] == 0) && !inStr && pct == 0) {
             tmp[1][ptr] = 0; ptr = 0;
@@ -34,7 +34,7 @@ if (!qstrcmp(tmp[0], "PRINT") || !qstrcmp(tmp[0], "?")) {
     fflush(stdout);
     return true;
 }
-if (!qstrcmp(tmp[0], "DO")) {
+if (chkCmd(1, tmp[0], "DO")) {
     if (dlstackp >= 255) {cerr = 12; goto lexit;}
     dlstackp++;
     if (itstackp > -1) {
@@ -50,7 +50,7 @@ if (!qstrcmp(tmp[0], "DO")) {
     dlpline[dlstackp] = progLine;
     return true;
 }
-if (!qstrcmp(tmp[0], "DOWHILE")) {
+if (chkCmd(1, tmp[0], "DOWHILE")) {
     if (dlstackp >= 255) {cerr = 12; goto lexit;}
     dlstackp++;
     if (itstackp > -1) {
@@ -68,7 +68,7 @@ if (!qstrcmp(tmp[0], "DOWHILE")) {
     dldcmd[dlstackp] = !dldcmd[dlstackp];
     return true;
 }
-if (!qstrcmp(tmp[0], "LOOP")) {
+if (chkCmd(1, tmp[0], "LOOP")) {
     if (dlstackp <= -1) {cerr = 6; return true;}
     if (dlstackp > -1) {
         if (dldcmd[dlstackp]) {dlstackp--; return true;}
@@ -86,7 +86,7 @@ if (!qstrcmp(tmp[0], "LOOP")) {
     didloop = true;
     return true;
 }
-if (!qstrcmp(tmp[0], "LOOPWHILE")) {
+if (chkCmd(1, tmp[0], "LOOPWHILE")) {
     if (dlstackp <= -1) {cerr = 6; return true;}
     if (itstackp > -1) {
         if (itdcmd[itstackp]) return true;
@@ -103,7 +103,7 @@ if (!qstrcmp(tmp[0], "LOOPWHILE")) {
     didloop = true;
     return true;
 }
-if (!qstrcmp(tmp[0], "IF")) {
+if (chkCmd(1, tmp[0], "IF")) {
     if (itstackp >= 255) {cerr = 13; return true;}
     itstackp++;
     if (itstackp > -2) {
@@ -118,7 +118,7 @@ if (!qstrcmp(tmp[0], "IF")) {
     itdcmd[itstackp] = (bool)!testval;
     return true;
 }
-if (!qstrcmp(tmp[0], "ELSE")) {
+if (chkCmd(1, tmp[0], "ELSE")) {
     if (itstackp <= -1) {cerr = 8; goto lexit;}
     if (itstackp > 0) {
         if (itdcmd[itstackp - 1]) return true;
@@ -131,7 +131,7 @@ if (!qstrcmp(tmp[0], "ELSE")) {
     itdcmd[itstackp] = !itdcmd[itstackp];
     return true;
 }
-if (!qstrcmp(tmp[0], "ENDIF")) {
+if (chkCmd(1, tmp[0], "ENDIF")) {
     if (itstackp <= -1) {cerr = 7; goto lexit;}
     itdcmd[itstackp] = false;
     didelse = false;

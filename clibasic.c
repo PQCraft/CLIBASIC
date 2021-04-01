@@ -10,13 +10,13 @@
 #include <inttypes.h>
 #include <sys/time.h>
 
-#if !defined(_WIN32)
+#ifndef _WIN32
     #include <termios.h>
     #include <readline/readline.h>
     #include <readline/history.h>
 #endif
 
-char VER[] = "0.12.7.2";
+char VER[] = "0.12.8";
 
 #ifndef BUFSIZE
     #define BUFSIZE 32768
@@ -202,9 +202,9 @@ void loadProg();
 void updateTxtAttrib();
 
 int main(int argc, char* argv[]) {
-    signal(SIGINT, cleanExit); 
-    signal(SIGKILL, cleanExit); 
-    signal(SIGTERM, cleanExit); 
+    signal(SIGINT, cleanExit);
+    signal(SIGKILL, cleanExit);
+    signal(SIGTERM, cleanExit);
     getCurPos();
     if (curx != 1) printf("\n");
     bool exit = false;
@@ -259,6 +259,9 @@ int main(int argc, char* argv[]) {
         loadProg();
     }
     resetTimer();
+    #ifndef _WIN32
+    rl_getc_function = getc;
+    #endif
     while (!exit) {
         fchkint:
         conbuf[0] = 0;
@@ -956,7 +959,7 @@ int getArg(int num, char* inbuf, char* outbuf) {
     for (int i = 0; inbuf[i] != 0 && ct <= num; i++) {
         if (inbuf[i] == '(' && !inStr) {pct++;}
         if (inbuf[i] == ')' && !inStr) {pct--;}
-        if (inbuf[i] == '"') {inStr = !inStr;}        
+        if (inbuf[i] == '"') {inStr = !inStr;}
         if (inbuf[i] == ' ' && !inStr) {} else
         if (inbuf[i] == ',' && !inStr && pct == 0) {ct++;} else
         if (ct == num) {outbuf[len] = inbuf[i]; len++;}

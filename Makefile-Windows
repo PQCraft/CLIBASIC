@@ -1,6 +1,6 @@
 C = gcc
 
-CFLAGS = -O2 -ffreestanding -lm --std=c99
+CFLAGS = -Werror -O2 -ffreestanding -lm --std=c99
 
 all:
 	del /q /f clibasic.exe

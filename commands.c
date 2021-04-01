@@ -107,7 +107,7 @@ if (chkCmd(1, arg[0], "WAITUS")) {
     uint64_t t = d + time_us();
     while (t > time_us()) {}
     goto cmderr;
-}    
+}
 if (chkCmd(1, arg[0], "WAITMS")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
@@ -118,7 +118,7 @@ if (chkCmd(1, arg[0], "WAITMS")) {
     uint64_t t = d * 1000 + time_us();
     while (t > time_us()) {}
     goto cmderr;
-}    
+}
 if (chkCmd(1, arg[0], "WAIT")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
@@ -129,7 +129,7 @@ if (chkCmd(1, arg[0], "WAIT")) {
     uint64_t t = d * 1000000 + time_us();
     while (t > time_us()) {}
     goto cmderr;
-}    
+}
 if (chkCmd(1, arg[0], "RESETTIMER")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
@@ -180,7 +180,7 @@ if (chkCmd(2, arg[0], "SRAND", "SRND")) {
     sscanf(arg[1], "%lf", &rs);
     srand(rs);
     goto cmderr;
-}    
+}
 if (chkCmd(1, arg[0], "_PROMPT")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
