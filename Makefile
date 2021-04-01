@@ -1,6 +1,6 @@
 C = gcc
 
-CFLAGS = -Wall -Wextra -O2 -ffreestanding -lm -lreadline
+CFLAGS = -Wall -Wextra -O2 -ffreestanding -lm -lreadline --std=c99
 
 CBITS = $(shell getconf LONG_BIT)
 
