@@ -1,5 +1,13 @@
 if (chkCmd(1, tmp[0], "REM")) return true;
-if (chkCmd(2, tmp[0], "PRINT", "?")) {
+if (chkCmd(2, tmp[0], "?;", "PRINT;")) {
+    for (int i = j; cmd[i] != 0; i++) {
+        if (cmd[i] != ' ') {cerr = 1; return true;}
+    }
+    fputs("", stdout);
+    fflush(stdout);
+    return true;
+}
+if (chkCmd(2, tmp[0], "?", "PRINT")) {
     if (dlstackp > -1) {
         if (dldcmd[dlstackp]) return true;
     }
@@ -25,7 +33,7 @@ if (chkCmd(2, tmp[0], "PRINT", "?")) {
             if (!(tmpt = getVal(tmp[1], tmp[1]))) return true;
             if (debug) printf(">tmp[1]: {%s}\n", tmp[1]);
             if (cmd[j] == ',' && tmpt != 255) putc('\t', stdout);
-            printf("%s", tmp[1]);
+            fputs(tmp[1], stdout);
             if (cmd[i] == 0 && len > 0) putc('\n', stdout);
             j = i;
         } else

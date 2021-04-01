@@ -105,7 +105,7 @@ if (chkCmd(1, arg[0], "WAITUS")) {
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
     uint64_t t = d + time_us();
-    while (t > time_us()) {}
+    while (t > time_us() && !cmdint) {}
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "WAITMS")) {
@@ -116,7 +116,7 @@ if (chkCmd(1, arg[0], "WAITMS")) {
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
     uint64_t t = d * 1000 + time_us();
-    while (t > time_us()) {}
+    while (t > time_us() && !cmdint) {}
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "WAIT")) {
@@ -127,7 +127,7 @@ if (chkCmd(1, arg[0], "WAIT")) {
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
     uint64_t t = d * 1000000 + time_us();
-    while (t > time_us()) {}
+    while (t > time_us() && !cmdint) {}
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "RESETTIMER")) {
@@ -211,23 +211,26 @@ if (chkCmd(1, arg[0], "_LOADCMDHST")) {
 if (chkCmd(1, arg[0], "_TXTLOCK")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
+    #ifndef _WIN32
     if (!textlock) {
         tcgetattr(0, &term);
         tcgetattr(0, &restore);
         term.c_lflag &= ~(ICANON|ECHO);
         tcsetattr(0, TCSANOW, &term);
     }
+    #endif
     textlock = true;
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "_TXTUNLOCK")) {
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
+    #ifndef _WIN32
     if (textlock) tcsetattr(0, TCSANOW, &restore);
+    #endif
     textlock = false;
     goto cmderr;
 }
-
 if (chkCmd(1, arg[0], "_TXTATTRIB")) {
     cerr = 0;
     if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
@@ -311,7 +314,57 @@ if (chkCmd(1, arg[0], "_TXTATTRIB")) {
     updateTxtAttrib();
     goto cmderr;
 }
-
+if (chkCmd(1, arg[0], "_SHATTRIB")) {
+    cerr = 0;
+    if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] == 0) {cerr = 3; goto cmderr;}
+    int attrib = 0;
+    if (argt[1] == 1) {
+        for (int i = 0; arg[1][i] != 0; i++) {
+            if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
+            if (arg[1][i] == ' ') arg[1][i] = '_';
+        }
+        if (!qstrcmp(arg[1], "RESET")) attrib = 0; else
+        if (!qstrcmp(arg[1], "SILENT")) attrib = 1; else
+        if (!qstrcmp(arg[1], "CLEARATTRIB")) attrib = 2; else
+        if (!qstrcmp(arg[1], "RESTOREATTRIB")) attrib = 3; else
+        {cerr = 16; goto cmderr;}
+    } else {
+        attrib = atoi(arg[1]);
+        if (attrib < 0 || attrib > 12) {cerr = 16; goto cmderr;}
+    }
+    int val = 0;
+    if (attrib == 0) {
+        if (argct == 2) {cerr = 3; goto cmderr;}
+        sh_silent = false;
+        sh_clearAttrib = true;
+        sh_restoreAttrib = true;
+        goto cmderr;
+    } else if (argct != 2) {
+        if (attrib == 12) {cerr = 16; goto cmderr;}
+        val = 1;
+    } else {
+        if (!solvearg(2)) goto cmderr;
+        if (argt[2] == 0) {cerr = 3; goto cmderr;}
+        if (argt[2] == 1) {
+            upCase(arg[2]);
+            if (!qstrcmp(arg[2], "ON") || !qstrcmp(arg[2], "TRUE") || !qstrcmp(arg[2], "YES")) val = 1; else
+            if (!qstrcmp(arg[2], "OFF") || !qstrcmp(arg[2], "FALSE") || !qstrcmp(arg[2], "NO")) val = 0; else
+            {cerr = 16; goto cmderr;}
+        } else {
+            sscanf(arg[2], "%d", &val);
+            if (val < 0 || val > 1) {cerr = 16; goto cmderr;}
+        }
+    }
+    switch (attrib) {
+        case 1: sh_silent = (bool)val; break;
+        case 2: sh_clearAttrib = (bool)val; break;
+        case 3: sh_restoreAttrib = (bool)val; break;
+    }
+    updateTxtAttrib();
+    goto cmderr;
+}
 if (chkCmd(1, arg[0], "_DEBUGON")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;

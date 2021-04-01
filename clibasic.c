@@ -16,7 +16,7 @@
     #include <readline/history.h>
 #endif
 
-char VER[] = "0.12.8";
+char VER[] = "0.12.9";
 
 #ifndef BUFSIZE
     #define BUFSIZE 32768
@@ -31,7 +31,6 @@ char VER[] = "0.12.8";
 #elif _WIN32
     char OSVER[] = "Windows";
     //(https://pbs.twimg.com/media/CRcU7BKWwAEQZIE.jpg)
-    #include "termios_win.h"
     #include <windows.h>
     #define SIGKILL 9
     char* rlptr;
@@ -61,6 +60,8 @@ char VER[] = "0.12.8";
     void add_history(char* str) {}
     void read_history(char* str) {}
     void write_history(char* str) {}
+    void txtqunlock() {}
+    void rl_resize_terminal() {}
     //(https://i.kym-cdn.com/entries/icons/original/000/027/746/crying.jpg)
 #elif __APPLE__
     char OSVER[] = "MacOS";
@@ -157,9 +158,14 @@ bool txt_hidden = false;
 bool txt_reverse = false;
 int  txt_underlncolor = 0;
 
+bool textlock = false;
+
+#ifndef _WIN32
 struct termios term, restore;
 static struct termios orig_termios;
-bool textlock = false;
+
+void txtqunlock() {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}}
+#endif
 
 struct timeval time1, time2;
 uint64_t t_start;
@@ -170,14 +176,14 @@ uint64_t t_start;
     strcmp((a), (b)))
 
 void forceExit() {
-    if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
+    txtqunlock();
     exit(0);
 }
 
 void getCurPos();
 
 void cleanExit() {
-    if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
+    txtqunlock();
     signal(SIGINT, forceExit);
     signal(SIGKILL, forceExit);
     signal(SIGTERM, forceExit);
@@ -261,13 +267,14 @@ int main(int argc, char* argv[]) {
     resetTimer();
     #ifndef _WIN32
     rl_getc_function = getc;
+    signal(SIGWINCH, (__sighandler_t)rl_resize_terminal);
     #endif
     while (!exit) {
         fchkint:
         conbuf[0] = 0;
         if (chkinProg) {inProg = true; chkinProg = false;}
         if (!inProg) {
-            if (runfile) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} err = cerr; cleanExit();}
+            if (runfile) {txtqunlock(); err = cerr; cleanExit();}
             char* tmpstr = NULL;
             int tmpt = getVal(prompt, pstr);
             if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
@@ -306,7 +313,7 @@ int main(int argc, char* argv[]) {
                     cmdl = 0;
                     if (debug) printf("calling runcmd()\n");
                     runcmd();
-                    if (cmdint) {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;} cmdint = false; goto brkproccmd;}
+                    if (cmdint) {txtqunlock(); cmdint = false; goto brkproccmd;}
                     if (cp == -1) goto brkproccmd;
                     if (conbuf[cp] == 0) goto brkproccmd;
                     if (chkinProg) goto fchkint;
@@ -336,9 +343,9 @@ int main(int argc, char* argv[]) {
         }
         brkproccmd:
         signal(SIGINT, cleanExit);
-        if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
+        txtqunlock();
     }
-    if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}
+    txtqunlock();
     cleanExit();
     return 0;
 }
@@ -401,9 +408,10 @@ void getCurPos() {
 }
 
 void enableRawMode() {
+    #ifndef _WIN32
     struct termios raw;
-    if (!isatty(STDIN_FILENO)) exit(EXIT_FAILURE);
-    if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) exit(EXIT_FAILURE);
+    if (!isatty(STDIN_FILENO)) return;
+    if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) return;
     raw = orig_termios;
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     raw.c_oflag &= ~(OPOST);
@@ -411,12 +419,14 @@ void enableRawMode() {
     raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0) exit(EXIT_FAILURE);
-    return;
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0) return; //exit(EXIT_FAILURE);
+    #endif
 }
 
 void disableRawMode() {
+    #ifndef _WIN32
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+    #endif
 }
 
 void loadProg() {
@@ -577,7 +587,6 @@ uint8_t getType(char* str) {
     return 2/*NUM*/;
 }
 
-uint8_t getVal(char* inbuf, char* outbuf);
 int getArg(int num, char* inbuf, char* outbuf);
 int getArgCt(char* inbuf);
 
@@ -801,7 +810,8 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
         if ((dt == 1 && inbuf[jp] != '+') && inbuf[jp] != 0) {cerr = 1; return 0;}
         if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[2]); getStr(tmp[2], tmp[2]); copyStrApnd(tmp[2], tmp[1]);} else
         if (t == 2) {
-            copyStr(inbuf, tmp[0]);
+            copyStrSnip(inbuf, jp, strlen(inbuf), tmp[1]);
+            copyStrApnd(tmp[1], tmp[0]);
             int p1, p2, p3;
             bool inStr = false;
             pct = 0;
@@ -1223,9 +1233,5 @@ void runcmd() {
     for (int i = 1; i <= argct; i++) {
         free(arg[i]);
     }
-    //free(tmpargs);
-    //free(argl);
-    //free(argt);
-    //free(arg);
     return;
 }
