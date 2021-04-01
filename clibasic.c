@@ -15,7 +15,7 @@
     #include <readline/history.h>
 #endif
 
-char VER[] = "0.12.7";
+char VER[] = "0.12.7.1";
 
 #ifndef BUFSIZE
     #define BUFSIZE 32768
@@ -62,7 +62,7 @@ char VER[] = "0.12.7";
     void write_history(char* str) {}
     //(https://i.kym-cdn.com/entries/icons/original/000/027/746/crying.jpg)
 #elif __APPLE__
-    char OSVER[] = "MacOS"
+    char OSVER[] = "MacOS";
 #else
     char OSVER[] = "?";
 #endif
