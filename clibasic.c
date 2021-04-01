@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include <signal.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -15,7 +16,7 @@
     #include <readline/history.h>
 #endif
 
-char VER[] = "0.12.7.1";
+char VER[] = "0.12.7.2";
 
 #ifndef BUFSIZE
     #define BUFSIZE 32768
