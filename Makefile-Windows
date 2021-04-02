@@ -1,31 +1,25 @@
 C = gcc
 
-CFLAGS = -Werror -O2 -ffreestanding -lm --std=c99
+CFLAGS = -O2 -ffreestanding -lm --std=c99
+
+BUILD64 = $(C) clibasic.c -m64 $(CFLAGS) -D B64 -o clibasic.exe
+BUILD32 = $(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic.exe
 
 all:
 	del /q /f clibasic.exe
-	$(C) clibasic.c -m64 $(CFLAGS) -D B64 -o clibasic.exe
+	$(BUILD64)
 	.\clibasic.exe
 
 all32:
 	del /q /f clibasic.exe
-	$(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic.exe
+	$(BUILD32)
 	.\clibasic.exe
 
 build:
-	$(C) clibasic.c -m64 $(CFLAGS) -D B64 -o clibasic.exe
+	$(BUILD64)
 
 build32:
-	$(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic.exe
-
-#update:
-	
-
-#install:
-	
-
-#install32:
-	
+	$(BUILD32)
 
 run:
 	.\clibasic.exe

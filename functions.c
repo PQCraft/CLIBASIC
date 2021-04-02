@@ -290,8 +290,10 @@ if (chkCmd(1, farg[0], "INKEY$")) {
     while ((outbuf[0] == 27 && tmp != 0) || outbuf[0] == 0) {
         obp++;
         tmp = read(1, &outbuf[obp], 1);
-        if (tmp == 0) {outbuf[obp] = 0; break;}
-        if (tmp == -1) {outbuf[obp] = 0; break;}
+        if (tmp < 1) {outbuf[obp] = 0; break;}
+        if (obp == 2 && !(outbuf[obp] >= 49 && outbuf[obp] <= 51)) {outbuf[obp + 1] = 0; break;}
+        if (obp == 3 && outbuf[obp] >= 126) {outbuf[obp + 1] = 0; break;}
+        if (obp == 4 && outbuf[obp] >= 126) {outbuf[obp + 1] = 0; break;}
         if (outbuf[obp] == 3) {outbuf[obp] = 0; cmdint = true; break;}
     }
     obp++;
@@ -299,7 +301,7 @@ if (chkCmd(1, farg[0], "INKEY$")) {
     disableRawMode();
     #else
     fflush(stdin);
-    outbuf[0] = getchar();
+    outbuf[0] = _getch();
     outbuf[1] = 0;
     #endif
     goto fexit;

@@ -16,10 +16,10 @@
     #include <readline/history.h>
 #endif
 
-char VER[] = "0.12.9";
+char VER[] = "0.12.10";
 
-#ifndef BUFSIZE
-    #define BUFSIZE 32768
+#ifndef CB_BUF_SIZE
+    #define CB_BUF_SIZE 32768
 #endif
 
 #if defined(__linux__)
@@ -32,6 +32,7 @@ char VER[] = "0.12.9";
     char OSVER[] = "Windows";
     //(https://pbs.twimg.com/media/CRcU7BKWwAEQZIE.jpg)
     #include <windows.h>
+    #include <conio.h>
     #define SIGKILL 9
     char* rlptr;
     void cleanExit();
@@ -45,7 +46,7 @@ char VER[] = "0.12.9";
         //(https://theenglishfarm.com/sites/default/files/styles/featured_image/public/harold_2.jpg?itok=uo6h4hz4)
         printf(prompt);
         fflush(stdout);
-        char buf[BUFSIZE];
+        char buf[CB_BUF_SIZE];
         buf[0] = 0;
         int inct = scanf("%[^\n]s", &buf);
         if (inct != 1 && inct != 0) raise(SIGINT);
@@ -123,10 +124,10 @@ int fnstackp = -1;
 */
 char* errstr;
 
-char conbuf[BUFSIZE];
-char lastcb[BUFSIZE];
-char prompt[BUFSIZE];
-char pstr[BUFSIZE];
+char conbuf[CB_BUF_SIZE];
+char lastcb[CB_BUF_SIZE];
+char prompt[CB_BUF_SIZE];
+char pstr[CB_BUF_SIZE];
 
 uint8_t fgc = 15;
 uint8_t bgc = 0;
@@ -267,7 +268,6 @@ int main(int argc, char* argv[]) {
     resetTimer();
     #ifndef _WIN32
     rl_getc_function = getc;
-    signal(SIGWINCH, (__sighandler_t)rl_resize_terminal);
     #endif
     while (!exit) {
         fchkint:
@@ -541,7 +541,7 @@ void updateTxtAttrib() {
 }
 
 void getStr(char* str1, char* str2) {
-    char buf[BUFSIZE];
+    char buf[CB_BUF_SIZE];
     int j = 0, i;
     for (i = 0; str1[i] != 0; i++) {
         char c = str1[i];
@@ -592,7 +592,7 @@ int getArgCt(char* inbuf);
 
 uint8_t getFunc(char* inbuf, char* outbuf) {
     if (debug) printf("getFunc(\"%s\", \"%s\");\n", inbuf, outbuf);
-    char tmp[2][BUFSIZE];
+    char tmp[2][CB_BUF_SIZE];
     char** farg;
     uint8_t *fargt;
     int* flen;
@@ -738,11 +738,11 @@ bool gvchkchar(char* tmp, int i) {
 uint8_t getVal(char* tmpinbuf, char* outbuf) {
     if (debug) printf("getVal(\"%s\", \"%s\");\n", tmpinbuf, outbuf);
     if (tmpinbuf[0] == 0) {return 255;}
-    char inbuf[BUFSIZE];
+    char inbuf[CB_BUF_SIZE];
     copyStr(tmpinbuf, inbuf);
     outbuf[0] = 0;
     int ip = 0, jp = 0;
-    char tmp[4][BUFSIZE];
+    char tmp[4][CB_BUF_SIZE];
     uint8_t t = 0;
     uint8_t dt = 0;
     bool inStr = false;
@@ -927,7 +927,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
 }
 
 bool solvearg(int i) {
-    char tmpbuf[BUFSIZE];
+    char tmpbuf[CB_BUF_SIZE];
     if (i == 0) {
         argt[0] = 0;
         arg[0] = tmpargs[0];
@@ -979,7 +979,7 @@ int getArg(int num, char* inbuf, char* outbuf) {
 }
 
 void mkargs() {
-    char tmpbuf[2][BUFSIZE];
+    char tmpbuf[2][CB_BUF_SIZE];
     int j = 0;
     while (cmd[j] == ' ') {j++;}
     int h = j;
@@ -1026,7 +1026,7 @@ void mkargs() {
 
 uint8_t logictest(char* inbuf) {
     if (debug) printf("logictest(\"%s\");\n", inbuf);
-    char tmp[3][BUFSIZE];
+    char tmp[3][CB_BUF_SIZE];
     int tmpp = 0;
     uint8_t t1 = 0;
     uint8_t t2 = 0;
@@ -1114,7 +1114,7 @@ uint8_t logictest(char* inbuf) {
 }
 
 bool runlogic() {
-    char tmp[2][BUFSIZE];
+    char tmp[2][CB_BUF_SIZE];
     tmp[0][0] = 0; tmp[1][0] = 0;
     int i = 0;
     while (cmd[i] == ' ') {i++;}

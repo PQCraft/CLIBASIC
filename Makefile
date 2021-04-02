@@ -1,28 +1,26 @@
 C = gcc
 
 CFLAGS = -Wall -Wextra -O2 -ffreestanding -lm -lreadline --std=c99
-
 CBITS = $(shell getconf LONG_BIT)
+
+BUILD__ = $(C) clibasic.c $(CFLAGS) -D B$(CBITS) -o clibasic && chmod +x ./clibasic
+BUILD32 = $(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic && chmod +x ./clibasic
 
 all:
 	rm -f ./clibasic
-	$(C) clibasic.c $(CFLAGS) -D B$(CBITS) -o clibasic
-	chmod +x ./clibasic
+	$(BUILD__)	
 	./clibasic
 
 all32:
 	rm -f ./clibasic
-	$(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic
-	chmod +x ./clibasic
+	$(BUILD32)
 	./clibasic
 
 build:
-	$(C) clibasic.c $(CFLAGS) -D B$(CBITS) -o clibasic
-	chmod +x ./clibasic
+	$(BUILD__)
 
 build32:
-	$(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic
-	chmod +x ./clibasic
+	$(BUILD32)
 
 update:
 	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/clibasic.c > .tmp
@@ -42,11 +40,11 @@ update:
 	mv .tmp Makefile
 
 install:
-	if [ ! -f ./clibasic ]; then $(C) clibasic.c $(CFLAGS) -D B$(CBITS) -o clibasic; chmod +x ./clibasic; fi
+	if [ ! -f ./clibasic ]; then $(BUILD__); fi
 	sudo rm -f /usr/bin/clibasic; sudo cp ./clibasic /usr/bin/clibasic
 
 install32:
-	if [ ! -f ./clibasic ]; then $(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic; chmod +x ./clibasic; fi
+	if [ ! -f ./clibasic ]; then $(BUILD32); fi
 	sudo rm -f /usr/bin/clibasic; sudo cp ./clibasic /usr/bin/clibasic
 
 run:
