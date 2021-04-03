@@ -14,9 +14,25 @@
     #include <termios.h>
     #include <readline/readline.h>
     #include <readline/history.h>
+    #include <sys/ioctl.h>
+    int kbhit() {
+        static const int STDIN = 0;
+        static bool initialized = false;
+        if (!initialized) {
+            struct termios term;
+            tcgetattr(STDIN, &term);
+            term.c_lflag &= ~ICANON;
+            tcsetattr(STDIN, TCSANOW, &term);
+            setbuf(stdin, NULL);
+            initialized = true;
+        }
+        int bytesWaiting;
+        ioctl(STDIN, FIONREAD, &bytesWaiting);
+        return bytesWaiting;
+    }
 #endif
 
-char VER[] = "0.12.10";
+char VER[] = "0.12.11";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -419,7 +435,7 @@ void enableRawMode() {
     raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0) return; //exit(EXIT_FAILURE);
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0) return;
     #endif
 }
 

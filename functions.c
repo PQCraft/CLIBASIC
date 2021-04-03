@@ -284,25 +284,32 @@ if (chkCmd(1, farg[0], "INKEY$")) {
     if (fargct != 0) {cerr = 3; goto fexit;}
     outbuf[0] = 0;
     #ifndef _WIN32
-    enableRawMode();
+    int tmp;
+    if (!(tmp = kbhit())) goto fexit;
     int obp = -1;
-    int tmp = -1;
-    while ((outbuf[0] == 27 && tmp != 0) || outbuf[0] == 0) {
+    while (obp < tmp) {
         obp++;
-        tmp = read(1, &outbuf[obp], 1);
-        if (tmp < 1) {outbuf[obp] = 0; break;}
+        outbuf[obp] = 0;
+        outbuf[obp] = getchar();
+        if (tmp == 1) break;
+        if (outbuf[obp] == 3) {outbuf[obp] = 0; cmdint = true; break;}
         if (obp == 2 && !(outbuf[obp] >= 49 && outbuf[obp] <= 51)) {outbuf[obp + 1] = 0; break;}
         if (obp == 3 && outbuf[obp] >= 126) {outbuf[obp + 1] = 0; break;}
         if (obp == 4 && outbuf[obp] >= 126) {outbuf[obp + 1] = 0; break;}
+    }
+    obp++;
+    outbuf[obp] = 0;
+    #else
+    int obp = -1;
+    while (1) {
+        obp++;
+        outbuf[obp] = 0;
+        if (kbhit()) outbuf[obp] = _getch();
+        if (outbuf[obp] == 0) {break;}
         if (outbuf[obp] == 3) {outbuf[obp] = 0; cmdint = true; break;}
     }
     obp++;
     outbuf[obp] = 0;
-    disableRawMode();
-    #else
-    fflush(stdin);
-    outbuf[0] = _getch();
-    outbuf[1] = 0;
     #endif
     goto fexit;
 }

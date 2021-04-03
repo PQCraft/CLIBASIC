@@ -1,11 +1,12 @@
-_txtlock
-put "Press Ctrl+C to exit...\n"
+'_txtlock
+print "Press Ctrl+C to exit..."
 do
     k$ = inkey$()
     l = len(k$)
     if asc(k$) <> 0
         p = 0
-        put "[", len(k$), "]"
+        locate curx() - 1
+        put "\t[", len(k$), "]"
         dowhile p < l
             put ", ", asc(k$, p)
             p = p + 1
