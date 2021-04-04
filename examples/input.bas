@@ -6,6 +6,7 @@ do
     if asc(k$) <> 0
         p = 0
         locate curx() - 1
+        if asc(k$) = 10: locate , cury() - 1: endif
         put "\t[", len(k$), "]"
         dowhile p < l
             put ", ", asc(k$, p)

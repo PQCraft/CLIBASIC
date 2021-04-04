@@ -1,17 +1,17 @@
 C = gcc
 
-CFLAGS = -O2 -ffreestanding -lm --std=c99
+CFLAGS = -O2 -s -lm --std=c99
 
 BUILD64 = $(C) clibasic.c -m64 $(CFLAGS) -D B64 -o clibasic.exe
 BUILD32 = $(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic.exe
 
 all:
-	del /q /f clibasic.exe
+	del /q /f .\clibasic.exe
 	$(BUILD64)
 	.\clibasic.exe
 
 all32:
-	del /q /f clibasic.exe
+	del /q /f .\clibasic.exe
 	$(BUILD32)
 	.\clibasic.exe
 
@@ -28,4 +28,4 @@ debug:
 	.\clibasic.exe --debug
 
 clean:
-	del /q /f clibasic.exe
+	del /q /f .\clibasic.exe

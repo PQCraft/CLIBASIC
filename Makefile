@@ -1,6 +1,6 @@
 C = gcc
 
-CFLAGS = -Wall -Wextra -O2 -ffreestanding -lm -lreadline --std=c99
+CFLAGS = -Wall -Wextra -O2 -s -no-pie -lm -lreadline --std=c99
 CBITS = $(shell getconf LONG_BIT)
 
 BUILD__ = $(C) clibasic.c $(CFLAGS) -D B$(CBITS) -o clibasic && chmod +x ./clibasic
@@ -8,7 +8,7 @@ BUILD32 = $(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic && chmod +x ./clibas
 
 all:
 	rm -f ./clibasic
-	$(BUILD__)	
+	$(BUILD__)
 	./clibasic
 
 all32:
@@ -54,4 +54,4 @@ debug:
 	./clibasic --debug
 
 clean:
-	rm -f clibasic
+	rm -f ./clibasic

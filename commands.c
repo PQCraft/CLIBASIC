@@ -104,8 +104,8 @@ if (chkCmd(1, arg[0], "WAITUS")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
-    uint64_t t = d + time_us();
-    while (t > time_us() && !cmdint) {}
+    uint64_t t = d + usTime();
+    while (t > usTime() && !cmdint) {}
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "WAITMS")) {
@@ -115,8 +115,8 @@ if (chkCmd(1, arg[0], "WAITMS")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
-    uint64_t t = d * 1000 + time_us();
-    while (t > time_us() && !cmdint) {}
+    uint64_t t = d * 1000 + usTime();
+    while (t > usTime() && !cmdint) {}
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "WAIT")) {
@@ -126,8 +126,8 @@ if (chkCmd(1, arg[0], "WAIT")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
-    uint64_t t = d * 1000000 + time_us();
-    while (t > time_us() && !cmdint) {}
+    uint64_t t = d * 1000000 + usTime();
+    while (t > usTime() && !cmdint) {}
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "RESETTIMER")) {
@@ -161,13 +161,7 @@ if (chkCmd(1, arg[0], "RUN")) {
     if (prog == NULL) {errstr = realloc(errstr, (argl[1] + 1) * sizeof(char)); copyStr(arg[1], errstr); cerr = 15; goto cmderr;}
     progFilename = malloc(argl[1] + 1);
     copyStr(arg[1], progFilename);
-    printf("Loading...");
-    fflush(stdout);
     loadProg();
-    for (uint8_t i = 0; i < 10; i++) printf("\b");
-    for (uint8_t i = 0; i < 10; i++) printf(" ");
-    for (uint8_t i = 0; i < 10; i++) printf("\b");
-    fflush(stdout);
     chkinProg = true;
     goto cmderr;
 }

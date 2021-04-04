@@ -1,6 +1,7 @@
 #include <math.h>
 #include <time.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
@@ -32,7 +33,7 @@
     }
 #endif
 
-char VER[] = "0.12.11";
+char VER[] = "0.12.12";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -60,16 +61,14 @@ char VER[] = "0.12.11";
     }
     char* readline(char* prompt) {
         //(https://theenglishfarm.com/sites/default/files/styles/featured_image/public/harold_2.jpg?itok=uo6h4hz4)
-        printf(prompt);
+        fputs(prompt, stdout);
         fflush(stdout);
         char buf[CB_BUF_SIZE];
         buf[0] = 0;
-        int inct = scanf("%[^\n]s", &buf);
-        if (inct != 1 && inct != 0) raise(SIGINT);
-        int tmpc = 0;
-        read(1, &tmpc, 1);
-        if (tmpc == 3) raise(SIGINT);
-        while (getchar() != '\n') {}
+        while (buf[strlen(buf) - 1] != '\n') {
+            fgets(buf, sizeof(buf), stdin);
+        }
+        buf[strlen(buf) - 1] = 0;
         rlptr = malloc(strlen(buf) + 1);
         strcpy(rlptr, buf);
         return rlptr;
@@ -184,8 +183,8 @@ static struct termios orig_termios;
 void txtqunlock() {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}}
 #endif
 
-struct timeval time1, time2;
-uint64_t t_start;
+struct timeval time1;
+uint64_t tval;
 
 #define qstrcmp(a, b)  (*(a) != *(b) ? \
     (int) ((unsigned char) *(a) - \
@@ -217,7 +216,8 @@ void cmdIntHndl() {
 }
 
 void runcmd();
-int copyStr(char* str1, char* str2);
+void copyStr(char* str1, char* str2);
+void copyStrApnd(char* str1, char* str2);
 void copyStrSnip(char* str1, int i, int j, char* str2);
 uint8_t getVal(char* inbuf, char* outbuf);
 void resetTimer();
@@ -225,6 +225,19 @@ void loadProg();
 void updateTxtAttrib();
 
 int main(int argc, char* argv[]) {
+    #ifndef _WIN32
+    if (system("tty -s")) {
+        char command[CB_BUF_SIZE];
+        copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e 'echo -e -n \"\x1b[\x33 q\" && ", command);
+        copyStrApnd(argv[0], command);
+        command[strlen(command) + 1] = 0;
+        command[strlen(command)] = '\'';
+        exit(system(command));
+    }
+    #endif
+    if (!isatty(STDERR_FILENO)) {exit(EIO);}
+    if (!isatty(STDIN_FILENO)) {fputs("CLIBASIC does not support pipes.\n", stderr); exit(EIO);}
+    if (!isatty(STDOUT_FILENO)) {fputs("CLIBASIC does not support redirects.\n", stderr); exit(EIO);}
     signal(SIGINT, cleanExit);
     signal(SIGKILL, cleanExit);
     signal(SIGTERM, cleanExit);
@@ -233,31 +246,29 @@ int main(int argc, char* argv[]) {
     bool exit = false;
     for (int i = 1; i < argc; i++) {
         if (!qstrcmp(argv[i], "--version") || !qstrcmp(argv[i], "-v")) {
-            if (argc > 2) {printf("Incorrent number of options passed.\n"); cleanExit();}
+            if (argc > 2) {fputs("Incorrent number of options passed.\n", stderr); err = EINVAL; cleanExit();}
             printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
-            printf("Copyright (C) 2021 PQCraft\n");
+            puts("Copyright (C) 2021 PQCraft");
             exit = true;
-        } else
-        if (!qstrcmp(argv[i], "--help") || !qstrcmp(argv[i], "-h")) {
-            if (argc > 2) {printf("Incorrent number of options passed.\n"); cleanExit();}
-            printf("Usage: clibasic [options] [file]\n");
-            printf("\n");
-            printf("  -h, --help      Shows the help screen.\n");
-            printf("  -v, --version   Shows the version info.\n");
-            printf("  -d, --debug     Quick way to create a text wall.\n");
+        } else if (!qstrcmp(argv[i], "--help") || !qstrcmp(argv[i], "-h")) {
+            if (argc > 2) {fputs("Incorrent number of options passed.\n", stderr); err = EINVAL; cleanExit();}
+            puts("Usage: clibasic [options] [file] [options]");
+            puts("Options:");
+            puts("  -h, --help      Shows the help screen.");
+            puts("  -v, --version   Shows the version info.");
+            puts("  -d, --debug     Quick way to create a text wall.");
             exit = true;
-        } else
-        if (!qstrcmp(argv[i], "--debug") || !qstrcmp(argv[i], "-d")) {
-            if (debug || argc > 3) {printf("Incorrent number of options passed.\n"); cleanExit();}
+        } else if (!qstrcmp(argv[i], "--debug") || !qstrcmp(argv[i], "-d")) {
+            if (debug) {fputs("Incorrent number of options passed.\n", stderr); err = EINVAL; cleanExit();}
             debug = true;
         } else {
-            if (runfile || argc > 3) {free(progFilename); printf("Incorrent number of options passed.\n"); cleanExit();}
+            if (runfile) {free(progFilename); fputs("Incorrent number of options passed.\n", stderr); cleanExit();}
             inProg = true;
             runfile = true;
             prog = fopen(argv[i], "r");
             progFilename = malloc(strlen(argv[i]));
             copyStr(argv[i], progFilename);
-            if (prog == NULL) {printf("File not found: '%s'\n", progFilename); free(progFilename); cleanExit();}
+            if (prog == NULL) {fprintf(stderr, "File not found: '%s'\n", progFilename); free(progFilename); err = ENOENT; cleanExit();}
         }
     }
     if (exit) cleanExit();
@@ -318,10 +329,13 @@ int main(int argc, char* argv[]) {
         bool inStr = false;
         if (!runfile) signal(SIGINT, cmdIntHndl);
         progLine = 1;
+        bool comment = false;
         while (1) {
             if (!inProg) {
+                if (!inStr && conbuf[cp] == '\'') comment = true;
                 if (conbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((conbuf[cp] == ':' && !inStr) || conbuf[cp] == 0) {
+                    comment = false;
                     while (conbuf[cp - cmdl] == ' ' && cmdl > 0) {cmdl--;}
                     cmd = realloc(cmd, (cmdl + 1) * sizeof(char));
                     cmdpos = cp - cmdl;
@@ -335,9 +349,8 @@ int main(int argc, char* argv[]) {
                     if (chkinProg) goto fchkint;
                 } else
                 {cmdl++;}
-                if (!didloop) {cp++;} else {didloop = false;}
+                if (!didloop) {if (comment) {conbuf[cp] = 0;} cp++;} else {didloop = false;}
             } else {
-                //if (cmdint) {inProg = false; fclose(prog); free(progFilename); cmdint = false; goto brkproccmd;}
                 if (progbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((progbuf[cp] == ':' && !inStr) || progbuf[cp] == '\n' || progbuf[cp] == 0) {
                     if (progbuf[cp - cmdl - 1] == '\n' && !lockpl) {progLine++; if (debug) printf("found nl: [%lld]\n", (long long int)cp);}
@@ -366,17 +379,17 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-uint64_t time_us() {
+uint64_t usTime() {
     gettimeofday(&time1, NULL);
     return time1.tv_sec * 1000000 + time1.tv_usec;
 }
 
 uint64_t timer() {
-    return time_us() - t_start;
+    return usTime() - tval;
 }
 
 void resetTimer() {
-    t_start = time_us();
+    tval = usTime();
 }
 
 void getCurPos() {
@@ -390,34 +403,22 @@ void getCurPos() {
         cury = con.dwCursorPosition.Y + 1;
     }
     #else
-    char buf[16]={0};
-    int ret, i, pow;
-    char ch;
+    char buf[16] = {0};
+    int tmp;
     if (!textlock) {
         tcgetattr(0, &term);
         tcgetattr(0, &restore);
         term.c_lflag &= ~(ICANON|ECHO);
         tcsetattr(0, TCSANOW, &term);
     }
-    while (write(1, "\e[6n", 4) == -1) {}
-    for (i = 0, ch = 0; ch != 'R'; i++) {
-        ret = read(1, &ch, 1);
-        if (!ret) {
-            if (!textlock) tcsetattr(0, TCSANOW, &restore);
-            return;
-        }
-        buf[i] = ch;
-    }
-    if (i < 2) {
+    fputs("\e[6n", stdout);
+    fflush(stdout);
+    tmp = read(1, &buf, sizeof(buf));
+    if (!tmp) {
         if (!textlock) tcsetattr(0, TCSANOW, &restore);
         return;
     }
-    for (i -= 2, pow = 1; buf[i] != ';'; i--, pow *= 10) {
-        curx += (buf[i] - '0') * pow;
-    }
-    for(i--, pow = 1; buf[i] != '['; i--, pow *= 10) {
-        cury += (buf[i] - '0') * pow;
-    }
+    sscanf(buf, "\e[%d;%dR", &cury, &curx);
     if (!textlock) tcsetattr(0, TCSANOW, &restore);
     return;
     #endif
@@ -446,12 +447,26 @@ void disableRawMode() {
 }
 
 void loadProg() {
+    printf("Loading...");
+    fflush(stdout);
     fseek(prog, 0, SEEK_END);
-    progbuf = realloc(progbuf, ftell(prog) + 1);
+    printf("\b\b\b ");
+    fflush(stdout);
+    getCurPos();
+    int tmpx = curx, tmpy = cury;
+    uint64_t fsize = (uint64_t)ftell(prog);
+    uint64_t time2 = usTime();
     fseek(prog, 0, SEEK_SET);
+    printf("\e[%d;%dH", tmpy, tmpx);
+    printf("(%llu bytes)...", (long long unsigned)fsize);
+    fflush(stdout);
+    progbuf = realloc(progbuf, fsize + 1);
     int64_t j = 0;
     bool comment = false;
     bool inStr = false;
+    printf("\e[%d;%dH", tmpy, tmpx);
+    printf("(0/%llu bytes)...", (long long unsigned)fsize);
+    fflush(stdout);
     while (!feof(prog)) {
         int tmpc = fgetc(prog);
         if (tmpc == '"') inStr = !inStr;
@@ -459,7 +474,19 @@ void loadProg() {
         if (tmpc == '\n') comment = false;
         if (tmpc == '\r' || tmpc == '\t') tmpc = ' ';
         if (!comment) {progbuf[j] = (char)tmpc; j++;}
+        if (usTime() - time2 >= 250000) {
+            time2 = usTime();
+            printf("\e[%d;%dH", tmpy, tmpx);
+            printf("(%lld/%lld bytes)...", (long long unsigned)ftell(prog), (long long unsigned)fsize);
+        }
+        fflush(stdout);
     }
+    printf("\e[%d;%dH", tmpy, tmpx);
+    printf("(%lld/%lld bytes)...", (long long unsigned)ftell(prog), (long long unsigned)fsize);
+    fflush(stdout);
+    printf("\e[%d;%dH", tmpy, 1);
+    fputs("\e[2K", stdout);
+    fflush(stdout);
     if (j == 0) j = 1;
     progbuf[j - 1] = 0;
 }
@@ -500,11 +527,10 @@ bool isValidVarChar(char* bfr, int pos) {
     || bfr[pos] == '_' || bfr[pos] == '$' || bfr[pos] == '%' || bfr[pos] == '&' || bfr[pos] == '!' || bfr[pos] == '~');
 }
 
-int copyStr(char* str1, char* str2) {
+void copyStr(char* str1, char* str2) {
     int i;
     for (i = 0; str1[i] != 0; i++) {str2[i] = str1[i];}
     str2[i] = 0;
-    return i;
 }
 
 void copyStrSnip(char* str1, int i, int j, char* str2) {
@@ -1237,7 +1263,7 @@ void runcmd() {
                 printf("Not a command: '%s'", arg[0]);
                 break;
         }
-        putc('\n', stdout);
+        putchar('\n');
         cp = -1;
         chkinProg = inProg = false;
     }

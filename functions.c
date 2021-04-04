@@ -67,21 +67,21 @@ if (chkCmd(1, farg[0], "TIMEUS")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;} 
-    sprintf(outbuf, "%llu", (long long unsigned)time_us());
+    sprintf(outbuf, "%llu", (long long unsigned)usTime());
     goto fexit;
 }
 if (chkCmd(1, farg[0], "TIMEMS")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;} 
-    sprintf(outbuf, "%llu", (long long unsigned)time_us() / 1000);
+    sprintf(outbuf, "%llu", (long long unsigned)usTime() / 1000);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "TIME")) {
     cerr = 0;
     ftype = 2;
     if (fargct != 0) {cerr = 3; goto fexit;} 
-    sprintf(outbuf, "%llu", (long long unsigned)time_us() / 1000000);
+    sprintf(outbuf, "%llu", (long long unsigned)usTime() / 1000000);
     goto fexit;
 }
 if (chkCmd(2, farg[0], "SH", "EXEC")) {
@@ -282,33 +282,26 @@ if (chkCmd(1, farg[0], "INKEY$")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 0) {cerr = 3; goto fexit;}
-    outbuf[0] = 0;
     #ifndef _WIN32
     int tmp;
     if (!(tmp = kbhit())) goto fexit;
-    int obp = -1;
+    int obp = 0;
     while (obp < tmp) {
-        obp++;
         outbuf[obp] = 0;
         outbuf[obp] = getchar();
-        if (tmp == 1) break;
-        if (outbuf[obp] == 3) {outbuf[obp] = 0; cmdint = true; break;}
-        if (obp == 2 && !(outbuf[obp] >= 49 && outbuf[obp] <= 51)) {outbuf[obp + 1] = 0; break;}
-        if (obp == 3 && outbuf[obp] >= 126) {outbuf[obp + 1] = 0; break;}
-        if (obp == 4 && outbuf[obp] >= 126) {outbuf[obp + 1] = 0; break;}
+        if (outbuf[obp] == 0) {break;}
+        obp++;
     }
-    obp++;
     outbuf[obp] = 0;
     #else
-    int obp = -1;
+    int obp = 0;
     while (1) {
-        obp++;
         outbuf[obp] = 0;
         if (kbhit()) outbuf[obp] = _getch();
         if (outbuf[obp] == 0) {break;}
         if (outbuf[obp] == 3) {outbuf[obp] = 0; cmdint = true; break;}
+        obp++;
     }
-    obp++;
     outbuf[obp] = 0;
     #endif
     goto fexit;

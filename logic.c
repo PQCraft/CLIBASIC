@@ -14,7 +14,7 @@ if (chkCmd(2, tmp[0], "?", "PRINT")) {
     if (itstackp > -1) {
         if (itdcmd[itstackp]) return true;
     }
-    if (cmd[i] == 0) {putc('\n', stdout); return true;}
+    if (cmd[i] == 0) {putchar('\n'); return true;}
     bool inStr = false;
     int pct = 0;
     int ptr = 0;
@@ -32,9 +32,9 @@ if (chkCmd(2, tmp[0], "?", "PRINT")) {
             if (debug) printf(">tmp[1]: {%s}\n", tmp[1]);
             if (!(tmpt = getVal(tmp[1], tmp[1]))) return true;
             if (debug) printf(">tmp[1]: {%s}\n", tmp[1]);
-            if (cmd[j] == ',' && tmpt != 255) putc('\t', stdout);
+            if (cmd[j] == ',' && tmpt != 255) putchar('\t');
             fputs(tmp[1], stdout);
-            if (cmd[i] == 0 && len > 0) putc('\n', stdout);
+            if (cmd[i] == 0 && len > 0) putchar('\n');
             j = i;
         } else
         {tmp[1][ptr] = cmd[i]; ptr++; if (debug) printf("tmp[1]: {%s}\n", tmp[1]);}
