@@ -27,4 +27,4 @@ MacOS Mojave-Big Sur (`brew`): `gcc`, `make`, `readline` <br>
 ### Notes <br>
 - On Windows please use Windows Terminal or execute the folowing command in CMD as Admin to enable ANSI escape sequnces on CMD: ```reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f```. <br>
 - Windows `INPUT$()` is faulty due to a poor implementaion of readline. <kbd>Ctrl</kbd>+<kbd>C</kbd> must be followed by <kbd>Enter</kbd>. <br>
-- On Linux if CLIBASIC is not run in a terminal it will attempt to open in XTerm.
+- On Linux if CLIBASIC is not run in a terminal it will attempt to open in XTerm. CLIBASIC will not read arguments if it is not started in a terminal.
