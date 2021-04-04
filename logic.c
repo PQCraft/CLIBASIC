@@ -1,5 +1,11 @@
 if (chkCmd(1, tmp[0], "REM")) return true;
 if (chkCmd(2, tmp[0], "?;", "PRINT;")) {
+    if (dlstackp > -1) {
+        if (dldcmd[dlstackp]) return true;
+    }
+    if (itstackp > -1) {
+        if (itdcmd[itstackp]) return true;
+    }
     for (int i = j; cmd[i] != 0; i++) {
         if (cmd[i] != ' ') {cerr = 1; return true;}
     }
@@ -114,7 +120,7 @@ if (chkCmd(1, tmp[0], "LOOPWHILE")) {
 if (chkCmd(1, tmp[0], "IF")) {
     if (itstackp >= 255) {cerr = 13; return true;}
     itstackp++;
-    if (itstackp > -2) {
+    if (itstackp > 0) {
         if (itdcmd[itstackp - 1]) {itdcmd[itstackp] = true; return true;}
     }
     if (dlstackp > -1) {

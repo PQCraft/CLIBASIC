@@ -378,6 +378,13 @@ if (chkCmd(1, farg[0], "_DEBUG")) {
     sprintf(outbuf, "%d", (int)debug);
     goto fexit;
 }
+if (chkCmd(1, farg[0], "_TXTLOCK")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    sprintf(outbuf, "%d", (int)textlock);
+    goto fexit;
+}
 if (chkCmd(1, farg[0], "_VER$")) {
     cerr = 0;
     ftype = 1;

@@ -33,7 +33,7 @@
     }
 #endif
 
-char VER[] = "0.12.12";
+char VER[] = "0.12.13";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -288,7 +288,7 @@ int main(int argc, char* argv[]) {
         prog = fopen("AUTORUN.BAS", "r"); progFilename = malloc(12); strcpy(progFilename, "AUTORUN.BAS");
         if (prog == NULL) {prog = fopen("autorun.bas", "r"); strcpy(progFilename, "autorun.bas");}
         if (prog == NULL) {free(progFilename);}
-        else {inProg = true;}
+        else {loadProg(); inProg = true;}
     } else {
         loadProg();
     }

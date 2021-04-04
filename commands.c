@@ -7,7 +7,7 @@ if (chkCmd(2, arg[0], "EXIT", "QUIT")) {
 }
 if (chkCmd(1, arg[0], "PUT")) {
     cerr = 0;
-    for (int i = 1; i <= argct; i++) {if (!solvearg(i)) goto cmderr; printf("%s", arg[i]);}
+    for (int i = 1; i <= argct; i++) {if (!solvearg(i)) goto cmderr; fputs(arg[i], stdout);}
     fflush(stdout);
     goto cmderr;
 }
@@ -363,7 +363,7 @@ if (chkCmd(1, arg[0], "_DEBUGON")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
-    if (!debug) printf("Enabled debug mode.\n");
+    if (!debug) puts("Enabled debug mode.");
     debug = true;
     goto cmderr;
 }
@@ -371,7 +371,7 @@ if (chkCmd(1, arg[0], "_DEBUGOFF")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
-    if (debug) printf("Disabled debug mode.\n");
+    if (debug) puts("Disabled debug mode.");
     debug = false;
     goto cmderr;
 }
