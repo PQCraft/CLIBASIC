@@ -1,6 +1,6 @@
 C = gcc
 
-CFLAGS = -Wall -Wextra -O2 -s -no-pie -lm -lreadline --std=c99
+CFLAGS = -Wall -Wextra -O2 -no-pie -lm -lreadline --std=c99
 CBITS = $(shell getconf LONG_BIT)
 
 BUILD__ = $(C) clibasic.c $(CFLAGS) -D B$(CBITS) -o clibasic && chmod +x ./clibasic
