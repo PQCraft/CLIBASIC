@@ -252,6 +252,14 @@ if (chkCmd(1, farg[0], "EXP")) {
     sprintf(outbuf, "%lf", exp(dbl));
     goto fexit;
 }
+if (chkCmd(1, farg[0], "ENV$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    copyStr(getenv(farg[1]), outbuf);
+    goto fexit;
+}
 if (chkCmd(1, farg[0], "UCASE$")) {
     cerr = 0;
     ftype = 1;

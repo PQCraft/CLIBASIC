@@ -20,7 +20,7 @@ if (chkCmd(2, tmp[0], "?", "PRINT")) {
     if (itstackp > -1) {
         if (itdcmd[itstackp]) return true;
     }
-    if (cmd[i] == 0) {putchar('\n'); return true;}
+    if (cmd[j] == 0) {putchar('\n'); return true;}
     bool inStr = false;
     int pct = 0;
     int ptr = 0;

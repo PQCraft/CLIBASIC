@@ -33,7 +33,7 @@
     }
 #endif
 
-char VER[] = "0.12.13";
+char VER[] = "0.12.14";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -305,9 +305,14 @@ int main(int argc, char* argv[]) {
             char* tmpstr = NULL;
             int tmpt = getVal(prompt, pstr);
             if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
-            updateTxtAttrib();
+            #ifndef _WIN32
             getCurPos();
-            if (curx != 1) printf("\n");
+            curx--;
+            int ptr = strlen(pstr);
+            while (curx) {pstr[ptr] = 22; ptr++; curx--;}
+            pstr[ptr] = 0;
+            #endif
+            updateTxtAttrib();
             while (tmpstr == NULL) {tmpstr = readline(pstr);}
             if (tmpstr[0] == 0) {free(tmpstr); goto brkproccmd;}
             if (qstrcmp(tmpstr, lastcb)) add_history(tmpstr);
@@ -528,18 +533,21 @@ bool isValidVarChar(char* bfr, int pos) {
 }
 
 void copyStr(char* str1, char* str2) {
+    if (str1 == NULL) {str2[0] = 0; return;}
     int i;
     for (i = 0; str1[i] != 0; i++) {str2[i] = str1[i];}
     str2[i] = 0;
 }
 
 void copyStrSnip(char* str1, int i, int j, char* str2) {
+    if (str1 == NULL) {str2[0] = 0; return;}
     int i2 = 0;
     for (int i3 = i; i3 < j; i3++) {str2[i2] = str1[i3]; i2++;}
     str2[i2] = 0;
 }
 
 void copyStrTo(char* str1, int i, char* str2) {
+    if (str1 == NULL) {str2[0] = 0; return;}
     int i2 = 0;
     int i3;
     for (i3 = i; str1[i] != 0; i++) {str2[i3] = str1[i2]; i2++; i3++;}
@@ -547,6 +555,7 @@ void copyStrTo(char* str1, int i, char* str2) {
 }
 
 void copyStrApnd(char* str1, char* str2) {
+    if (str1 == NULL) {str2[0] = 0; return;}
     int j = 0, i = 0;
     for (i = strlen(str2); str1[j] != 0; i++) {str2[i] = str1[j]; j++;}
     str2[i] = 0;
@@ -822,10 +831,10 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
     if (tmpct != 0) {cerr = 1; return 0;}
     ip = 0; jp = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
-    while (true) {
+    while (1) {
         bool seenStr = false;
         int pct = 0;
-        while (true) {
+        while (1) {
             if (inbuf[jp] == '"') {inStr = !inStr; if (seenStr && inStr) {cerr = 1; return 0;} seenStr = true;}
             if (inbuf[jp] == '(') {pct++;}
             if (inbuf[jp] == ')') {pct--;}
@@ -835,6 +844,7 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
         gvbrk:
         copyStrSnip(inbuf, ip, jp, tmp[0]);
         t = getType(tmp[0]);
+        if (t == 1) getStr(tmp[0], tmp[0]);
         if (t == 255) {
             t = getVar(tmp[0], tmp[0]);
             if (t == 0) {return 0;}
@@ -850,14 +860,14 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
         if ((t != 0 && t != dt)) {cerr = 2; return 0;} else
         if (t == 0) {cerr = 1; return false;}
         if ((dt == 1 && inbuf[jp] != '+') && inbuf[jp] != 0) {cerr = 1; return 0;}
-        if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[2]); getStr(tmp[2], tmp[2]); copyStrApnd(tmp[2], tmp[1]);} else
+        if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[2]); copyStrApnd(tmp[2], tmp[1]);} else
         if (t == 2) {
             copyStrSnip(inbuf, jp, strlen(inbuf), tmp[1]);
             copyStrApnd(tmp[1], tmp[0]);
             int p1, p2, p3;
             bool inStr = false;
             pct = 0;
-            while (true) {
+            while (1) {
                 numAct = 0;
                 p1 = 0, p2 = 0, p3 = 0;
                 for (int i = 0; tmp[0][i] != 0 && p2 == 0; i++) {
