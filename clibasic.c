@@ -7,6 +7,7 @@
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
+#include <setjmp.h>
 #include <stdbool.h>
 #include <inttypes.h>
 #include <sys/time.h>
@@ -33,7 +34,7 @@
     }
 #endif
 
-char VER[] = "0.12.14";
+char VER[] = "0.12.15";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -154,6 +155,9 @@ int64_t cp = 0;
 
 bool cmdint = false;
 
+bool inprompt = false;
+jmp_buf ctrlc_buf;
+
 bool debug = false;
 bool runfile = false;
 
@@ -192,6 +196,7 @@ uint64_t tval;
     strcmp((a), (b)))
 
 void forceExit() {
+    printf("exit forced\n");
     txtqunlock();
     exit(0);
 }
@@ -199,6 +204,7 @@ void forceExit() {
 void getCurPos();
 
 void cleanExit() {
+    if (inprompt) {putchar('\n'); signal(SIGINT, cleanExit); longjmp(ctrlc_buf, 1); return;}
     txtqunlock();
     signal(SIGINT, forceExit);
     signal(SIGKILL, forceExit);
@@ -313,7 +319,11 @@ int main(int argc, char* argv[]) {
             pstr[ptr] = 0;
             #endif
             updateTxtAttrib();
-            while (tmpstr == NULL) {tmpstr = readline(pstr);}
+            inprompt = true;
+            setjmp(ctrlc_buf);
+            tmpstr = readline(pstr);
+            inprompt = false;
+            if (tmpstr == NULL) cleanExit();
             if (tmpstr[0] == 0) {free(tmpstr); goto brkproccmd;}
             if (qstrcmp(tmpstr, lastcb)) add_history(tmpstr);
             copyStr(tmpstr, conbuf);
@@ -867,28 +877,28 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
             int p1, p2, p3;
             bool inStr = false;
             pct = 0;
-            while (1) {
+            while (true) {
                 numAct = 0;
                 p1 = 0, p2 = 0, p3 = 0;
-                for (int i = 0; tmp[0][i] != 0 && p2 == 0; i++) {
+                for (register int i = 0; tmp[0][i] != 0 && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
                     if (tmp[0][i] == '(') {pct++;}
                     if (tmp[0][i] == ')') {pct--;}
-                    if (tmp[0][i] == '^' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 4;}
+                    if (tmp[0][i] == '^' && !inStr && !pct) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 4;}
                 }
-                for (int i = 0; tmp[0][i] != 0 && p2 == 0; i++) {
+                for (register int i = 0; tmp[0][i] != 0 && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
                     if (tmp[0][i] == '(') {pct++;}
                     if (tmp[0][i] == ')') {pct--;}
-                    if (tmp[0][i] == '*' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 2;}
-                    if (tmp[0][i] == '/' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 3;}
+                    if (tmp[0][i] == '*' && !inStr && !pct) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 2;}
+                    if (tmp[0][i] == '/' && !inStr && !pct) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 3;}
                 }
-                for (int i = 0; tmp[0][i] != 0 && p2 == 0; i++) {
+                for (register int i = 0; tmp[0][i] != 0 && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
                     if (tmp[0][i] == '(') {pct++;}
                     if (tmp[0][i] == ')') {pct--;}
-                    if (tmp[0][i] == '+' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 0;}
-                    if (tmp[0][i] == '-' && !inStr && pct == 0) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 1;}
+                    if (tmp[0][i] == '+' && !inStr && !pct) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 0;}
+                    if (tmp[0][i] == '-' && !inStr && !pct) {if (!gvchkchar(tmp[0], i)) {return 0;} p2 = i; numAct = 1;}
                 }
                 inStr = false;
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
@@ -904,11 +914,11 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                     copyStr(tmp[0], tmp[1]); goto gvfexit;
                 }
                 tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
-                for (int i = p2 - 1; i > 0; i--) {
+                for (register int i = p2 - 1; i > 0; i--) {
                     if (tmp[0][i] == '"') inStr = !inStr;
                     if (isSpChar(tmp[0], i) && !inStr) {p1 = i; break;}
                 }
-                for (int i = p2 + 1; true; i++) {
+                for (register int i = p2 + 1; true; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
                     if ((isSpChar(tmp[0], i) && i != p2 + 1 && !inStr) || tmp[0][i] == 0) {p3 = i; break;}
                 }
@@ -923,8 +933,12 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                 if (t == 255) {t = getVar(tmp[3], tmp[3]); if (t == 0) {return 0;} if (t != 2) {cerr = 2; return 0;}}
                 if (debug) printf("getVal: p1: [%d], p2: [%d], p3: [%d]\n", p1, p2, p3);
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
-                sscanf(tmp[2], "%lf", &num1);
-                sscanf(tmp[3], "%lf", &num2);
+                if (!strcmp(tmp[2], ".")) {cerr = 1; return 0;}
+                num1 = atof(tmp[2]);
+                //sscanf(tmp[2], "%lf", &num1);
+                if (!strcmp(tmp[2], ".")) {cerr = 1; return 0;}
+                num2 = atof(tmp[3]);
+                //sscanf(tmp[3], "%lf", &num2);
                 if (debug) printf("num1: [%lf], num2: [%lf], num3: [%lf]\n", num1, num2, num3);
                 switch (numAct) {
                     case 0: num3 = num1 + num2; break;
@@ -942,13 +956,9 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
                 tmp[1][0] = 0;
                 sprintf(tmp[2], "%lf", num3);
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
-                if (dt == 2) {
-                    bool dp = false;
-                    int i = 0;
-                    while (tmp[2][i] != 0) {if (tmp[2][i] == '.') {dp = true;} i++;}
-                    while (dp && tmp[2][strlen(tmp[2]) - 1] == '0') {tmp[2][strlen(tmp[2]) - 1] = 0;}
-                    if (dp && tmp[2][strlen(tmp[2]) - 1] == '.') {tmp[2][strlen(tmp[2]) - 1] = 0;}
-                }
+                int i = 0;
+                while (tmp[2][i] == '0') i++;
+                copyStrSnip(tmp[2], i, strlen(tmp[2]), tmp[2]);
                 copyStrSnip(tmp[0], p3, strlen(tmp[0]), tmp[3]);
                 if (p1 != 0) copyStrSnip(tmp[0], 0, p1, tmp[1]);
                 copyStrApnd(tmp[2], tmp[1]);
@@ -962,14 +972,19 @@ uint8_t getVal(char* tmpinbuf, char* outbuf) {
     }
     gvfexit:
     if (dt == 2) {
+        if (tmp[1][0] == '.' && !tmp[1][1]) {cerr = 1; return 0;}
+        int i = 0, j = strlen(tmp[1]);
         bool dp = false;
-        int i = 0;
-        while (tmp[1][i] != 0) {if (tmp[1][i] == '.') {dp = true;} i++;}
-        while (dp && tmp[1][strlen(tmp[1]) - 1] == '0') {tmp[1][strlen(tmp[1]) - 1] = 0;}
-        if (dp && tmp[1][strlen(tmp[1]) - 1] == '.') {tmp[1][strlen(tmp[1]) - 1] = 0;}
+        while (tmp[1][i] != 0) {if (tmp[1][i] == '.') {tmp[1][i + 7] = 0; dp = true; break;} i++;}
         i = 0;
-        while (tmp[1][i] == '0' && tmp[1][i + 1] != 0) {i++;}
-        copyStrSnip(tmp[1], i, strlen(tmp[1]), outbuf);
+        while (tmp[1][i] == '0') i++;
+        if (dp) {
+            j--;
+            while (tmp[1][j] == '0') {j--;}
+            if (tmp[1][j] == '.') {j--;}
+            j++;
+        }
+        copyStrSnip(tmp[1], i, j, outbuf);
     } else {
         copyStr(tmp[1], outbuf);
     }

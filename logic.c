@@ -20,7 +20,9 @@ if (chkCmd(2, tmp[0], "?", "PRINT")) {
     if (itstackp > -1) {
         if (itdcmd[itstackp]) return true;
     }
+    while (cmd[j] == ' ') j++;
     if (cmd[j] == 0) {putchar('\n'); return true;}
+    else {j--;}
     bool inStr = false;
     int pct = 0;
     int ptr = 0;
