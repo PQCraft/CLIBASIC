@@ -322,14 +322,6 @@ if (chkCmd(1, farg[0], "CURY")) {
     sprintf(outbuf, "%d", cury);
     goto fexit;
 }
-if (chkCmd(1, farg[0], "SYSTEM")) {
-    cerr = 0;
-    ftype = 2;
-    if (fargct != 1) {cerr = 3; goto fexit;}
-    if (fargt[1] != 1) {cerr = 2; goto fexit;}
-    sprintf(outbuf, "%d", system(farg[1]));
-    goto fexit;
-}
 if (chkCmd(1, farg[0], "FGC")) {
     cerr = 0;
     ftype = 2;
@@ -349,17 +341,28 @@ if (chkCmd(1, farg[0], "INPUT$")) {
     ftype = 1;
     if (fargct > 1) {cerr = 3; goto fexit;}
     if (fargct == 1 && fargt[1] != 1) {cerr = 2; goto fexit;}
+    if (fargct != 1) {
+        farg[1] = malloc(4);
+        strcpy(farg[1], "?: ");
+    }
     outbuf[0] = 0;
     char* tmp = NULL;
-    if (fargct == 1) {
-        tmp = readline(farg[1]);
-    } else {
-        tmp = readline("?: ");
-    }
+    #ifndef _WIN32
+    getCurPos();
+    curx--;
+    farg[1] = realloc(farg[1], sizeof(farg[1] + curx));
+    int ptr = strlen(farg[1]);
+    while (curx) {farg[1][ptr] = 22; ptr++; curx--;}
+    farg[1][ptr] = 0;
+    #endif
+    tmp = readline(farg[1]);
     if (tmp != NULL) {
         copyStr(tmp, outbuf);
         free(tmp);
+    } else {
+        putchar('\n');
     }
+    if (fargct != 1) free(farg[1]);
     if (debug) printf("input output: {%s}\n", outbuf);
     goto fexit;
 }

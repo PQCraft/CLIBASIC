@@ -34,7 +34,7 @@
     }
 #endif
 
-char VER[] = "0.13";
+char VER[] = "0.13.1";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -232,7 +232,7 @@ void updateTxtAttrib();
 
 int main(int argc, char* argv[]) {
     #ifndef _WIN32
-    if (system("tty -s")) {
+    if (system("tty -s &> /dev/null")) {
         char command[CB_BUF_SIZE];
         copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e 'echo -e -n \"\x1b[\x33 q\" && ", command);
         copyStrApnd(argv[0], command);
@@ -251,35 +251,39 @@ int main(int argc, char* argv[]) {
     if (curx != 1) putchar('\n');
     bool exit = false;
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
-            if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
-            printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
-            puts("Copyright (C) 2021 PQCraft");
-            exit = true;
-        } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
-            if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
-            printf("Usage: %s [options] [{--file|-f}] [file] [options]\n", argv[0]);
-            puts("Options:");
-            puts("  -f, --file <file>   Runs <file>.");
-            puts("  -h, --help          Shows this help text.");
-            puts("  -v, --version       Shows the version and license information.");
-            puts("  -d, --debug         Enables the printing of debug information.");
-            exit = true;
-        } else if (!strcmp(argv[i], "--debug") || !strcmp(argv[i], "-d")) {
-            if (debug) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
-            debug = true;
+        if (argv[i][0] == '-' && strcmp(argv[i], "--file") && strcmp(argv[i], "-f")) {
+            if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
+                if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
+                printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
+                puts("Copyright (C) 2021 PQCraft");
+                exit = true;
+            } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
+                if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
+                printf("Usage: %s [options] [{--file|-f}] [file] [options]\n", argv[0]);
+                puts("Options:");
+                puts("  -f, --file <file>   Runs <file>.");
+                puts("  -h, --help          Shows this help text.");
+                puts("  -v, --version       Shows the version and license information.");
+                puts("  -d, --debug         Enables the printing of debug information.");
+                exit = true;
+            } else if (!strcmp(argv[i], "--debug") || !strcmp(argv[i], "-d")) {
+                if (debug) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
+                debug = true;
+            } else {
+                fprintf(stderr, "Invalid option '%s'\n", argv[i]); err = EINVAL; cleanExit();
+            }
         } else {
             if (runfile) {free(progFilename); fputs("Incorrect number of options passed.\n", stderr); cleanExit();}
             if (!strcmp(argv[i], "--file") || !strcmp(argv[i], "-f")) {
                 i++;
-                if (argv[i] == NULL) {fprintf(stderr, "No filename provided.\n"); err = EINVAL; cleanExit();}
+                if (argv[i] == NULL) {fputs( "No filename provided.\n", stderr); err = EINVAL; cleanExit();}
             }
             inProg = true;
             runfile = true;
             prog = fopen(argv[i], "r");
             progFilename = malloc(strlen(argv[i]));
             copyStr(argv[i], progFilename);
-            if (prog == NULL) {fprintf(stderr, "File not found: '%s'\n", progFilename); free(progFilename); err = ENOENT; cleanExit();}
+            if (prog == NULL) {fprintf(stderr, "File not found: '%s'.\n", progFilename); free(progFilename); err = ENOENT; cleanExit();}
         }
     }
     if (exit) cleanExit();

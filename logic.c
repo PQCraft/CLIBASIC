@@ -200,21 +200,25 @@ if (chkCmd(1, ltmp[0], "FOR")) {
     if (getVar(fnvar, forbuf[0]) != 2) return true;
     getArg(1, ltmp[1], forbuf[1]);
     if (getVal(forbuf[1], forbuf[1]) != 2) return true;
+    getArg(3, ltmp[1], forbuf[3]);
+    if (getVal(forbuf[3], forbuf[3]) != 2) return true;
     if (fnstack[fnstackp] == -1) {
         setVar(fnvar, forbuf[1], 2);
         copyStr(forbuf[1], forbuf[0]);
     }
     getArg(2, ltmp[1], forbuf[2]);
+    sprintf(forbuf[0], "%lf", atof(forbuf[0]) + atof(forbuf[3]));
+    setVar(fnvar, forbuf[0], 2);
     int testval = logictest(forbuf[2]);
     if (testval == -1) return true;
     fndcmd[fnstackp] = !(bool)testval;
     if (!(fninfor[fnstackp] = (bool)testval)) {cerr = 0; return true;}
+    if (fnstack[fnstackp] == -1) {
+        sprintf(forbuf[0], "%lf", atof(forbuf[0]) - atof(forbuf[3]));
+        setVar(fnvar, forbuf[0], 2);
+    }
     fnstack[fnstackp] = cmdpos;
     fnpline[fnstackp] = progLine;
-    getArg(3, ltmp[1], forbuf[3]);
-    if (getVal(forbuf[3], forbuf[3]) != 2) return true;
-    sprintf(forbuf[3], "%lf", atof(forbuf[0]) + atof(forbuf[3]));
-    setVar(fnvar, forbuf[3], 2);
     cerr = 0;
     return true;
 }
