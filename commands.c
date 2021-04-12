@@ -19,7 +19,7 @@ if (chkCmd(2, arg[0], "SET", "LET")) {
     if (argt[1] == 0 || argt[2] == 0) {cerr = 1; goto cmderr;}
     int v = -1;
     for (int i = 0; i < varmaxct; i++) {
-        if (varinuse[i] && !qstrcmp(arg[1], varname[i])) {v = i; break;}
+        if (varinuse[i] && !strcmp(arg[1], varname[i])) {v = i; break;}
     }
     if (argt[1] != argt[2] && v != -1) {cerr = 2; goto cmderr;}
     if (getType(tmpargs[1]) != 255) {
@@ -236,19 +236,19 @@ if (chkCmd(1, arg[0], "_TXTATTRIB")) {
             if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
             if (arg[1][i] == ' ') arg[1][i] = '_';
         }
-        if (!qstrcmp(arg[1], "RESET")) attrib = 0; else
-        if (!qstrcmp(arg[1], "BOLD")) attrib = 1; else
-        if (!qstrcmp(arg[1], "ITALIC")) attrib = 2; else
-        if (!qstrcmp(arg[1], "UNDERLINE")) attrib = 3; else
-        if (!qstrcmp(arg[1], "DBL_UNDERLINE") || !qstrcmp(arg[1], "DOUBLE_UNDERLINE")) attrib = 4; else
-        if (!qstrcmp(arg[1], "SQG_UNDERLINE") || !qstrcmp(arg[1], "SQUIGGLY_UNDERLINE")) attrib = 5; else
-        if (!qstrcmp(arg[1], "STRIKETROUGH")) attrib = 6; else
-        if (!qstrcmp(arg[1], "OVERLINE")) attrib = 7; else
-        if (!qstrcmp(arg[1], "DIM")) attrib = 8; else
-        if (!qstrcmp(arg[1], "BLINK")) attrib = 9; else
-        if (!qstrcmp(arg[1], "HIDDEN")) attrib = 10; else
-        if (!qstrcmp(arg[1], "REVERSE")) attrib = 11; else
-        if (!qstrcmp(arg[1], "UNDERLINE_COLOR")) attrib = 12; else
+        if (!strcmp(arg[1], "RESET")) attrib = 0; else
+        if (!strcmp(arg[1], "BOLD")) attrib = 1; else
+        if (!strcmp(arg[1], "ITALIC")) attrib = 2; else
+        if (!strcmp(arg[1], "UNDERLINE")) attrib = 3; else
+        if (!strcmp(arg[1], "DBL_UNDERLINE") || !strcmp(arg[1], "DOUBLE_UNDERLINE")) attrib = 4; else
+        if (!strcmp(arg[1], "SQG_UNDERLINE") || !strcmp(arg[1], "SQUIGGLY_UNDERLINE")) attrib = 5; else
+        if (!strcmp(arg[1], "STRIKETROUGH")) attrib = 6; else
+        if (!strcmp(arg[1], "OVERLINE")) attrib = 7; else
+        if (!strcmp(arg[1], "DIM")) attrib = 8; else
+        if (!strcmp(arg[1], "BLINK")) attrib = 9; else
+        if (!strcmp(arg[1], "HIDDEN")) attrib = 10; else
+        if (!strcmp(arg[1], "REVERSE")) attrib = 11; else
+        if (!strcmp(arg[1], "UNDERLINE_COLOR")) attrib = 12; else
         {cerr = 16; goto cmderr;}
     } else {
         attrib = atoi(arg[1]);
@@ -283,8 +283,8 @@ if (chkCmd(1, arg[0], "_TXTATTRIB")) {
             if (argt[2] == 0) {cerr = 3; goto cmderr;}
             if (argt[2] == 1) {
                 upCase(arg[2]);
-                if (!qstrcmp(arg[2], "ON") || !qstrcmp(arg[2], "TRUE") || !qstrcmp(arg[2], "YES")) val = 1; else
-                if (!qstrcmp(arg[2], "OFF") || !qstrcmp(arg[2], "FALSE") || !qstrcmp(arg[2], "NO")) val = 0; else
+                if (!strcmp(arg[2], "ON") || !strcmp(arg[2], "TRUE") || !strcmp(arg[2], "YES")) val = 1; else
+                if (!strcmp(arg[2], "OFF") || !strcmp(arg[2], "FALSE") || !strcmp(arg[2], "NO")) val = 0; else
                 {cerr = 16; goto cmderr;}
             } else {
                 sscanf(arg[2], "%d", &val);
@@ -319,10 +319,10 @@ if (chkCmd(1, arg[0], "_SHATTRIB")) {
             if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
             if (arg[1][i] == ' ') arg[1][i] = '_';
         }
-        if (!qstrcmp(arg[1], "RESET")) attrib = 0; else
-        if (!qstrcmp(arg[1], "SILENT")) attrib = 1; else
-        if (!qstrcmp(arg[1], "CLEARATTRIB")) attrib = 2; else
-        if (!qstrcmp(arg[1], "RESTOREATTRIB")) attrib = 3; else
+        if (!strcmp(arg[1], "RESET")) attrib = 0; else
+        if (!strcmp(arg[1], "SILENT")) attrib = 1; else
+        if (!strcmp(arg[1], "CLEARATTRIB")) attrib = 2; else
+        if (!strcmp(arg[1], "RESTOREATTRIB")) attrib = 3; else
         {cerr = 16; goto cmderr;}
     } else {
         attrib = atoi(arg[1]);
@@ -343,8 +343,8 @@ if (chkCmd(1, arg[0], "_SHATTRIB")) {
         if (argt[2] == 0) {cerr = 3; goto cmderr;}
         if (argt[2] == 1) {
             upCase(arg[2]);
-            if (!qstrcmp(arg[2], "ON") || !qstrcmp(arg[2], "TRUE") || !qstrcmp(arg[2], "YES")) val = 1; else
-            if (!qstrcmp(arg[2], "OFF") || !qstrcmp(arg[2], "FALSE") || !qstrcmp(arg[2], "NO")) val = 0; else
+            if (!strcmp(arg[2], "ON") || !strcmp(arg[2], "TRUE") || !strcmp(arg[2], "YES")) val = 1; else
+            if (!strcmp(arg[2], "OFF") || !strcmp(arg[2], "FALSE") || !strcmp(arg[2], "NO")) val = 0; else
             {cerr = 16; goto cmderr;}
         } else {
             sscanf(arg[2], "%d", &val);
