@@ -34,7 +34,7 @@
     }
 #endif
 
-char VER[] = "0.13.1";
+char VER[] = "0.13.2";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -232,7 +232,7 @@ void updateTxtAttrib();
 
 int main(int argc, char* argv[]) {
     #ifndef _WIN32
-    if (system("tty -s &> /dev/null")) {
+    if (system("tty -s 1> /dev/null 2> /dev/null")) {
         char command[CB_BUF_SIZE];
         copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e 'echo -e -n \"\x1b[\x33 q\" && ", command);
         copyStrApnd(argv[0], command);
