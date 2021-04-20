@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 199309L
+
 #include <math.h>
 #include <time.h>
 #include <stdio.h>
@@ -34,7 +36,7 @@
     }
 #endif
 
-char VER[] = "0.13.2";
+char VER[] = "0.13.3";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -420,6 +422,18 @@ void resetTimer() {
     tval = usTime();
 }
 
+void wait(uint64_t d) {
+    #ifdef _WIN32
+    uint64_t t = d + usTime();
+    while (t > usTime() && !cmdint) {}
+    #else
+    struct timespec dts;
+    dts.tv_sec = d / 1000000;
+    dts.tv_nsec = (d % 1000000) * 1000;
+    nanosleep(&dts, NULL);
+    #endif
+}
+
 void getCurPos() {
     fflush(stdout);
     cury = 0; curx = 0;
@@ -667,8 +681,6 @@ uint8_t getType(char* str) {
 int getArg(int num, char* inbuf, char* outbuf);
 int getArgCt(char* inbuf);
 
-char gftmp[2][CB_BUF_SIZE];
-
 uint8_t getFunc(char* inbuf, char* outbuf) {
     if (debug) printf("getFunc(\"%s\", \"%s\");\n", inbuf, outbuf);
     char** farg;
@@ -677,6 +689,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     int fargct;
     int ftmpct = 0;
     int ftype = 0;
+    char gftmp[2][CB_BUF_SIZE];
     int i;
     for (i = 0; inbuf[i] != '('; i++) {if (inbuf[i] >= 'a' && inbuf[i] <= 'z') inbuf[i] = inbuf[i] - 32;}
     copyStrSnip(inbuf, i + 1, strlen(inbuf) - 1, gftmp[0]);
@@ -863,14 +876,10 @@ bool gvchkchar(char* tmp, int i) {
     return true;
 }
 
-char tmp[4][CB_BUF_SIZE];
-
-uint8_t getVal(char* tmpinbuf, char* outbuf) {
-    if (debug) printf("getVal(\"%s\", \"%s\");\n", tmpinbuf, outbuf);
-    if (tmpinbuf[0] == 0) {return 255;}
-    char inbuf[CB_BUF_SIZE];
-    copyStr(tmpinbuf, inbuf);
-    outbuf[0] = 0;
+uint8_t getVal(char* inbuf, char* outbuf) {
+    if (debug) printf("getVal(\"%s\", \"\");\n", inbuf);
+    if (inbuf[0] == 0) {return 255;}
+    char tmp[4][CB_BUF_SIZE];
     int ip = 0, jp = 0;
     uint8_t t = 0;
     uint8_t dt = 0;

@@ -104,8 +104,7 @@ if (chkCmd(1, arg[0], "WAITUS")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
-    uint64_t t = d + usTime();
-    while (t > usTime() && !cmdint) {}
+    wait(d);
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "WAITMS")) {
@@ -115,8 +114,7 @@ if (chkCmd(1, arg[0], "WAITMS")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
-    uint64_t t = d * 1000 + usTime();
-    while (t > usTime() && !cmdint) {}
+    wait(d * 1000);
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "WAIT")) {
@@ -126,8 +124,7 @@ if (chkCmd(1, arg[0], "WAIT")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
-    uint64_t t = d * 1000000 + usTime();
-    while (t > usTime() && !cmdint) {}
+    wait(d * 1000000);
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "RESETTIMER")) {
