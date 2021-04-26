@@ -36,7 +36,7 @@
     }
 #endif
 
-char VER[] = "0.13.3";
+char VER[] = "0.13.4";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -97,7 +97,8 @@ char VER[] = "0.13.3";
 #endif
 
 FILE *prog;
-char* progbuf;
+char* progbuf = NULL;
+char* argptr;
 FILE *f[256];
 
 int err = 0;
@@ -105,7 +106,7 @@ int cerr;
 
 bool inProg = false;
 bool chkinProg = false;
-char* progFilename;
+char* progFilename = NULL;
 int progLine = 1;
 
 int* varlen;
@@ -258,19 +259,27 @@ int main(int argc, char* argv[]) {
                 if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
                 printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
                 puts("Copyright (C) 2021 PQCraft");
+                puts("This software is licensed under the GNU GPL v3.");
                 exit = true;
             } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
                 if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
                 printf("Usage: %s [options] [{--file|-f}] [file] [options]\n", argv[0]);
                 puts("Options:");
-                puts("  -f, --file <file>   Runs <file>.");
-                puts("  -h, --help          Shows this help text.");
-                puts("  -v, --version       Shows the version and license information.");
-                puts("  -d, --debug         Enables the printing of debug information.");
+                puts("  {-f|--file} <file>          Loads and runs <file>.");
+                puts("  {-c|--command} <command>    Runs <command> and exits.");
+                puts("  {-h|--help}                 Shows this help text.");
+                puts("  {-v|--version}              Shows the version and license information.");
+                puts("  {-d|--debug}                Enables the printing of debug information.");
                 exit = true;
             } else if (!strcmp(argv[i], "--debug") || !strcmp(argv[i], "-d")) {
                 if (debug) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
                 debug = true;
+            } else if (!strcmp(argv[i], "--command") || !strcmp(argv[i], "-c")) {
+                i++;
+                if (argv[i] == NULL) {fputs( "No command provided.\n", stderr); err = EINVAL; cleanExit();}
+                inProg = true;
+                runfile = true;
+                argptr = argv[i];
             } else {
                 fprintf(stderr, "Invalid option '%s'\n", argv[i]); err = EINVAL; cleanExit();
             }
@@ -283,7 +292,7 @@ int main(int argc, char* argv[]) {
             inProg = true;
             runfile = true;
             prog = fopen(argv[i], "r");
-            progFilename = malloc(strlen(argv[i]));
+            progFilename = malloc(strlen(argv[i]) + 1);
             copyStr(argv[i], progFilename);
             if (prog == NULL) {fprintf(stderr, "File not found: '%s'.\n", progFilename); free(progFilename); err = ENOENT; cleanExit();}
         }
@@ -295,19 +304,36 @@ int main(int argc, char* argv[]) {
         strcpy(prompt, "\"CLIBASIC> \"");
     }
     if (debug) printf("Running in debug mode\n");
-    progbuf = malloc(0);
+    if (progbuf == NULL) progbuf = malloc(0);
     errstr = malloc(0);
     cmd = malloc(0);
     argt = malloc(0);
     arg = malloc(0);
     srand(time(0));
-    if (!runfile) {
+    if (runfile) {
+        if (progFilename == NULL) {
+            progFilename = malloc(9);
+            strcpy(progFilename, "argument");
+            progbuf = realloc(progbuf, strlen(argptr) + 1);
+            bool inStr = false;
+            bool comment = false;
+            int j = 0;
+            while (*argptr) {
+                int tmpc = *argptr;
+                argptr++;
+                if (tmpc == '"') inStr = !inStr;
+                if (tmpc == '\'' && !inStr) comment = true;
+                if (tmpc == '\n') comment = false;
+                if (tmpc == '\r' || tmpc == '\t') tmpc = ' ';
+                if (!comment) {progbuf[j] = (char)tmpc; j++;}
+            }
+        }
+        else {loadProg();}
+    } else {
         prog = fopen("AUTORUN.BAS", "r"); progFilename = malloc(12); strcpy(progFilename, "AUTORUN.BAS");
         if (prog == NULL) {prog = fopen("autorun.bas", "r"); strcpy(progFilename, "autorun.bas");}
         if (prog == NULL) {free(progFilename);}
         else {loadProg(); inProg = true;}
-    } else {
-        loadProg();
     }
     resetTimer();
     #ifndef _WIN32
@@ -392,9 +418,9 @@ int main(int argc, char* argv[]) {
                     cmdl = 0;
                     if (debug) printf("conbuf: {%s}\n", conbuf);
                     runcmd();
-                    if (cmdint) {inProg = false; fclose(prog); free(progFilename); cmdint = false; goto brkproccmd;}
-                    if (cp == -1) {inProg = false; fclose(prog); free(progFilename); goto brkproccmd;}
-                    if (progbuf[cp] == 0) {inProg = false; fclose(prog); free(progFilename); goto brkproccmd;}
+                    if (cmdint) {inProg = false; if (prog != NULL) {fclose(prog);} free(progFilename); cmdint = false; goto brkproccmd;}
+                    if (cp == -1) {inProg = false; if (prog != NULL) {fclose(prog);} free(progFilename); goto brkproccmd;}
+                    if (progbuf[cp] == 0) {inProg = false; if (prog != NULL) {fclose(prog);} free(progFilename); goto brkproccmd;}
                 } else
                 {cmdl++;}
                 if (!didloop) {cp++;} else {didloop = false;}
