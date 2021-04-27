@@ -36,7 +36,7 @@
     }
 #endif
 
-char VER[] = "0.13.4";
+char VER[] = "0.13.4.1";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -1085,7 +1085,10 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             if (tmp[1][j] == '.') {j--;}
             j++;
         }
-        copyStrSnip(tmp[1], i, j, outbuf);
+        outbuf[0] = 0;
+        copyStrSnip(tmp[1], i, j, tmp[2]);
+        if (tmp[1][i] == '.') strcpy(outbuf, "0");
+        copyStrApnd(tmp[2], outbuf);
     } else {
         copyStr(tmp[1], outbuf);
     }
