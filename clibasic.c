@@ -12,7 +12,9 @@
 #include <setjmp.h>
 #include <stdbool.h>
 #include <inttypes.h>
+#include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/types.h>
 
 int tab_width = 4;
 
@@ -58,7 +60,7 @@ int tab_width = 4;
     }
 #endif
 
-char VER[] = "0.14";
+char VER[] = "0.14.1";
 
 #ifndef CB_BUF_SIZE
     #define CB_BUF_SIZE 32768
@@ -265,6 +267,7 @@ uint8_t getVal(char* inbuf, char* outbuf);
 void resetTimer();
 void loadProg();
 void updateTxtAttrib();
+bool isFile();
 
 char* gethome() {
     if (!homepath) {
@@ -345,6 +348,7 @@ int main(int argc, char* argv[]) {
             progFilename = malloc(strlen(argv[i]) + 1);
             copyStr(argv[i], progFilename);
             if (!prog) {fprintf(stderr, "File not found: '%s'.\n", progFilename); free(progFilename); err = ENOENT; cleanExit();}
+            if (!isFile(progFilename)) {puts("Expected file instead of directory."); err = EISDIR; cleanExit();}
         }
     }
     if (exit) cleanExit();
@@ -394,7 +398,9 @@ int main(int argc, char* argv[]) {
             prog = fopen("AUTORUN.BAS", "r"); progFilename = malloc(12); strcpy(progFilename, "AUTORUN.BAS");
             if (!prog) {prog = fopen("autorun.bas", "r"); strcpy(progFilename, "autorun.bas");}
             if (!prog) {free(progFilename);}
-            else {loadProg(); inProg = true;}
+            else {
+                if (isFile(progFilename)) {loadProg(); inProg = true;}
+            }
             ret = chdir(tmpcwd);
             (void)ret;
         }
@@ -528,6 +534,12 @@ void wait(uint64_t d) {
     uint64_t t = d + usTime();
     while (t > usTime() && !cmdint) {}
     #endif
+}
+
+bool isFile(char *path) {
+    struct stat pathstat;
+    stat(path, &pathstat);
+    return (bool)(S_ISREG(pathstat.st_mode));
 }
 
 void getCurPos() {
@@ -1459,6 +1471,12 @@ void runcmd() {
                 break;
             case 17:
                 printf("Cannot change to directory '%s'", errstr);
+                break;
+            case 18:
+                fputs("Expected file instead of directory.", stdout);
+                break;
+            case 19:
+                fputs("Expected directory instead of file.", stdout);
                 break;
             case 127:
                 printf("Not a function: '%s'", errstr);

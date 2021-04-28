@@ -169,6 +169,7 @@ if (chkCmd(1, arg[0], "RUN")) {
     }
     progFilename = malloc(argl[1] + 1);
     copyStr(arg[1], progFilename);
+    if (!isFile(progFilename)) {cerr = 18; goto cmderr;}
     loadProg();
     chkinProg = true;
     goto cmderr;
