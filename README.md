@@ -3,7 +3,7 @@
 ### <ins>C</ins>ommand <ins>L</ins>ine <ins>I</ins>nterface <ins>B</ins>eginners <ins>A</ins>ll-purpose <ins>S</ins>ymbolic <ins>I</ins>nstruction <ins>C</ins>ode <br>
 CLIBASIC is a version of BASIC designed to run in the command line or terminal
 <!----> <br>
-<img src="docs/clibasic_logo_rounded.png"></src>
+<img src="docs/clibasic_logo_rounded.png"></img>
 <!----> <br>
 ### Building and Running <br>
 #### Linux/MacOS <br>
