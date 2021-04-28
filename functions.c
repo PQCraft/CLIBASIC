@@ -366,6 +366,31 @@ if (chkCmd(1, farg[0], "INPUT$")) {
     if (debug) printf("input output: {%s}\n", outbuf);
     goto fexit;
 }
+if (chkCmd(1, farg[0], "CWD$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    copyStr(getcwd(NULL, 0), outbuf);
+    goto fexit;
+}
+if (chkCmd(1, farg[0], "CHDIR")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    errno = 0;
+    int ret = chdir(farg[1]);
+    (void)ret;
+    sprintf(outbuf, "%d", errno);
+    goto fexit;
+}
+if (chkCmd(1, farg[0], "_HOME$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 0) {cerr = 3; goto fexit;}
+    copyStr(gethome(), outbuf);
+    goto fexit;
+}
 if (chkCmd(1, farg[0], "_PROMPT$")) {
     cerr = 0;
     ftype = 1;
