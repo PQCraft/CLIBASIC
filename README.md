@@ -30,4 +30,4 @@ MacOS Mojave-Big Sur (`brew`): `gcc`, `make`, `readline` <br>
     reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f```
     ```
 - On Linux if CLIBASIC is not run in a terminal it will attempt to open in XTerm. CLIBASIC will not read arguments if it is not started in a terminal.
-- If the file `.clibasic_history` is present in the user's home directory CLIBASIC will automatically save history there. Run `_AUTOHIST` to generate this file. Remove the file to disable this feature.
+- On Linux if the file `.clibasic_history` is present in the user's home directory CLIBASIC will automatically save history there. Run `_AUTOHIST` or `SH "touch ~/.clibasic_history"` (you can also run the command in the qutoes in a terminal/shell) to enable this feature. Remove the file to disable this feature.
