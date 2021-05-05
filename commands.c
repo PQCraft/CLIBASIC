@@ -94,7 +94,7 @@ if (chkCmd(1, arg[0], "CLS")) {
     cerr = 0;
     if (argct > 1) {cerr = 3; goto cmderr;}
     uint8_t tbgc = bgc;
-    if (argct != 0) {
+    if (argct) {
         if (!solvearg(1)) goto cmderr;
         if (argt[1] != 2) {cerr = 2; goto cmderr;}
         tbgc = (uint8_t)atoi(arg[1]);
@@ -135,7 +135,7 @@ if (chkCmd(1, arg[0], "WAIT")) {
 }
 if (chkCmd(1, arg[0], "RESETTIMER")) {
     cerr = 0;
-    if (argct != 0) {cerr = 3; goto cmderr;}
+    if (argct) {cerr = 3; goto cmderr;}
     resetTimer();
     goto cmderr;
 }
@@ -145,11 +145,13 @@ if (chkCmd(2, arg[0], "SH", "EXEC")) {
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     if (sh_clearAttrib) fputs("\e[0m", stdout);
+    fflush(stdout);
     #ifdef _WIN32
     if (sh_silent) {arg[1] = realloc(arg[1], sizeof(arg[1]) + 13); copyStrApnd(arg[1], " 1>nul 2>nul");}
     #else
     if (sh_silent) {arg[1] = realloc(arg[1], sizeof(arg[1]) + 13); copyStrApnd(arg[1], " &>/dev/null");}
     #endif
+    fflush(stdout);
     cerr = system(arg[1]);
     if (sh_restoreAttrib) updateTxtAttrib();
     cerr = 0;
@@ -184,17 +186,33 @@ if (chkCmd(2, arg[0], "SRAND", "SRND")) {
     srand(rs);
     goto cmderr;
 }
-if (chkCmd(1, arg[0], "_PROMPT")) {
-    if (inProg) {cerr = 254; goto cmderr;}
+if (chkCmd(1, arg[0], "FILES")) {
     cerr = 0;
-    if (argct != 1) {cerr = 3; goto cmderr;}
-    if (!solvearg(1)) goto cmderr;
-    if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    copyStr(tmpargs[1], prompt);
+    DIR* cwd = opendir(".");
+    if (!cwd) {cerr = 20; goto cmderr;}
+    DIR* tmpdir;
+    struct dirent* dir;
+    #ifdef _WIN32
+        #define DIRPFS "%s\\\n"
+        puts(".\\\n..\\");
+    #else
+        #define DIRPFS "%s/\n"
+        puts("./\n../");
+    #endif
+    while ((dir = readdir(cwd))) {
+        if ((tmpdir = opendir(dir->d_name)) && strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) printf(DIRPFS, dir->d_name);
+        if (tmpdir) closedir(tmpdir);
+    }
+    closedir(cwd);
+    cwd = opendir(".");
+    while ((dir = readdir(cwd))) {
+        if (!(tmpdir = opendir(dir->d_name))) puts(dir->d_name);
+        if (tmpdir) closedir(tmpdir);
+    }
+    closedir(cwd);
     goto cmderr;
 }
 if (chkCmd(2, arg[0], "CHDIR", "CD")) {
-    if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -205,6 +223,15 @@ if (chkCmd(2, arg[0], "CHDIR", "CD")) {
         cerr = 17;
         goto cmderr;
     }
+    goto cmderr;
+}
+if (chkCmd(1, arg[0], "_PROMPT")) {
+    if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    copyStr(tmpargs[1], prompt);
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "_PROMPTTAB")) {
@@ -223,23 +250,40 @@ if (chkCmd(1, arg[0], "_AUTOHIST")) {
 if (chkCmd(1, arg[0], "_SAVECMDHIST")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
-    if (argct != 1) {cerr = 3; goto cmderr;}
-    if (!solvearg(1)) goto cmderr;
-    if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    write_history(arg[1]);
+    if (argct > 1) {cerr = 3; goto cmderr;}
+    if (argct) {
+        if (!solvearg(1)) goto cmderr;
+        if (argt[1] != 1) {cerr = 2; goto cmderr;}
+        write_history(arg[1]);
+    } else {
+        char* tmpcwd = getcwd(NULL, 0);
+        int ret = chdir(gethome());
+        write_history(".clibasic_history");
+        ret = chdir(tmpcwd);
+        (void)ret;
+    }
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "_LOADCMDHIST")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
-    if (argct != 1) {cerr = 3; goto cmderr;}
-    if (!solvearg(1)) goto cmderr;
-    if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    read_history(arg[1]);
+    if (argct > 1) {cerr = 3; goto cmderr;}
+    clear_history();
+    if (argct) {
+        if (!solvearg(1)) goto cmderr;
+        if (argt[1] != 1) {cerr = 2; goto cmderr;}
+        read_history(arg[1]);
+    } else {
+        char* tmpcwd = getcwd(NULL, 0);
+        int ret = chdir(gethome());
+        read_history(".clibasic_history");
+        ret = chdir(tmpcwd);
+        (void)ret;
+    }
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "_TXTLOCK")) {
-    if (argct != 0) {cerr = 3; goto cmderr;}
+    if (argct) {cerr = 3; goto cmderr;}
     cerr = 0;
     #ifndef _WIN32
     if (!textlock) {
@@ -253,7 +297,7 @@ if (chkCmd(1, arg[0], "_TXTLOCK")) {
     goto cmderr;
 }
 if (chkCmd(1, arg[0], "_TXTUNLOCK")) {
-    if (argct != 0) {cerr = 3; goto cmderr;}
+    if (argct) {cerr = 3; goto cmderr;}
     cerr = 0;
     #ifndef _WIN32
     if (textlock) tcsetattr(0, TCSANOW, &restore);
@@ -268,7 +312,7 @@ if (chkCmd(1, arg[0], "_TXTATTRIB")) {
     if (argt[1] == 0) {cerr = 3; goto cmderr;}
     int attrib = 0;
     if (argt[1] == 1) {
-        for (int i = 0; arg[1][i] != 0; i++) {
+        for (int i = 0; arg[1][i]; i++) {
             if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
             if (arg[1][i] == ' ') arg[1][i] = '_';
         }
@@ -351,7 +395,7 @@ if (chkCmd(1, arg[0], "_SHATTRIB")) {
     if (argt[1] == 0) {cerr = 3; goto cmderr;}
     int attrib = 0;
     if (argt[1] == 1) {
-        for (int i = 0; arg[1][i] != 0; i++) {
+        for (int i = 0; arg[1][i]; i++) {
             if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
             if (arg[1][i] == ' ') arg[1][i] = '_';
         }
@@ -398,7 +442,7 @@ if (chkCmd(1, arg[0], "_SHATTRIB")) {
 if (chkCmd(1, arg[0], "_DEBUGON")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
-    if (argct != 0) {cerr = 3; goto cmderr;}
+    if (argct) {cerr = 3; goto cmderr;}
     if (!debug) puts("Enabled debug mode.");
     debug = true;
     goto cmderr;
@@ -406,7 +450,7 @@ if (chkCmd(1, arg[0], "_DEBUGON")) {
 if (chkCmd(1, arg[0], "_DEBUGOFF")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
-    if (argct != 0) {cerr = 3; goto cmderr;}
+    if (argct) {cerr = 3; goto cmderr;}
     if (debug) puts("Disabled debug mode.");
     debug = false;
     goto cmderr;

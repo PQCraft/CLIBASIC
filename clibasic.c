@@ -1,4 +1,29 @@
-#define _POSIX_C_SOURCE 199309L
+/* USER RE-DEFINABLE MACROS */
+
+#ifndef CB_BUF_SIZE // Avoids redefinition error if '-D CB_BUF_SIZE=<number>' is used
+    /* Sets the size of text buffers */
+    #define CB_BUF_SIZE 32768 // Change the value to change the size of text buffers
+#endif
+
+/* Uses strcpy and strcat in place of copyStr and copyStrApnd */
+#define BUILT_IN_STRING_FUNCS // Comment out this line to use CLIBASIC string functions
+
+/* ------------------------ */
+
+/* Always use latest POSIX features */
+#define _POSIX_C_SOURCE 999999L
+
+/* Check if the buffer size is usable */
+#if (CB_BUF_SIZE < 0)
+    #error /* CB_BUF_SIZE cannot be less than 0 */ \
+    Invalid value for CB_BUF_SIZE (CB_BUF_SIZE cannot be less than 0).
+#elif (CB_BUF_SIZE < 2)
+    #error /* Buffers only have room for NULL char */ \
+    Unusable CB_BUF_SIZE (Buffers only have room for NULL char).
+#elif (CB_BUF_SIZE < 256)
+    #warning /* Buffers will be small and may cause issues. */ \
+    Small CB_BUF_SIZE (Buffers will be small and may cause issues).
+#endif
 
 #include <math.h>
 #include <time.h>
@@ -10,61 +35,25 @@
 #include <signal.h>
 #include <unistd.h>
 #include <setjmp.h>
+#include <dirent.h>
 #include <stdbool.h>
 #include <inttypes.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
-
-int tab_width = 4;
-
 #ifdef __unix__
-    #include <termios.h>
-    #include <readline/readline.h>
-    #include <readline/history.h>
-    #include <sys/ioctl.h>
-    int kbhit() {
-        static const int STDIN = 0;
-        static bool initialized = false;
-        if (!initialized) {
-            struct termios term;
-            tcgetattr(STDIN, &term);
-            term.c_lflag &= ~ICANON;
-            tcsetattr(STDIN, TCSANOW, &term);
-            setbuf(stdin, NULL);
-            initialized = true;
-        }
-        int bytesWaiting;
-        ioctl(STDIN, FIONREAD, &bytesWaiting);
-        return bytesWaiting;
-    }
-    int tab_end = 0;
-    char* rl_get_tab(const char* text, int state) {
-        char* tab = NULL;
-        if (!state) {
-            tab = malloc(strlen(text) + 5);
-            strcpy(tab, text);
-            tab_end = tab_width - (tab_end % tab_width) - 1;
-            for (int i = 0; i < tab_end; i++) {
-                strcat(tab, " ");
-            }
-        }
-        return tab;
-    }
-    char** rl_tab(const char* text, int start, int end) {
-        (void)start;
-        char** tab = NULL;
-        tab_end = end;
-        tab = rl_completion_matches(text, rl_get_tab);
-        return tab;
-    }
+#include <termios.h>
+#include <readline/readline.h>
+#include <readline/history.h>
+#include <sys/ioctl.h>
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#include <conio.h>
+#define SIGKILL 9
 #endif
 
-char VER[] = "0.14.1";
-
-#ifndef CB_BUF_SIZE
-    #define CB_BUF_SIZE 32768
-#endif
+char VER[] = "0.15";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -74,41 +63,11 @@ char VER[] = "0.14.1";
     char OSVER[] = "Unix";
 #elif defined(_WIN32)
     char OSVER[] = "Windows";
-    //(https://pbs.twimg.com/media/CRcU7BKWwAEQZIE.jpg)
-    #include <windows.h>
-    #include <conio.h>
-    #define SIGKILL 9
-    char* rlptr;
-    bool inrl = false;
-    void cleanExit();
-    void setcsr() {
-        COORD coord;
-        coord.X = 0;
-        coord.Y = 0;
-        SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
-    }
-    void rl_sigh(int sig) {signal(sig, rl_sigh);}
-    char* readline(char* prompt) {
-        //(https://theenglishfarm.com/sites/default/files/styles/featured_image/public/harold_2.jpg?itok=uo6h4hz4)
-        fputs(prompt, stdout);
-        fflush(stdout);
-        char buf[CB_BUF_SIZE];
-        buf[0] = 0;
-        fflush(stdin);
-        scanf("%[^\n]s ", buf);
-        rlptr = malloc(strlen(buf) + 1);
-        strcpy(rlptr, buf);
-        return rlptr;
-    }
-    void add_history(char* str) {}
-    void read_history(char* str) {}
-    void write_history(char* str) {}
-    void txtqunlock() {}
-    void rl_resize_terminal() {}
-    //(https://i.kym-cdn.com/entries/icons/original/000/027/746/crying.jpg)
 #elif defined(__APPLE__)
     char OSVER[] = "MacOS";
 #else
+    #warning /* No matching operating system defines */ \
+    Could not detect operating system (No matching operating system defines; this may cause compilation failure).
     char OSVER[] = "?";
 #endif
 
@@ -117,13 +76,15 @@ char VER[] = "0.14.1";
 #elif B64
     char BVER[] = "64";
 #else
+    #warning /* Neither B32 or B64 was defined */ \
+    Could not detect architecture bits. BVER[] will be set to "?". Please use '-D B64' or '-D B32' when compiling (Neither B32 or B64 was defined).
     char BVER[] = "?";
 #endif
 
-FILE *prog;
+FILE* prog;
 char* progbuf = NULL;
 char* argptr;
-FILE *f[256];
+FILE* f[256];
 
 int err = 0;
 int cerr;
@@ -136,15 +97,15 @@ int progLine = 1;
 int* varlen;
 char** varstr;
 char** varname;
-bool *varinuse;
-uint8_t *vartype;
+bool* varinuse;
+uint8_t* vartype;
 int varmaxct = 0;
 
 char* cmd;
 int cmdl;
 char** tmpargs;
 char** arg;
-uint8_t *argt;
+uint8_t* argt;
 int* argl;
 int argct = 0;
 
@@ -212,16 +173,90 @@ int  txt_underlncolor = 0;
 
 bool textlock = false;
 
+bool keep = false;
+
 char* homepath = NULL;
 char* cwd = NULL;
 
 bool autohist = false;
+
+int tab_width = 4;
 
 #ifdef __unix__
 struct termios term, restore;
 static struct termios orig_termios;
 
 void txtqunlock() {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}}
+
+int kbhit() {
+    static const int STDIN = 0;
+    static bool initialized = false;
+    if (!initialized) {
+        struct termios term;
+        tcgetattr(STDIN, &term);
+        term.c_lflag &= ~ICANON;
+        tcsetattr(STDIN, TCSANOW, &term);
+        setbuf(stdin, NULL);
+        initialized = true;
+    }
+    int bytesWaiting;
+    ioctl(STDIN, FIONREAD, &bytesWaiting);
+    return bytesWaiting;
+}
+int tab_end = 0;
+void strApndChar(char* str, char c);
+char* rl_get_tab(const char* text, int state) {
+    char* tab = NULL;
+    if (!state) {
+        tab = malloc(strlen(text) + 5);
+        strcpy(tab, text);
+        tab_end = tab_width - (tab_end % tab_width) - 1;
+        for (int i = 0; i < tab_end; i++) {
+            strApndChar(tab, ' ');
+        }
+    }
+    return tab;
+}
+char** rl_tab(const char* text, int start, int end) {
+    (void)start;
+    char** tab = NULL;
+    tab_end = end;
+    tab = rl_completion_matches(text, rl_get_tab);
+    return tab;
+}
+#endif
+
+#ifdef _WIN32
+//(https://pbs.twimg.com/media/CRcU7BKWwAEQZIE.jpg)
+char* rlptr;
+bool inrl = false;
+void cleanExit();
+void setcsr() {
+    COORD coord;
+    coord.X = 0;
+    coord.Y = 0;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
+}
+void rl_sigh(int sig) {signal(sig, rl_sigh);}
+char* readline(char* prompt) {
+    //(https://theenglishfarm.com/sites/default/files/styles/featured_image/public/harold_2.jpg?itok=uo6h4hz4)
+    fputs(prompt, stdout);
+    fflush(stdout);
+    char buf[CB_BUF_SIZE];
+    buf[0] = 0;
+    fflush(stdin);
+    scanf("%[^\n]s ", buf);
+    rlptr = malloc(strlen(buf) + 1);
+    strcpy(rlptr, buf);
+    return rlptr;
+}
+void add_history(char* str) {(void)str;}
+void read_history(char* str) {(void)str;}
+void write_history(char* str) {(void)str;}
+void clear_history() {};
+void txtqunlock() {}
+void rl_resize_terminal() {}
+//(https://i.kym-cdn.com/entries/icons/original/000/027/746/crying.jpg)
 #endif
 
 struct timeval time1;
@@ -247,8 +282,8 @@ void cleanExit() {
     int ret = chdir(gethome());
     (void)ret;
     if (autohist) write_history(".clibasic_history");
-    printf("\e[0m");
-    fflush(stdout);
+    if (!keep) printf("\e[0m");
+    //fflush(stdout);
     getCurPos();
     if (curx != 1) printf("\n");
     exit(err);
@@ -260,8 +295,13 @@ void cmdIntHndl() {
 }
 
 void runcmd();
-void copyStr(char* str1, char* str2);
-void copyStrApnd(char* str1, char* str2);
+#ifdef BUILT_IN_STRING_FUNCS
+    #define copyStr(b, a) strcpy(a, b)
+    #define copyStrApnd(b, a) strcat(a, b)
+#else
+    void copyStr(char* str1, char* str2);
+    void copyStrApnd(char* str1, char* str2);
+#endif
 void copyStrSnip(char* str1, int i, int j, char* str2);
 uint8_t getVal(char* inbuf, char* outbuf);
 void resetTimer();
@@ -290,12 +330,12 @@ int main(int argc, char* argv[]) {
         char command[CB_BUF_SIZE];
         copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e 'echo -e -n \"\x1b[\x33 q\" && ", command);
         copyStrApnd(argv[0], command);
-        command[strlen(command) + 1] = 0;
-        command[strlen(command)] = '\'';
+        strApndChar(command, '\'');
         exit(system(command));
     }
     rl_readline_name = "CLIBASIC";
     rl_attempted_completion_function = (rl_completion_func_t*)rl_tab;
+    rl_getc_function = getc;
     #endif
     if (!isatty(STDERR_FILENO)) {exit(EIO);}
     if (!isatty(STDIN_FILENO)) {fputs("CLIBASIC does not support pipes.\n", stderr); exit(EIO);}
@@ -318,15 +358,19 @@ int main(int argc, char* argv[]) {
                 if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
                 printf("Usage: %s [options] [{--file|-f}] [file] [options]\n", argv[0]);
                 puts("Options:");
-                puts("  {-f|--file} <file>          Loads and runs <file>.");
-                puts("  {-c|--command} <command>    Runs <command> and exits.");
-                puts("  {-h|--help}                 Shows this help text.");
-                puts("  {-v|--version}              Shows the version and license information.");
-                puts("  {-d|--debug}                Enables the printing of debug information.");
+                puts("    {-f|--file} <file>          Loads and runs <file>.");
+                puts("    {-c|--command} <command>    Runs <command> and exits.");
+                puts("    {-k|--keep}                 Stops CLIBASIC from resetting text attributes.");
+                puts("    {-h|--help}                 Shows this help text.");
+                puts("    {-v|--version}              Shows the version and license information.");
+                puts("    {-d|--debug}                Enables the printing of debug information.");
                 exit = true;
             } else if (!strcmp(argv[i], "--debug") || !strcmp(argv[i], "-d")) {
                 if (debug) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
                 debug = true;
+            } else if (!strcmp(argv[i], "--keep") || !strcmp(argv[i], "-k")) {
+                if (keep) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
+                keep = true;
             } else if (!strcmp(argv[i], "--command") || !strcmp(argv[i], "-c")) {
                 i++;
                 if (!argv[i]) {fputs( "No command provided.\n", stderr); err = EINVAL; cleanExit();}
@@ -358,11 +402,11 @@ int main(int argc, char* argv[]) {
         strcpy(prompt, "\"CLIBASIC> \"");
     }
     if (debug) printf("Running in debug mode\n");
-    if (!progbuf) progbuf = malloc(0);
-    errstr = malloc(0);
-    cmd = malloc(0);
-    argt = malloc(0);
-    arg = malloc(0);
+    if (!progbuf) progbuf = NULL;
+    errstr = NULL;
+    cmd = NULL;
+    argt = NULL;
+    arg = NULL;
     srand(time(0));
     if (runfile) {
         if (!progFilename) {
@@ -406,9 +450,6 @@ int main(int argc, char* argv[]) {
         }
     }
     resetTimer();
-    #ifdef __unix__
-    rl_getc_function = getc;
-    #endif
     while (!exit) {
         fchkint:
         conbuf[0] = 0;
@@ -436,9 +477,14 @@ int main(int argc, char* argv[]) {
             inprompt = false;
             if (!tmpstr) cleanExit();
             if (tmpstr[0] == 0) {free(tmpstr); goto brkproccmd;}
+            #ifdef __unix__
+            HIST_ENTRY* tmphist = history_get(history_length);
+            if (!tmphist || strcmp(tmpstr, tmphist->line)) add_history(tmpstr);
+            #else
             if (strcmp(tmpstr, lastcb)) add_history(tmpstr);
-            copyStr(tmpstr, conbuf);
             copyStr(tmpstr, lastcb);
+            #endif
+            copyStr(tmpstr, conbuf);
             free(tmpstr);
         }
         cp = 0;
@@ -536,7 +582,7 @@ void wait(uint64_t d) {
     #endif
 }
 
-bool isFile(char *path) {
+bool isFile(char* path) {
     struct stat pathstat;
     stat(path, &pathstat);
     return (bool)(S_ISREG(pathstat.st_mode));
@@ -679,12 +725,21 @@ bool isValidVarChar(char bfr) {
     || (bfr >= '#' && bfr <= '&') || bfr == '!' || bfr == '?' || bfr == '@');
 }
 
+#ifndef BUILT_IN_STRING_FUNCS
 void copyStr(char* str1, char* str2) {
     if (!str1) {str2[0] = 0; return;}
     int i;
-    for (i = 0; str1[i] != 0; i++) {str2[i] = str1[i];}
+    for (i = 0; str1[i]; i++) {str2[i] = str1[i];}
     str2[i] = 0;
 }
+
+void copyStrApnd(char* str1, char* str2) {
+    if (!str1) {str2[0] = 0; return;}
+    int j = 0, i = 0;
+    for (i = strlen(str2); str1[j]; i++) {str2[i] = str1[j]; j++;}
+    str2[i] = 0;
+}
+#endif
 
 void copyStrSnip(char* str1, int i, int j, char* str2) {
     if (!str1) {str2[0] = 0; return;}
@@ -697,25 +752,26 @@ void copyStrTo(char* str1, int i, char* str2) {
     if (!str1) {str2[0] = 0; return;}
     int i2 = 0;
     int i3;
-    for (i3 = i; str1[i] != 0; i++) {str2[i3] = str1[i2]; i2++; i3++;}
+    for (i3 = i; str1[i]; i++) {str2[i3] = str1[i2]; i2++; i3++;}
     str2[i3] = 0;
 }
 
-void copyStrApnd(char* str1, char* str2) {
-    if (!str1) {str2[0] = 0; return;}
-    int j = 0, i = 0;
-    for (i = strlen(str2); str1[j] != 0; i++) {str2[i] = str1[j]; j++;}
-    str2[i] = 0;
+void strApndChar(char* str, char c) {
+    int len = 0;
+    while (str[len]) {len++;}
+    str[len] = c;
+    len++;
+    str[len] = 0;
 }
 
 void upCase(char* str) {
-    for (int i = 0; str[i] != 0; i++) {
+    for (int i = 0; str[i]; i++) {
         if (str[i] >= 'a' && str[i] <= 'z') str[i] -= 32;
     }
 }
 
 void lowCase(char* str) {
-    for (int i = 0; str[i] != 0; i++) {
+    for (int i = 0; str[i]; i++) {
         if (str[i] >= 'A' && str[i] <= 'Z') str[i] += 32;
     }
 }
@@ -742,7 +798,7 @@ char buf[CB_BUF_SIZE];
 
 void getStr(char* str1, char* str2) {
     int j = 0, i;
-    for (i = 0; str1[i] != 0; i++) {
+    for (i = 0; str1[i]; i++) {
         char c = str1[i];
         if (c == '\\') {
             i++;
@@ -778,7 +834,7 @@ void getStr(char* str1, char* str2) {
 uint8_t getType(char* str) {
     if (str[0] == '"') {if (str[strlen(str) - 1] != '"') {return 0;} return 1;}
     bool p = false;
-    for (int i = 0; str[i] != 0; i++) {
+    for (int i = 0; str[i]; i++) {
         if (str[i] == '-') {} else
         if ((str[i] < '0' || str[i] > '9') && str[i] != '.') {return 255;} else
         if (str[i] == '.') {if (p) {return 0;} p = true;}
@@ -792,7 +848,7 @@ int getArgCt(char* inbuf);
 uint8_t getFunc(char* inbuf, char* outbuf) {
     if (debug) printf("getFunc(\"%s\", \"%s\");\n", inbuf, outbuf);
     char** farg;
-    uint8_t *fargt;
+    uint8_t* fargt;
     int* flen;
     int fargct;
     int ftmpct = 0;
@@ -835,7 +891,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     free(flen);
     free(fargt);
     if (debug) printf("output: getFunc(\"%s\", \"%s\");\n", inbuf, outbuf);
-    if (cerr != 0) return 0;
+    if (cerr) return 0;
     return ftype;
 }
 
@@ -853,7 +909,7 @@ uint8_t getVar(char* vn, char* varout) {
         copyStr(vn, errstr);
         return 0;
     }
-    for (register int i = 0; vn[i] != 0; i++) {
+    for (register int i = 0; vn[i]; i++) {
         if (!isValidVarChar(vn[i])) {
             cerr = 4;
             errstr = realloc(errstr, (vnlen + 1) * sizeof(char));
@@ -889,7 +945,7 @@ bool setVar(char* vn, char* val, uint8_t t) {
         copyStr(vn, errstr);
         return false;
     }
-    for (register int i = 0; vn[i] != 0; i++) {
+    for (register int i = 0; vn[i]; i++) {
         if (!isValidVarChar(vn[i])) {
             cerr = 4;
             errstr = realloc(errstr, (vnlen + 1) * sizeof(char));
@@ -933,7 +989,7 @@ bool delVar(char* vn) {
     if (debug) printf("delVar(\"%s\");\n", vn);
     upCase(vn);
     int vnlen = strlen(vn);
-    for (register int i = 0; vn[i] != 0; i++) {
+    for (register int i = 0; vn[i]; i++) {
         if (!isValidVarChar(vn[i])) {
             cerr = 4;
             errstr = realloc(errstr, (vnlen + 1) * sizeof(char));
@@ -988,19 +1044,19 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     if (debug) printf("getVal(\"%s\", \"\");\n", inbuf);
     if (inbuf[0] == 0) {return 255;}
     //char tmp[4][CB_BUF_SIZE];
-    char* tmp[4] = {malloc(32768), malloc(32768), malloc(32768), malloc(32768)};
+    char* tmp[4] = {malloc(CB_BUF_SIZE), malloc(CB_BUF_SIZE), malloc(CB_BUF_SIZE), malloc(CB_BUF_SIZE)};
     int ip = 0, jp = 0;
     uint8_t t = 0;
     uint8_t dt = 0;
     bool inStr = false;
-    double num1 = 0;
-    double num2 = 0;
-    double num3 = 0;
+    register double num1 = 0;
+    register double num2 = 0;
+    register double num3 = 0;
     int numAct;
     if ((isSpChar(inbuf[0]) && inbuf[0] != '-') || isSpChar(inbuf[strlen(inbuf) - 1])) {cerr = 1; dt = 0; goto gvreturn;}
     int tmpct = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = '"'; tmp[3][1] = 0;
-    for (int i = 0; inbuf[i] != 0; i++) {
+    for (int i = 0; inbuf[i]; i++) {
         if (inbuf[i] == '(') {if (tmpct == 0) {ip = i;} tmpct++;}
         if (inbuf[i] == ')') {
             tmpct--;
@@ -1024,20 +1080,35 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             }
         }
     }
-    if (tmpct != 0) {cerr = 1; dt = 0; goto gvreturn;}
+    if (tmpct) {cerr = 1; dt = 0; goto gvreturn;}
     ip = 0; jp = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
     while (1) {
-        bool seenStr = false;
         int pct = 0;
+        bool* seenStr = malloc(1 * sizeof(bool));
+        seenStr[0] = false;
         while (1) {
-            if (inbuf[jp] == '"') {inStr = !inStr; if (seenStr && inStr) {cerr = 1; dt = 0; goto gvreturn;} seenStr = true;}
-            if (inbuf[jp] == '(') {pct++;}
-            if (inbuf[jp] == ')') {pct--;}
-            if ((isSpChar(inbuf[jp]) && !inStr && pct == 0) || inbuf[jp] == 0) goto gvbrk;
+            if (inbuf[jp] == '"') {
+                inStr = !inStr;
+                if (seenStr[pct] && inStr) {
+                    cerr = 1;
+                    dt = 0;
+                    free(seenStr);
+                    goto gvreturn;
+                }
+                seenStr[pct] = true;
+            }
+            if (inbuf[jp] == '(') {
+                pct++;
+                seenStr = realloc(seenStr, (pct * 1) * sizeof(bool));
+                seenStr[pct] = false;
+            }
+            if (inbuf[jp] == ')') {pct--; seenStr = realloc(seenStr, (pct * 1) * sizeof(bool));}
+            if ((isSpChar(inbuf[jp]) && !inStr && pct == 0) || inbuf[jp] == 0) {break;}
             jp++;
         }
-        gvbrk:
+        //gvbrk:
+        free(seenStr);
         copyStrSnip(inbuf, ip, jp, tmp[0]);
         t = getType(tmp[0]);
         if (t == 1) getStr(tmp[0], tmp[0]);
@@ -1052,34 +1123,34 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 copyStrApnd(tmp[2], tmp[0]);
             }
         }
-        if (t != 0 && dt == 0) {dt = t;} else
-        if ((t != 0 && t != dt)) {cerr = 2; dt = 0; goto gvreturn;} else
+        if (t && dt == 0) {dt = t;} else
+        if ((t && t != dt)) {cerr = 2; dt = 0; goto gvreturn;} else
         if (t == 0) {cerr = 1; dt = 0; goto gvreturn;}
-        if ((dt == 1 && inbuf[jp] != '+') && inbuf[jp] != 0) {cerr = 1; dt = 0; goto gvreturn;}
+        if ((dt == 1 && inbuf[jp] != '+') && inbuf[jp]) {cerr = 1; dt = 0; goto gvreturn;}
         if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[2]); copyStrApnd(tmp[2], tmp[1]);} else
         if (t == 2) {
             copyStrSnip(inbuf, jp, strlen(inbuf), tmp[1]);
             copyStrApnd(tmp[1], tmp[0]);
-            int p1, p2, p3;
+            register int p1, p2, p3;
             bool inStr = false;
             pct = 0;
             while (true) {
                 numAct = 0;
                 p1 = 0, p2 = 0, p3 = 0;
-                for (register int i = 0; tmp[0][i] != 0 && p2 == 0; i++) {
+                for (register int i = 0; tmp[0][i] && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
                     if (tmp[0][i] == '(') {pct++;}
                     if (tmp[0][i] == ')') {pct--;}
                     if (tmp[0][i] == '^' && !inStr && !pct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 4;}
                 }
-                for (register int i = 0; tmp[0][i] != 0 && p2 == 0; i++) {
+                for (register int i = 0; tmp[0][i] && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
                     if (tmp[0][i] == '(') {pct++;}
                     if (tmp[0][i] == ')') {pct--;}
                     if (tmp[0][i] == '*' && !inStr && !pct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 2;}
                     if (tmp[0][i] == '/' && !inStr && !pct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 3;}
                 }
-                for (register int i = 0; tmp[0][i] != 0 && p2 == 0; i++) {
+                for (register int i = 0; tmp[0][i] && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
                     if (tmp[0][i] == '(') {pct++;}
                     if (tmp[0][i] == ')') {pct--;}
@@ -1087,6 +1158,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                     if (tmp[0][i] == '-' && !inStr && !pct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 1;}
                 }
                 inStr = false;
+                pct = 0;
                 if (debug) printf("getVal: tmp[0]: {%s}, tmp[1]: {%s}, tmp[2]: {%s}, tmp[3]: {%s}\n", tmp[0], tmp[1], tmp[2], tmp[3]);
                 if (p2 == 0) {
                     if (p3 == 0) {
@@ -1102,11 +1174,15 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
                 for (register int i = p2 - 1; i > 0; i--) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (isSpChar(tmp[0][i]) && !inStr) {p1 = i; break;}
+                    if (tmp[0][i] == '(') {pct++;}
+                    if (tmp[0][i] == ')') {pct--;}
+                    if (isSpChar(tmp[0][i]) && !inStr && !pct) {p1 = i; break;}
                 }
                 for (register int i = p2 + 1; true; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if ((isSpChar(tmp[0][i]) && i != p2 + 1 && !inStr) || tmp[0][i] == 0) {p3 = i; break;}
+                    if (tmp[0][i] == '(') {pct++;}
+                    if (tmp[0][i] == ')') {pct--;}
+                    if ((isSpChar(tmp[0][i]) && i != p2 + 1 && !inStr && !pct) || tmp[0][i] == 0) {p3 = i; break;}
                 }
                 if (tmp[0][p1] == '+') p1++;
                 copyStrSnip(tmp[0], p1, p2, tmp[2]);
@@ -1144,7 +1220,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 while (tmp[2][i] == '0') i++;
                 copyStrSnip(tmp[2], i, strlen(tmp[2]), tmp[2]);
                 copyStrSnip(tmp[0], p3, strlen(tmp[0]), tmp[3]);
-                if (p1 != 0) copyStrSnip(tmp[0], 0, p1, tmp[1]);
+                if (p1) copyStrSnip(tmp[0], 0, p1, tmp[1]);
                 copyStrApnd(tmp[2], tmp[1]);
                 copyStrApnd(tmp[3], tmp[1]);
                 copyStr(tmp[1], tmp[0]);
@@ -1159,7 +1235,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         if (tmp[1][0] == '.' && !tmp[1][1]) {cerr = 1; dt = 0; goto gvreturn;}
         int i = 0, j = strlen(tmp[1]);
         bool dp = false;
-        while (tmp[1][i] != 0) {if (tmp[1][i] == '.') {tmp[1][i + 7] = 0; dp = true; break;} i++;}
+        while (tmp[1][i]) {if (tmp[1][i] == '.') {tmp[1][i + 7] = 0; dp = true; break;} i++;}
         i = 0;
         while (tmp[1][i] == '0') i++;
         if (dp) {
@@ -1208,7 +1284,7 @@ int getArgCt(char* inbuf) {
     int pct = 0;
     int j = 0;
     while (inbuf[j] == ' ') {j++;}
-    for (int i = j; inbuf[i] != 0; i++) {
+    for (int i = j; inbuf[i]; i++) {
         if (ct == 0) ct = 1;
         if (inbuf[i] == '(' && !inStr) {pct++;}
         if (inbuf[i] == ')' && !inStr) {pct--;}
@@ -1223,7 +1299,7 @@ int getArg(int num, char* inbuf, char* outbuf) {
     int pct = 0;
     int ct = 0;
     int len = 0;
-    for (int i = 0; inbuf[i] != 0 && ct <= num; i++) {
+    for (int i = 0; inbuf[i] && ct <= num; i++) {
         if (inbuf[i] == '(' && !inStr) {pct++;}
         if (inbuf[i] == ')' && !inStr) {pct--;}
         if (inbuf[i] == '"') {inStr = !inStr;}
@@ -1241,10 +1317,10 @@ void mkargs() {
     int j = 0;
     while (cmd[j] == ' ') {j++;}
     int h = j;
-    while (cmd[h] != ' ' && cmd[h] != '=' && cmd[h] != 0) {h++;}
+    while (cmd[h] != ' ' && cmd[h] != '=' && cmd[h]) {h++;}
     copyStrSnip(cmd, h + 1, strlen(cmd), tmpbuf[0]);
     int tmph = h;
-    while (cmd[tmph] == ' ' && cmd[tmph] != 0) {tmph++;}
+    while (cmd[tmph] == ' ' && cmd[tmph]) {tmph++;}
     if (cmd[tmph] == '=') {
         strcpy(tmpbuf[1], "SET ");
         cmd[tmph] = ',';
@@ -1379,7 +1455,7 @@ bool runlogic() {
     int i = 0;
     while (cmd[i] == ' ') {i++;}
     int j = i;
-    while (cmd[j] != ' ' && cmd[j] != 0) {j++;}
+    while (cmd[j] != ' ' && cmd[j]) {j++;}
     copyStrSnip(cmd, i, j, ltmp[0]);
     upCase(ltmp[0]);
     cerr = 0;
@@ -1403,7 +1479,7 @@ void runcmd() {
     mkargs();
     argt = realloc(argt, argct + 1);
     arg = realloc(arg, (argct + 1) * sizeof(char*));
-    for (int i = 1; i <= argct; i++) {arg[i] = malloc(0);}
+    for (int i = 1; i <= argct; i++) {arg[i] = NULL;}
     if (debug) printf("running command...\n");
     solvearg(0);
     upCase(arg[0]);
@@ -1477,6 +1553,9 @@ void runcmd() {
                 break;
             case 19:
                 fputs("Expected directory instead of file.", stdout);
+                break;
+            case 20:
+                fputs("File or directory error.", stdout);
                 break;
             case 127:
                 printf("Not a function: '%s'", errstr);

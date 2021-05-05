@@ -9,7 +9,7 @@ if (chkCmd(2, ltmp[0], "?;", "PRINT;")) {
     if (fnstackp > -1) {
         if (fndcmd[fnstackp]) return true;
     }
-    for (int i = j; cmd[i] != 0; i++) {
+    for (int i = j; cmd[i]; i++) {
         if (cmd[i] != ' ') {cerr = 1; return true;}
     }
     fputs("", stdout);
@@ -33,7 +33,7 @@ if (chkCmd(2, ltmp[0], "?", "PRINT")) {
     int pct = 0;
     int ptr = 0;
     int i = j;
-    while (cmd[i] != 0) {
+    while (cmd[i]) {
         i++;
         if (cmd[i] == '(' && !inStr) {pct++;}
         if (cmd[i] == ')' && !inStr) {pct--;}
@@ -69,7 +69,7 @@ if (chkCmd(1, ltmp[0], "DO")) {
         if (fndcmd[fnstackp]) return true;
     }
     int p = j;
-    while (cmd[p] != 0) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
+    while (cmd[p]) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
     dldcmd[dlstackp] = false;
     dlstack[dlstackp] = cmdpos;
     dlpline[dlstackp] = progLine;
@@ -89,7 +89,7 @@ if (chkCmd(1, ltmp[0], "DOWHILE")) {
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     uint8_t testval = logictest(ltmp[1]);
-    if (testval != 1 && testval != 0) return true;
+    if (testval != 1 && testval) return true;
     if (testval == 1) dlpline[dlstackp] = progLine;
     if (testval == 1) dlstack[dlstackp] = cmdpos;
     dldcmd[dlstackp] = (bool)testval;
@@ -113,7 +113,7 @@ if (chkCmd(1, ltmp[0], "LOOP")) {
     dldcmd[dlstackp] = false;
     dlstackp--;
     int p = j;
-    while (cmd[p] != 0) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
+    while (cmd[p]) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
     didloop = true;
     return true;
 }
@@ -130,7 +130,7 @@ if (chkCmd(1, ltmp[0], "LOOPWHILE")) {
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     uint8_t testval = logictest(ltmp[1]);
-    if (testval != 1 && testval != 0) return true;
+    if (testval != 1 && testval) return true;
     if (testval == 1) {cp = dlstack[dlstackp]; progLine = dlpline[dlstackp]; lockpl = true;}
     dldcmd[dlstackp] = false;
     dlstackp--;
@@ -151,7 +151,7 @@ if (chkCmd(1, ltmp[0], "IF")) {
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     uint8_t testval = logictest(ltmp[1]);
-    if (testval != 1 && testval != 0) return true;
+    if (testval != 1 && testval) return true;
     itdcmd[itstackp] = (bool)!testval;
     return true;
 }

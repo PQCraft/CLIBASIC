@@ -16,7 +16,7 @@ if (chkCmd(1, farg[0], "ASC")) {
     if (fargct == 2) {
         if (fargt[2] != 2) {cerr = 2; goto fexit;}
         pos = (int)atoi(farg[2]);
-        if (pos < 0) pos = 0;
+        if (pos < 0) {cerr = 16; goto fexit;}
         if (pos > (int)strlen(farg[1])) pos = strlen(farg[1]);
     }
     sprintf(outbuf, "%d", farg[1][pos]);
@@ -45,42 +45,42 @@ if (chkCmd(2, farg[0], "RND", "RAND")) {
 if (chkCmd(1, farg[0], "TIMERUS")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;} 
+    if (fargct) {cerr = 3; goto fexit;} 
     sprintf(outbuf, "%llu", (long long unsigned)timer());
     goto fexit;
 }
 if (chkCmd(1, farg[0], "TIMERMS")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;} 
+    if (fargct) {cerr = 3; goto fexit;} 
     sprintf(outbuf, "%llu", (long long unsigned)timer() / 1000);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "TIMER")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;} 
+    if (fargct) {cerr = 3; goto fexit;} 
     sprintf(outbuf, "%llu", (long long unsigned)timer() / 1000000);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "TIMEUS")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;} 
+    if (fargct) {cerr = 3; goto fexit;} 
     sprintf(outbuf, "%llu", (long long unsigned)usTime());
     goto fexit;
 }
 if (chkCmd(1, farg[0], "TIMEMS")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;} 
+    if (fargct) {cerr = 3; goto fexit;} 
     sprintf(outbuf, "%llu", (long long unsigned)usTime() / 1000);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "TIME")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;} 
+    if (fargct) {cerr = 3; goto fexit;} 
     sprintf(outbuf, "%llu", (long long unsigned)usTime() / 1000000);
     goto fexit;
 }
@@ -122,7 +122,7 @@ if (chkCmd(1, farg[0], "INT")) {
     sscanf(farg[1], "%lf", &dbl);
     sprintf(outbuf, "%d", (int)dbl);
     int i;
-    for (i = 0; outbuf[i] != '.' && outbuf[i] != 0; i++) {}
+    for (i = 0; outbuf[i] != '.' && outbuf[i]; i++) {}
     outbuf[i] = 0;
     goto fexit;
 }
@@ -158,7 +158,7 @@ if (chkCmd(1, farg[0], "MOD")) {
 if (chkCmd(1, farg[0], "PI")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     strcpy(outbuf, "3.141592");
     goto fexit;
 }
@@ -281,7 +281,7 @@ if (chkCmd(1, farg[0], "LEN")) {
 if (chkCmd(1, farg[0], "INKEY$")) {
     cerr = 0;
     ftype = 1;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     #ifndef _WIN32
     int tmp;
     if (!(tmp = kbhit())) goto fexit;
@@ -309,7 +309,7 @@ if (chkCmd(1, farg[0], "INKEY$")) {
 if (chkCmd(1, farg[0], "CURX")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     getCurPos();
     sprintf(outbuf, "%d", curx);
     goto fexit;
@@ -317,7 +317,7 @@ if (chkCmd(1, farg[0], "CURX")) {
 if (chkCmd(1, farg[0], "CURY")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     getCurPos();
     sprintf(outbuf, "%d", cury);
     goto fexit;
@@ -325,14 +325,14 @@ if (chkCmd(1, farg[0], "CURY")) {
 if (chkCmd(1, farg[0], "FGC")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     sprintf(outbuf, "%d", (int)fgc);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "BGC")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     sprintf(outbuf, "%d", (int)bgc);
     goto fexit;
 }
@@ -366,14 +366,84 @@ if (chkCmd(1, farg[0], "INPUT$")) {
     if (debug) printf("input output: {%s}\n", outbuf);
     goto fexit;
 }
+if (chkCmd(1, farg[0], "LINES")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    int cl = 1;
+    if (!farg[1][0]) {strcpy(outbuf, "0"); goto fexit;}
+    outbuf[0] = 0;
+    for (i = 0; farg[1][i]; i++) {
+        if (farg[1][i] == '\n') {
+            cl++;
+        }
+    }
+    sprintf(outbuf, "%d", cl);
+    goto fexit;
+}
+if (chkCmd(1, farg[0], "LINE$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 2) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2 || fargt[2] != 1) {cerr = 2; goto fexit;}
+    int cl = 0, tl = atoi(farg[1]);
+    if (tl < 0) {cerr = 16; goto fexit;}
+    int i;
+    outbuf[0] = 0;
+    for (i = 0; farg[2][i]; i++) {
+        if (farg[2][i] == '\n') {
+            cl++;
+        } else if (cl == tl) {
+            strApndChar(outbuf, farg[2][i]);
+        }
+    }
+    if (outbuf[strlen(outbuf) - 1] == '\r') outbuf[strlen(outbuf) - 1] = 0;
+    goto fexit;
+}
 if (chkCmd(1, farg[0], "CWD$")) {
     cerr = 0;
     ftype = 1;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     copyStr(getcwd(NULL, 0), outbuf);
     goto fexit;
 }
-if (chkCmd(1, farg[0], "CHDIR")) {
+if (chkCmd(1, farg[0], "FILES$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct) {cerr = 3; goto fexit;}
+    DIR* cwd = opendir(".");
+    if (!cwd) {cerr = 20; goto fexit;}
+    DIR* tmpdir;
+    struct dirent* dir;
+    #ifdef _WIN32
+        #define FSC '\\'
+        strcpy(outbuf, ".\\\n..\\");
+    #else
+        #define FSC '/'
+        strcpy(outbuf, "./\n../");
+    #endif
+    while ((dir = readdir(cwd))) {
+        if ((tmpdir = opendir(dir->d_name)) && strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) {
+            strApndChar(outbuf, '\n');
+            copyStrApnd(dir->d_name, outbuf);
+            strApndChar(outbuf, FSC);
+        }
+        if (tmpdir) closedir(tmpdir);
+    }
+    closedir(cwd);
+    cwd = opendir(".");
+    while ((dir = readdir(cwd))) {
+        if (!(tmpdir = opendir(dir->d_name))) {
+            strApndChar(outbuf, '\n');
+            copyStrApnd(dir->d_name, outbuf);
+        }
+        if (tmpdir) closedir(tmpdir);
+    }
+    closedir(cwd);
+    goto fexit;
+}
+if (chkCmd(2, farg[0], "CHDIR", "CD")) {
     cerr = 0;
     ftype = 1;
     if (fargct != 1) {cerr = 3; goto fexit;}
@@ -387,14 +457,14 @@ if (chkCmd(1, farg[0], "CHDIR")) {
 if (chkCmd(1, farg[0], "_HOME$")) {
     cerr = 0;
     ftype = 1;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     copyStr(gethome(), outbuf);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "_PROMPT$")) {
     cerr = 0;
     ftype = 1;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     int tmpt = getVal(prompt, outbuf);
     if (tmpt != 1) strcpy(outbuf, "CLIBASIC> ");
     goto fexit;
@@ -402,35 +472,35 @@ if (chkCmd(1, farg[0], "_PROMPT$")) {
 if (chkCmd(1, farg[0], "_DEBUG")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     sprintf(outbuf, "%d", (int)debug);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "_TXTLOCK")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     sprintf(outbuf, "%d", (int)textlock);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "_VER$")) {
     cerr = 0;
     ftype = 1;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     copyStr(VER, outbuf);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "_BITS$")) {
     cerr = 0;
     ftype = 1;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     copyStr(BVER, outbuf);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "_OS$")) {
     cerr = 0;
     ftype = 1;
-    if (fargct != 0) {cerr = 3; goto fexit;}
+    if (fargct) {cerr = 3; goto fexit;}
     copyStr(OSVER, outbuf);
     goto fexit;
 }
