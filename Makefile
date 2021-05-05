@@ -1,20 +1,19 @@
 C = gcc
 
 CFLAGS = -Wall -Wextra -O2 -s -no-pie -lm -lreadline --std=c99
+
 CBITS = $(shell getconf LONG_BIT)
 
-BUILD__ = $(C) clibasic.c $(CFLAGS) -D B$(CBITS) -o clibasic && chmod +x ./clibasic
-BUILD32 = $(C) clibasic.c -m32 $(CFLAGS) -D B32 -o clibasic && chmod +x ./clibasic
+BUILD__ = $(C) clibasic.c $(CFLAGS) -DB$(CBITS) -o clibasic && chmod +x ./clibasic
+BUILD32 = $(C) clibasic.c -m32 $(CFLAGS) -DB32 -o clibasic && chmod +x ./clibasic
 
-all:
-	rm -f ./clibasic
-	$(BUILD__)
-	./clibasic
+INSTALL_TO = "/usr/bin/clibasic"
 
-all32:
-	rm -f ./clibasic
-	$(BUILD32)
-	./clibasic
+INSTALL = sudo rm -f $(INSTALL_TO); sudo cp ./clibasic $(INSTALL_TO)
+
+all: clean build run
+
+all32: clean build32 run
 
 build:
 	$(BUILD__)
@@ -41,11 +40,11 @@ update:
 
 install:
 	if [ ! -f ./clibasic ]; then $(BUILD__); fi
-	sudo rm -f /usr/bin/clibasic; sudo cp ./clibasic /usr/bin/clibasic
+	$(INSTALL)
 
 install32:
 	if [ ! -f ./clibasic ]; then $(BUILD32); fi
-	sudo rm -f /usr/bin/clibasic; sudo cp ./clibasic /usr/bin/clibasic
+	$(INSTALL)
 
 run:
 	./clibasic

@@ -236,13 +236,14 @@ if (chkCmd(1, arg[0], "_PROMPT")) {
 }
 if (chkCmd(1, arg[0], "_PROMPTTAB")) {
     if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     tab_width = atoi(arg[1]);
-    cerr = 0;
 }
-if (chkCmd(1, arg[0], "_AUTOHIST")) {
+if (chkCmd(1, arg[0], "_AUTOCMDHIST")) {
+    cerr = 0;
     if (inProg) {cerr = 254; goto cmderr;}
     autohist = true;
     goto cmderr;

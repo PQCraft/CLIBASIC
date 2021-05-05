@@ -8,6 +8,9 @@
 /* Uses strcpy and strcat in place of copyStr and copyStrApnd */
 #define BUILT_IN_STRING_FUNCS // Comment out this line to use CLIBASIC string functions
 
+/* Sets what file CLIBASIC uses to store command history */
+#define HIST_FILE ".clibasic_history" // Change the value to change where CLIBASIC puts the history file
+
 /* ------------------------ */
 
 /* Always use latest POSIX features */
@@ -41,19 +44,20 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#ifdef __unix__
-#include <termios.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+#ifdef __unix__
+#include <termios.h>
 #include <sys/ioctl.h>
 #endif
 #ifdef _WIN32
 #include <windows.h>
 #include <conio.h>
+#include <fileapi.h>
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.15";
+char VER[] = "0.15.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -67,7 +71,7 @@ char VER[] = "0.15";
     char OSVER[] = "MacOS";
 #else
     #warning /* No matching operating system defines */ \
-    Could not detect operating system (No matching operating system defines; this may cause compilation failure).
+    Could not detect operating system. (No matching operating system defines; this may cause compilation failure)
     char OSVER[] = "?";
 #endif
 
@@ -77,7 +81,7 @@ char VER[] = "0.15";
     char BVER[] = "64";
 #else
     #warning /* Neither B32 or B64 was defined */ \
-    Could not detect architecture bits. BVER[] will be set to "?". Please use '-D B64' or '-D B32' when compiling (Neither B32 or B64 was defined).
+    Could not detect architecture bits. Please use '-DB64' or '-DB32' when compiling. (Neither B32 or B64 was defined)
     char BVER[] = "?";
 #endif
 
@@ -134,7 +138,6 @@ char forbuf[4][CB_BUF_SIZE];
 char* errstr;
 
 char conbuf[CB_BUF_SIZE];
-char lastcb[CB_BUF_SIZE];
 char prompt[CB_BUF_SIZE];
 char pstr[CB_BUF_SIZE];
 
@@ -238,24 +241,7 @@ void setcsr() {
     SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
 }
 void rl_sigh(int sig) {signal(sig, rl_sigh);}
-char* readline(char* prompt) {
-    //(https://theenglishfarm.com/sites/default/files/styles/featured_image/public/harold_2.jpg?itok=uo6h4hz4)
-    fputs(prompt, stdout);
-    fflush(stdout);
-    char buf[CB_BUF_SIZE];
-    buf[0] = 0;
-    fflush(stdin);
-    scanf("%[^\n]s ", buf);
-    rlptr = malloc(strlen(buf) + 1);
-    strcpy(rlptr, buf);
-    return rlptr;
-}
-void add_history(char* str) {(void)str;}
-void read_history(char* str) {(void)str;}
-void write_history(char* str) {(void)str;}
-void clear_history() {};
 void txtqunlock() {}
-void rl_resize_terminal() {}
 //(https://i.kym-cdn.com/entries/icons/original/000/027/746/crying.jpg)
 #endif
 
@@ -281,7 +267,10 @@ void cleanExit() {
     signal(SIGTERM, forceExit);
     int ret = chdir(gethome());
     (void)ret;
-    if (autohist) write_history(".clibasic_history");
+    if (autohist) write_history(HIST_FILE);
+    #ifdef _WIN32
+    SetFileAttributesA(HIST_FILE, FILE_ATTRIBUTE_HIDDEN);
+    #endif
     if (!keep) printf("\e[0m");
     //fflush(stdout);
     getCurPos();
@@ -437,8 +426,8 @@ int main(int argc, char* argv[]) {
         } else {
             char* tmpcwd = getcwd(NULL, 0);
             int ret = chdir(homepath);
-            FILE* tmpfile = fopen(".clibasic_history", "r");
-            if ((autohist = (bool)tmpfile)) {fclose(tmpfile); read_history(".clibasic_history");}
+            FILE* tmpfile = fopen(HIST_FILE, "r");
+            if ((autohist = (bool)tmpfile)) {fclose(tmpfile); read_history(HIST_FILE);}
             prog = fopen("AUTORUN.BAS", "r"); progFilename = malloc(12); strcpy(progFilename, "AUTORUN.BAS");
             if (!prog) {prog = fopen("autorun.bas", "r"); strcpy(progFilename, "autorun.bas");}
             if (!prog) {free(progFilename);}
@@ -459,12 +448,14 @@ int main(int argc, char* argv[]) {
             char* tmpstr = NULL;
             int tmpt = getVal(prompt, pstr);
             if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
-            #ifdef __unix__
             getCurPos();
+            #ifdef __unix__
             curx--;
             int ptr = strlen(pstr);
             while (curx) {pstr[ptr] = 22; ptr++; curx--;}
             pstr[ptr] = 0;
+            #else
+            if (curx > 1) putchar('\n');
             #endif
             updateTxtAttrib();
             inprompt = true;
@@ -477,13 +468,8 @@ int main(int argc, char* argv[]) {
             inprompt = false;
             if (!tmpstr) cleanExit();
             if (tmpstr[0] == 0) {free(tmpstr); goto brkproccmd;}
-            #ifdef __unix__
             HIST_ENTRY* tmphist = history_get(history_length);
             if (!tmphist || strcmp(tmpstr, tmphist->line)) add_history(tmpstr);
-            #else
-            if (strcmp(tmpstr, lastcb)) add_history(tmpstr);
-            copyStr(tmpstr, lastcb);
-            #endif
             copyStr(tmpstr, conbuf);
             free(tmpstr);
         }
@@ -585,7 +571,7 @@ void wait(uint64_t d) {
 bool isFile(char* path) {
     struct stat pathstat;
     stat(path, &pathstat);
-    return (bool)(S_ISREG(pathstat.st_mode));
+    return !(S_ISDIR(pathstat.st_mode));
 }
 
 void getCurPos() {
@@ -1540,10 +1526,10 @@ void runcmd() {
                 fputs("Reached FOR limit", stdout);
                 break;
             case 15:
-                printf("File not found: '%s'", errstr);
+                printf("File not found or permission denied: '%s'", errstr);
                 break;
             case 16:
-                fputs("Invalid data or data range exceded", stdout);
+                fputs("Invalid data or data range exceeded", stdout);
                 break;
             case 17:
                 printf("Cannot change to directory '%s'", errstr);
