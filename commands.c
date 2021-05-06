@@ -259,7 +259,10 @@ if (chkCmd(1, arg[0], "_SAVECMDHIST")) {
     } else {
         char* tmpcwd = getcwd(NULL, 0);
         int ret = chdir(gethome());
-        write_history(".clibasic_history");
+        write_history(HIST_FILE);
+        #ifdef _WIN32
+        SetFileAttributesA(HIST_FILE, FILE_ATTRIBUTE_HIDDEN);
+        #endif
         ret = chdir(tmpcwd);
         (void)ret;
     }

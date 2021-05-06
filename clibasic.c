@@ -57,7 +57,7 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.15.1";
+char VER[] = "0.15.2";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
