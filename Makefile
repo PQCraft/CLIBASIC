@@ -22,21 +22,12 @@ build32:
 	$(BUILD32)
 
 update:
-	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/clibasic.c > .tmp
-	rm -f clibasic.c
-	mv .tmp clibasic.c
-	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/commands.c > .tmp
-	rm -f commands.c
-	mv .tmp commands.c
-	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/functions.c > .tmp
-	rm -f functions.c
-	mv .tmp functions.c
-	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/logic.c > .tmp
-	rm -f logic.c
-	mv .tmp logic.c
-	curl https://raw.githubusercontent.com/PQCraft/clibasic/master/Makefile > .tmp
-	rm -f Makefile
-	mv .tmp Makefile
+	wget https://github.com/PQCraft/clibasic/archive/refs/heads/master.zip -O clibasic.zip
+	unzip clibasic.zip
+	rm -f clibasic.zip
+	ls | grep -v clibasic-master | while read line; do rm -rf "$$line"; done
+	mv clibasic-master/* ./
+	rm -rf clibasic-master
 
 install:
 	if [ ! -f ./clibasic ]; then $(BUILD__); fi
