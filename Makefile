@@ -22,11 +22,11 @@ build32:
 	$(BUILD32)
 
 update:
+	rm -rf clibasic-master clibasic.zip
 	wget https://github.com/PQCraft/clibasic/archive/refs/heads/master.zip -O clibasic.zip
 	unzip clibasic.zip
 	rm -f clibasic.zip
-	ls | grep -v clibasic-master | while read line; do rm -rf "$$line"; done
-	mv clibasic-master/* ./
+	cp -rf clibasic-master/* ./
 	rm -rf clibasic-master
 
 install:
