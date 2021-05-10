@@ -57,7 +57,7 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.15.2";
+char VER[] = "0.15.3";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -493,7 +493,25 @@ int main(int argc, char* argv[]) {
         progLine = 1;
         bool comment = false;
         while (1) {
-            if (!inProg) {
+            if (inProg) {
+                if (progbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
+                if ((progbuf[cp] == ':' && !inStr) || progbuf[cp] == '\n' || progbuf[cp] == 0) {
+                    if (progbuf[cp - cmdl - 1] == '\n' && !lockpl) {progLine++; if (debug) printf("found nl: [%lld]\n", (long long int)cp);}
+                    if (lockpl) lockpl = false;
+                    while (progbuf[cp - cmdl] == ' ' && cmdl > 0) {cmdl--;}
+                    cmd = realloc(cmd, (cmdl + 1) * sizeof(char));
+                    cmdpos = cp - cmdl;
+                    copyStrSnip(progbuf, cp - cmdl, cp, cmd);
+                    cmdl = 0;
+                    if (debug) printf("conbuf: {%s}\n", conbuf);
+                    runcmd();
+                    if (cmdint) {inProg = false; if (prog != NULL) {fclose(prog);} free(progFilename); cmdint = false; goto brkproccmd;}
+                    if (cp == -1) {inProg = false; if (prog != NULL) {fclose(prog);} free(progFilename); goto brkproccmd;}
+                    if (progbuf[cp] == 0) {inProg = false; if (prog != NULL) {fclose(prog);} free(progFilename); goto brkproccmd;}
+                } else
+                {cmdl++;}
+                if (!didloop) {cp++;} else {didloop = false;}
+            } else {
                 if (!inStr && conbuf[cp] == '\'') comment = true;
                 if (conbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((conbuf[cp] == ':' && !inStr) || conbuf[cp] == 0) {
@@ -512,24 +530,6 @@ int main(int argc, char* argv[]) {
                 } else
                 {cmdl++;}
                 if (!didloop) {if (comment) {conbuf[cp] = 0;} cp++;} else {didloop = false;}
-            } else {
-                if (progbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
-                if ((progbuf[cp] == ':' && !inStr) || progbuf[cp] == '\n' || progbuf[cp] == 0) {
-                    if (progbuf[cp - cmdl - 1] == '\n' && !lockpl) {progLine++; if (debug) printf("found nl: [%lld]\n", (long long int)cp);}
-                    if (lockpl) lockpl = false;
-                    while (progbuf[cp - cmdl] == ' ' && cmdl > 0) {cmdl--;}
-                    cmd = realloc(cmd, (cmdl + 1) * sizeof(char));
-                    cmdpos = cp - cmdl;
-                    copyStrSnip(progbuf, cp - cmdl, cp, cmd);
-                    cmdl = 0;
-                    if (debug) printf("conbuf: {%s}\n", conbuf);
-                    runcmd();
-                    if (cmdint) {inProg = false; if (prog != NULL) {fclose(prog);} free(progFilename); cmdint = false; goto brkproccmd;}
-                    if (cp == -1) {inProg = false; if (prog != NULL) {fclose(prog);} free(progFilename); goto brkproccmd;}
-                    if (progbuf[cp] == 0) {inProg = false; if (prog != NULL) {fclose(prog);} free(progFilename); goto brkproccmd;}
-                } else
-                {cmdl++;}
-                if (!didloop) {cp++;} else {didloop = false;}
             }
         }
         brkproccmd:
@@ -1029,7 +1029,6 @@ bool gvchkchar(char* tmp, int i) {
 uint8_t getVal(char* inbuf, char* outbuf) {
     if (debug) printf("getVal(\"%s\", \"\");\n", inbuf);
     if (inbuf[0] == 0) {return 255;}
-    //char tmp[4][CB_BUF_SIZE];
     char* tmp[4] = {malloc(CB_BUF_SIZE), malloc(CB_BUF_SIZE), malloc(CB_BUF_SIZE), malloc(CB_BUF_SIZE)};
     int ip = 0, jp = 0;
     uint8_t t = 0;
@@ -1043,7 +1042,10 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     int tmpct = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = '"'; tmp[3][1] = 0;
     for (int i = 0; inbuf[i]; i++) {
-        if (inbuf[i] == '(') {if (tmpct == 0) {ip = i;} tmpct++;}
+        if (inbuf[i] == '(') {
+            if (tmpct == 0) {ip = i;}
+            tmpct++;
+        }
         if (inbuf[i] == ')') {
             tmpct--;
             if (tmpct == 0 && (ip == 0 || isSpChar(inbuf[ip - 1]))) {
@@ -1077,24 +1079,24 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             if (inbuf[jp] == '"') {
                 inStr = !inStr;
                 if (seenStr[pct] && inStr) {
-                    cerr = 1;
-                    dt = 0;
                     free(seenStr);
+                    dt = 0;
+                    cerr = 1;
                     goto gvreturn;
                 }
                 seenStr[pct] = true;
             }
             if (inbuf[jp] == '(') {
                 pct++;
-                seenStr = realloc(seenStr, (pct * 1) * sizeof(bool));
+                seenStr = realloc(seenStr, (pct + 1) * sizeof(bool));
                 seenStr[pct] = false;
             }
             if (inbuf[jp] == ')') {pct--; seenStr = realloc(seenStr, (pct * 1) * sizeof(bool));}
             if ((isSpChar(inbuf[jp]) && !inStr && pct == 0) || inbuf[jp] == 0) {break;}
             jp++;
         }
-        //gvbrk:
         free(seenStr);
+        if (inStr) {dt = 0; cerr = 1; goto gvreturn;}
         copyStrSnip(inbuf, ip, jp, tmp[0]);
         t = getType(tmp[0]);
         if (t == 1) getStr(tmp[0], tmp[0]);
@@ -1447,16 +1449,14 @@ bool runlogic() {
     cerr = 0;
     #include "logic.c"
     return false;
-    lexit:
-    return true;
 }
 
 void runcmd() {
     if (cmd[0] == 0) return;
     cerr = 0;
-    bool lgc = runlogic();
-    if (lgc) goto cmderr;
     if (debug) printf("testing logic...\n");
+    bool lgc = runlogic();
+    if (lgc) {if (debug) printf("tested logic.\n"); goto cmderr;}
     if (dlstackp > -1) {if (dldcmd[dlstackp]) return;}
     if (itstackp > -1) {if (itdcmd[itstackp]) return;}
     if (fnstackp > -1) {if (fndcmd[fnstackp]) return;}
@@ -1472,8 +1472,9 @@ void runcmd() {
     if (debug) printf("C [%d]: {%s}\n", 0, arg[0]);
     cerr = 255;
     #include "commands.c"
-    if (debug) printf("cerr: [%d]\n", cerr);
+    if (debug) printf("no error");
     cmderr:
+    if (debug) printf("cerr: [%d]\n", cerr);
     if (cerr) {
         getCurPos();
         if (curx != 1) printf("\n");

@@ -46,18 +46,22 @@ if (chkCmd(2, ltmp[0], "?", "PRINT")) {
             if (debug) printf(">ltmp[1]: {%s}\n", ltmp[1]);
             if (!(tmpt = getVal(ltmp[1], ltmp[1]))) return true;
             if (debug) printf(">ltmp[1]: {%s}\n", ltmp[1]);
-            if (cmd[j] == ',' && tmpt != 255) putchar('\t');
+            if (cmd[j] == ',') {
+                if (tmpt != 255) {putchar('\t');}
+                else {putchar('\n');}
+            }
             fputs(ltmp[1], stdout);
             if (cmd[i] == 0 && len > 0) putchar('\n');
             j = i;
         } else
         {ltmp[1][ptr] = cmd[i]; ptr++; if (debug) printf("ltmp[1]: {%s}\n", ltmp[1]);}
     }
+    if (pct || inStr) {cerr = 1; return true;}
     fflush(stdout);
     return true;
 }
 if (chkCmd(1, ltmp[0], "DO")) {
-    if (dlstackp >= 255) {cerr = 12; goto lexit;}
+    if (dlstackp >= 255) {cerr = 12; return true;}
     dlstackp++;
     if (itstackp > -1) {
         if (itdcmd[itstackp]) {dldcmd[dlstackp] = true; return true;}
@@ -76,7 +80,7 @@ if (chkCmd(1, ltmp[0], "DO")) {
     return true;
 }
 if (chkCmd(1, ltmp[0], "DOWHILE")) {
-    if (dlstackp >= 255) {cerr = 12; goto lexit;}
+    if (dlstackp >= 255) {cerr = 12; return true;}
     dlstackp++;
     if (itstackp > -1) {
         if (itdcmd[itstackp]) {dldcmd[dlstackp] = true; return true;}
@@ -156,7 +160,7 @@ if (chkCmd(1, ltmp[0], "IF")) {
     return true;
 }
 if (chkCmd(1, ltmp[0], "ELSE")) {
-    if (itstackp <= -1) {cerr = 8; goto lexit;}
+    if (itstackp <= -1) {cerr = 8; return true;}
     if (itstackp > 0) {
         if (itdcmd[itstackp - 1]) return true;
     }
@@ -172,7 +176,7 @@ if (chkCmd(1, ltmp[0], "ELSE")) {
     return true;
 }
 if (chkCmd(1, ltmp[0], "ENDIF")) {
-    if (itstackp <= -1) {cerr = 7; goto lexit;}
+    if (itstackp <= -1) {cerr = 7; return true;}
     if (fnstackp > -1) {
         if (fndcmd[fnstackp]) return true;
     }
@@ -223,7 +227,7 @@ if (chkCmd(1, ltmp[0], "FOR")) {
     return true;
 }
 if (chkCmd(1, ltmp[0], "NEXT")) {
-    if (fnstackp <= -1) {cerr = 9; goto lexit;}
+    if (fnstackp <= -1) {cerr = 9; return true;}
     if (fninfor[fnstackp]) {
         cp = fnstack[fnstackp];
         progLine = fnpline[fnstackp];
