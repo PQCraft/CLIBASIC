@@ -7,24 +7,24 @@ assignees: ''
 
 ---
 
-### Steps to reproduce
+### Steps to reproduce:
 (A numbered list of instructions to reproduce the bug)
 
-### Expected behavior
+### Expected behavior:
 (What was supposed to happen)
 
-### Actual behavior
+### Actual behavior:
 (What is happening instead)
 
-### Screenshots
+### Screenshots:
 Add screenshots or paste terminal output
 ```
 (Paste terminal output here or remove the backticks and attach screenshots)
 ```
 
-### Device info
+### Device info:
 - **Type:** (PC, phone, etc)
 - **OS:** (Windows, Linux, MacOS, etc)
 
-### Additional information
+### Additional information:
 (If applicable, add more info on the problem)
