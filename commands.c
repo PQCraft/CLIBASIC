@@ -169,11 +169,16 @@ if (chkCmd(1, arg[0], "RUN")) {
         cerr = 15;
         goto cmderr;
     }
-    progFilename = malloc(argl[1] + 1);
-    copyStr(arg[1], progFilename);
-    if (!isFile(progFilename)) {cerr = 18; goto cmderr;}
-    loadProg();
-    chkinProg = true;
+    if (!isFile(arg[1])) {cerr = 18; goto cmderr;}
+    progFilename = malloc(argl[1] + strlen(startcmd) + 7);
+    copyStr(startcmd, progFilename);
+    copyStrApnd(" -f \"", progFilename);
+    copyStrApnd(arg[1], progFilename);
+    copyStrApnd("\"", progFilename);
+    int ret = system(progFilename);
+    (void)ret;
+    free(progFilename);
+    progFilename = NULL;
     goto cmderr;
 }
 if (chkCmd(2, arg[0], "SRAND", "SRND")) {

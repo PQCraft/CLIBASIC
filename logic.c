@@ -35,9 +35,9 @@ if (chkCmd(2, ltmp[0], "?", "PRINT")) {
     int i = j;
     while (cmd[i]) {
         i++;
+        if (cmd[i] == '"') {inStr = !inStr;}
         if (cmd[i] == '(' && !inStr) {pct++;}
         if (cmd[i] == ')' && !inStr) {pct--;}
-        if (cmd[i] == '"') {inStr = !inStr;}
         if (cmd[i] == ' ' && !inStr) {} else
         if ((cmd[i] == ',' || cmd[i] == ';' || cmd[i] == 0) && !inStr && pct == 0) {
             ltmp[1][ptr] = 0; ptr = 0;

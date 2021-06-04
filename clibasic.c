@@ -57,7 +57,7 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.15.3";
+char VER[] = "0.15.4";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -184,6 +184,8 @@ char* cwd = NULL;
 bool autohist = false;
 
 int tab_width = 4;
+
+char* startcmd;
 
 #ifdef __unix__
 struct termios term, restore;
@@ -314,17 +316,32 @@ char* gethome() {
 }
 
 int main(int argc, char* argv[]) {
+    startcmd = argv[0];
     #ifdef __unix__
     if (system("tty -s 1> /dev/null 2> /dev/null")) {
         char command[CB_BUF_SIZE];
         copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e 'echo -e -n \"\x1b[\x33 q\" && ", command);
-        copyStrApnd(argv[0], command);
+        copyStrApnd(startcmd, command);
         strApndChar(command, '\'');
         exit(system(command));
     }
     rl_readline_name = "CLIBASIC";
     rl_attempted_completion_function = (rl_completion_func_t*)rl_tab;
     rl_getc_function = getc;
+    #endif
+    #ifdef _WIN32 // Copied from Microsoft docs
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut == INVALID_HANDLE_VALUE) {
+        exit(GetLastError());
+    }
+    DWORD dwMode = 0;
+    if (!GetConsoleMode(hOut, &dwMode)){
+        exit(GetLastError());
+    }
+    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    if (!SetConsoleMode(hOut, dwMode)) {
+        exit(GetLastError());
+    }
     #endif
     if (!isatty(STDERR_FILENO)) {exit(EIO);}
     if (!isatty(STDIN_FILENO)) {fputs("CLIBASIC does not support pipes.\n", stderr); exit(EIO);}
@@ -1041,13 +1058,29 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     if ((isSpChar(inbuf[0]) && inbuf[0] != '-') || isSpChar(inbuf[strlen(inbuf) - 1])) {cerr = 1; dt = 0; goto gvreturn;}
     int tmpct = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = '"'; tmp[3][1] = 0;
+    bool* tmpseenStr = malloc(1 * sizeof(bool));
+    tmpseenStr[0] = false;
     for (int i = 0; inbuf[i]; i++) {
-        if (inbuf[i] == '(') {
+        if (inbuf[i] == '"') {
+            inStr = !inStr;
+            if (tmpseenStr[tmpct] && inStr) {
+                free(tmpseenStr);
+                dt = 0;
+                cerr = 1;
+                goto gvreturn;
+            }
+            tmpseenStr[tmpct] = true;
+        }
+        if (isSpChar(inbuf[i]) && !inStr && tmpct == 0) tmpseenStr[tmpct] = false;
+        if (inbuf[i] == '(' && !inStr) {
             if (tmpct == 0) {ip = i;}
             tmpct++;
+            tmpseenStr = realloc(tmpseenStr, (tmpct + 1) * sizeof(bool));
+            tmpseenStr[tmpct] = false;
         }
-        if (inbuf[i] == ')') {
+        if (inbuf[i] == ')' && !inStr) {
             tmpct--;
+            tmpseenStr = realloc(tmpseenStr, (tmpct + 1) * sizeof(bool));
             if (tmpct == 0 && (ip == 0 || isSpChar(inbuf[ip - 1]))) {
                 jp = i;
                 copyStrSnip(inbuf, ip + 1, jp, tmp[0]);
@@ -1091,7 +1124,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 seenStr = realloc(seenStr, (pct + 1) * sizeof(bool));
                 seenStr[pct] = false;
             }
-            if (inbuf[jp] == ')') {pct--; seenStr = realloc(seenStr, (pct * 1) * sizeof(bool));}
+            if (inbuf[jp] == ')') {pct--; seenStr = realloc(seenStr, (pct + 1) * sizeof(bool));}
             if ((isSpChar(inbuf[jp]) && !inStr && pct == 0) || inbuf[jp] == 0) {break;}
             jp++;
         }
