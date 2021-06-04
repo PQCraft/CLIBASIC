@@ -11,6 +11,9 @@
 /* Sets what file CLIBASIC uses to store command history */
 #define HIST_FILE ".clibasic_history" // Change the value to change where CLIBASIC puts the history file
 
+/* Changes the terminal title to display the CLIBASIC version and bits */
+#define CHANGE_TITLE // Comment out this line to disable changing the terminal/console title
+
 /* ------------------------ */
 
 /* Always use latest POSIX features */
@@ -57,7 +60,7 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.15.4";
+char VER[] = "0.15.4.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -187,6 +190,8 @@ int tab_width = 4;
 
 char* startcmd;
 
+bool changedtitle = false;
+
 #ifdef __unix__
 struct termios term, restore;
 static struct termios orig_termios;
@@ -273,6 +278,9 @@ void cleanExit() {
     #ifdef _WIN32
     SetFileAttributesA(HIST_FILE, FILE_ATTRIBUTE_HIDDEN);
     #endif
+    #ifdef CHANGE_TITLE
+    if (changedtitle) printf("\e[23;0t");
+    #endif
     if (!keep) printf("\e[0m");
     //fflush(stdout);
     getCurPos();
@@ -329,6 +337,12 @@ int main(int argc, char* argv[]) {
     rl_attempted_completion_function = (rl_completion_func_t*)rl_tab;
     rl_getc_function = getc;
     #endif
+    if (!isatty(STDERR_FILENO)) {exit(EIO);}
+    if (!isatty(STDIN_FILENO)) {fputs("CLIBASIC does not support pipes.\n", stderr); exit(EIO);}
+    if (!isatty(STDOUT_FILENO)) {fputs("CLIBASIC does not support redirects.\n", stderr); exit(EIO);}
+    signal(SIGINT, cleanExit);
+    signal(SIGKILL, cleanExit);
+    signal(SIGTERM, cleanExit);
     #ifdef _WIN32 // Copied from Microsoft docs
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) {
@@ -343,12 +357,6 @@ int main(int argc, char* argv[]) {
         exit(GetLastError());
     }
     #endif
-    if (!isatty(STDERR_FILENO)) {exit(EIO);}
-    if (!isatty(STDIN_FILENO)) {fputs("CLIBASIC does not support pipes.\n", stderr); exit(EIO);}
-    if (!isatty(STDOUT_FILENO)) {fputs("CLIBASIC does not support redirects.\n", stderr); exit(EIO);}
-    signal(SIGINT, cleanExit);
-    signal(SIGKILL, cleanExit);
-    signal(SIGTERM, cleanExit);
     getCurPos();
     if (curx != 1) putchar('\n');
     bool exit = false;
@@ -406,6 +414,13 @@ int main(int argc, char* argv[]) {
     if (!runfile) {
         printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
         strcpy(prompt, "\"CLIBASIC> \"");
+        #ifdef CHANGE_TITLE
+        printf("\e[22;0t");
+        fflush(stdout);
+        changedtitle = true;
+        printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
+        fflush(stdout);
+        #endif
     }
     if (debug) printf("Running in debug mode\n");
     if (!progbuf) progbuf = NULL;
