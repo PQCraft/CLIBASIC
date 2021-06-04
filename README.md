@@ -27,10 +27,6 @@ Windows 7-10 (`choco`): `mingw`, `make` <br>
 MacOS Mojave-Big Sur (`brew`): `gcc`, `make`, `readline` <br>
 <br>
 ### Notes <br>
-- On Windows please execute the folowing command in CMD as Admin to enable ANSI escape sequnces on CMD:
-    ```
-    reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f
-    ```
 - On Linux if CLIBASIC is not run in a terminal it will attempt to open in XTerm. CLIBASIC will only read arguments if it is run in a terminal.
 - If the file `.clibasic_history` is present in the user's home directory CLIBASIC will automatically save history there. Run `_AUTOCMDHIST`, `_SAVECMDHIST` (without any arguments), or create the file `.clibasic_history` in your home/user folder to enable this feature. Remove the file to disable this feature.
 - CLIBASIC will look for `AUTORUN.BAS` (and `autorun.bas` on Linux) in the user's home directory and run the file if present.
