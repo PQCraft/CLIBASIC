@@ -22,12 +22,7 @@ build32:
 	$(BUILD32)
 
 update:
-	rm -rf clibasic-master clibasic.zip
-	wget https://github.com/PQCraft/clibasic/archive/refs/heads/master.zip -O clibasic.zip
-	unzip clibasic.zip
-	rm -f clibasic.zip
-	cp -rf clibasic-master/* ./
-	rm -rf clibasic-master
+	git clone https://github.com/PQCraft/clibasic .
 
 install:
 	if [ ! -f ./clibasic ]; then $(BUILD__); fi

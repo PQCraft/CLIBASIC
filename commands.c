@@ -9,7 +9,7 @@ if (chkCmd(1, arg[0], "PUT")) {
     cerr = 0;
     for (int i = 1; i <= argct; i++) {if (!solvearg(i)) {goto cmderr;} fputs(arg[i], stdout);}
     fflush(stdout);
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(2, arg[0], "SET", "LET")) {
     if (argct != 2) {cerr = 3; goto cmderr;}
@@ -29,13 +29,13 @@ if (chkCmd(2, arg[0], "SET", "LET")) {
         goto cmderr;
     }
     if (!setVar(tmpargs[1], arg[2], argt[2])) goto cmderr;
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "DEL")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!delVar(tmpargs[1])) goto cmderr;
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "COLOR")) {
     if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
@@ -62,7 +62,7 @@ if (chkCmd(1, arg[0], "COLOR")) {
         }
     }
     fflush(stdout);
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "LOCATE")) {
     cerr = 0;
@@ -88,7 +88,7 @@ if (chkCmd(1, arg[0], "LOCATE")) {
     }
     printf("\e[%d;%dH", cury, curx);
     fflush(stdout);
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "CLS")) {
     cerr = 0;
@@ -101,7 +101,7 @@ if (chkCmd(1, arg[0], "CLS")) {
     }
     printf("\e[48;5;%um\e[H\e[2J\e[3J\e[48;5;%um", tbgc, bgc);
     fflush(stdout);
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "WAITUS")) {
     cerr = 0;
@@ -111,7 +111,7 @@ if (chkCmd(1, arg[0], "WAITUS")) {
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
     wait(d);
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "WAITMS")) {
     cerr = 0;
@@ -121,7 +121,7 @@ if (chkCmd(1, arg[0], "WAITMS")) {
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
     wait(d * 1000);
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "WAIT")) {
     cerr = 0;
@@ -131,13 +131,42 @@ if (chkCmd(1, arg[0], "WAIT")) {
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
     wait(d * 1000000);
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "RESETTIMER")) {
     cerr = 0;
     if (argct) {cerr = 3; goto cmderr;}
     resetTimer();
-    goto cmderr;
+    goto noerr;
+}
+if (chkCmd(2, arg[0], "SRAND", "SRND")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    double rs;
+    sscanf(arg[1], "%lf", &rs);
+    srand(rs);
+    goto noerr;
+}
+if (chkCmd(1, arg[0], "CALL")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    prog = fopen(arg[1], "r");
+    if (!prog) {
+        errstr = realloc(errstr, (argl[1] + 1) * sizeof(char));
+        copyStr(arg[1], errstr);
+        cerr = 15;
+        goto cmderr;
+    }
+    progFilename = malloc(argl[1] + 1);
+    copyStr(arg[1], progFilename);
+    if (!isFile(progFilename)) {cerr = 18; goto cmderr;}
+    loadProg();
+    chkinProg = true;
+    goto noerr;
 }
 if (chkCmd(2, arg[0], "SH", "EXEC")) {
     cerr = 0;
@@ -155,7 +184,7 @@ if (chkCmd(2, arg[0], "SH", "EXEC")) {
     cerr = system(arg[1]);
     if (sh_restoreAttrib) updateTxtAttrib();
     cerr = 0;
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "RUN")) {
     cerr = 0;
@@ -170,8 +199,8 @@ if (chkCmd(1, arg[0], "RUN")) {
         goto cmderr;
     }
     if (!isFile(arg[1])) {cerr = 18; goto cmderr;}
-    progFilename = malloc(argl[1] + strlen(startcmd) + 7);
-    copyStr(startcmd, progFilename);
+    progFilename = malloc(argl[1] + strlen(termargs[0]) + 7);
+    copyStr(termargs[0], progFilename);
     copyStrApnd(" -f \"", progFilename);
     copyStrApnd(arg[1], progFilename);
     copyStrApnd("\"", progFilename);
@@ -179,17 +208,7 @@ if (chkCmd(1, arg[0], "RUN")) {
     (void)ret;
     free(progFilename);
     progFilename = NULL;
-    goto cmderr;
-}
-if (chkCmd(2, arg[0], "SRAND", "SRND")) {
-    cerr = 0;
-    if (argct != 1) {cerr = 3; goto cmderr;}
-    if (!solvearg(1)) goto cmderr;
-    if (argt[1] != 2) {cerr = 2; goto cmderr;}
-    double rs;
-    sscanf(arg[1], "%lf", &rs);
-    srand(rs);
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "FILES")) {
     cerr = 0;
@@ -215,7 +234,7 @@ if (chkCmd(1, arg[0], "FILES")) {
         if (tmpdir) closedir(tmpdir);
     }
     closedir(cwd);
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(2, arg[0], "CHDIR", "CD")) {
     cerr = 0;
@@ -228,7 +247,34 @@ if (chkCmd(2, arg[0], "CHDIR", "CD")) {
         cerr = 17;
         goto cmderr;
     }
-    goto cmderr;
+    goto noerr;
+}
+if (chkCmd(1, arg[0], "_RESETTITLE")) {
+    if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    if (!changedtitle) {
+        if (changedtitlecmd) fputs("\e[23;0t", stdout);
+        goto noerr;
+    }
+    printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
+    fflush(stdout);
+    goto noerr;
+}
+if (chkCmd(1, arg[0], "_TITLE")) {
+    if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    if (!changedtitle) {
+        fputs("\e[22;0t", stdout);
+        fflush(stdout);
+        changedtitle = true;
+    }
+    changedtitlecmd = true;
+    printf("\e]2;%s%c", arg[1], 7);
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "_PROMPT")) {
     if (inProg) {cerr = 254; goto cmderr;}
@@ -237,7 +283,7 @@ if (chkCmd(1, arg[0], "_PROMPT")) {
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     copyStr(tmpargs[1], prompt);
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "_PROMPTTAB")) {
     if (inProg) {cerr = 254; goto cmderr;}
@@ -248,10 +294,11 @@ if (chkCmd(1, arg[0], "_PROMPTTAB")) {
     tab_width = atoi(arg[1]);
 }
 if (chkCmd(1, arg[0], "_AUTOCMDHIST")) {
-    cerr = 0;
     if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
     autohist = true;
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "_SAVECMDHIST")) {
     if (inProg) {cerr = 254; goto cmderr;}
@@ -271,7 +318,7 @@ if (chkCmd(1, arg[0], "_SAVECMDHIST")) {
         ret = chdir(tmpcwd);
         (void)ret;
     }
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "_LOADCMDHIST")) {
     if (inProg) {cerr = 254; goto cmderr;}
@@ -289,7 +336,7 @@ if (chkCmd(1, arg[0], "_LOADCMDHIST")) {
         ret = chdir(tmpcwd);
         (void)ret;
     }
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "_TXTLOCK")) {
     if (argct) {cerr = 3; goto cmderr;}
@@ -303,7 +350,7 @@ if (chkCmd(1, arg[0], "_TXTLOCK")) {
     }
     #endif
     textlock = true;
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "_TXTUNLOCK")) {
     if (argct) {cerr = 3; goto cmderr;}
@@ -312,7 +359,7 @@ if (chkCmd(1, arg[0], "_TXTUNLOCK")) {
     if (textlock) tcsetattr(0, TCSANOW, &restore);
     #endif
     textlock = false;
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "_TXTATTRIB")) {
     if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
@@ -395,7 +442,7 @@ if (chkCmd(1, arg[0], "_TXTATTRIB")) {
         case 12: txt_underlncolor = val; break;
     }
     updateTxtAttrib();
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "_SHATTRIB")) {
     if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
@@ -446,7 +493,7 @@ if (chkCmd(1, arg[0], "_SHATTRIB")) {
         case 3: sh_restoreAttrib = (bool)val; break;
     }
     updateTxtAttrib();
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "_DEBUGON")) {
     if (inProg) {cerr = 254; goto cmderr;}
@@ -454,7 +501,7 @@ if (chkCmd(1, arg[0], "_DEBUGON")) {
     if (argct) {cerr = 3; goto cmderr;}
     if (!debug) puts("Enabled debug mode.");
     debug = true;
-    goto cmderr;
+    goto noerr;
 }
 if (chkCmd(1, arg[0], "_DEBUGOFF")) {
     if (inProg) {cerr = 254; goto cmderr;}
@@ -462,5 +509,5 @@ if (chkCmd(1, arg[0], "_DEBUGOFF")) {
     if (argct) {cerr = 3; goto cmderr;}
     if (debug) puts("Disabled debug mode.");
     debug = false;
-    goto cmderr;
+    goto noerr;
 }

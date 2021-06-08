@@ -105,11 +105,11 @@ if (chkCmd(1, farg[0], "CINT")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
+    //double dbl;
     if (debug) printf("farg[1]: {%s}\n", farg[1]);
-    sscanf(farg[1], "%lf", &dbl);
-    dbl = round(dbl);
-    sprintf(outbuf, "%d", (int)dbl);
+    //sscanf(farg[1], "%lf", &dbl);
+    //dbl = round(dbl);
+    sprintf(outbuf, "%d", (int)round(atof(farg[1])));
     if (debug) printf("outbuf: {%s}\n", outbuf);
     goto fexit;
 }
@@ -129,11 +129,51 @@ if (chkCmd(1, farg[0], "INT")) {
 if (chkCmd(1, farg[0], "VAL")) {
     cerr = 0;
     ftype = 2;
-    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargct < 1 || fargct > 2) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    if (fargct == 2 && fargt[2] != 2) {cerr = 2; goto fexit;}
     double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%lf", dbl);
+    if (fargct == 1) {
+        sscanf(farg[1], "%lf", &dbl);
+        sprintf(outbuf, "%lf", dbl);
+        goto fexit;
+    }
+    int act = 0;
+    uint64_t num;
+    char* tmpstr = NULL;
+    int tmplen = 0;
+    int tmppos = 0;
+    if (fargct == 2) act = atoi(farg[2]);
+    switch (act) {
+        case 0:
+            tmplen = strlen(farg[1]);
+            for (int i = 0; farg[1][i] == '0' && i < tmplen; i++) {
+                tmppos++;
+            }
+            tmpstr = (char*)malloc(tmplen - tmppos + 1);
+            copyStrSnip(farg[1], tmppos, tmplen, tmpstr);
+            if (getType(farg[1]) != 2) {
+                outbuf[0] = '0';
+                outbuf[1] = 0;
+                break;
+            }
+            sscanf(tmpstr, "%lf", &dbl);
+            free(tmpstr);
+            sprintf(outbuf, "%lf", dbl);
+            break;
+        case 1:
+            sscanf(farg[1], "%llx", (long long unsigned int*)&num);
+            sprintf(outbuf, "%llu", (long long unsigned int)num);
+            break;
+        case 2:
+            sscanf(farg[1], "%llo", (long long unsigned int*)&num);
+            sprintf(outbuf, "%llu", (long long unsigned int)num);
+            break;
+        default:
+            sscanf(farg[1], "%lf", &dbl);
+            sprintf(outbuf, "%lf", dbl);
+            break;
+    }
     goto fexit;
 }
 if (chkCmd(1, farg[0], "STR$")) {
@@ -159,7 +199,7 @@ if (chkCmd(1, farg[0], "PI")) {
     cerr = 0;
     ftype = 2;
     if (fargct) {cerr = 3; goto fexit;}
-    strcpy(outbuf, "3.141592");
+    strcpy(outbuf, "3.141593");
     goto fexit;
 }
 if (chkCmd(1, farg[0], "SIN")) {
@@ -294,12 +334,14 @@ if (chkCmd(1, farg[0], "INKEY$")) {
     }
     outbuf[obp] = 0;
     #else
+    int tmp = 1;
+    //if (!(tmp = strlen(inbuf) + 1)) goto fexit;
     int obp = 0;
-    while (1) {
+    while (obp < tmp) {
         outbuf[obp] = 0;
-        if (kbhit()) outbuf[obp] = _getch();
+        outbuf[obp] = kbinbuf[obp];
+        kbinbuf[obp] = 0;
         if (outbuf[obp] == 0) {break;}
-        if (outbuf[obp] == 3) {outbuf[obp] = 0; cmdint = true; break;}
         obp++;
     }
     outbuf[obp] = 0;
@@ -320,6 +362,28 @@ if (chkCmd(1, farg[0], "CURY")) {
     if (fargct) {cerr = 3; goto fexit;}
     getCurPos();
     sprintf(outbuf, "%d", cury);
+    goto fexit;
+}
+if (chkCmd(1, farg[0], "HEX$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    double dbl;
+    sscanf(farg[1], "%lf", &dbl);
+    sprintf(outbuf, "%llx", (long long unsigned int)dbl);
+    upCase(outbuf);
+    goto fexit;
+}
+if (chkCmd(1, farg[0], "OCT$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    double dbl;
+    sscanf(farg[1], "%lf", &dbl);
+    sprintf(outbuf, "%llo", (long long unsigned int)dbl);
+    upCase(outbuf);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "FGC")) {
@@ -459,6 +523,33 @@ if (chkCmd(1, farg[0], "_HOME$")) {
     ftype = 1;
     if (fargct) {cerr = 3; goto fexit;}
     copyStr(gethome(), outbuf);
+    goto fexit;
+}
+if (chkCmd(1, farg[0], "_ENV$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    char* tmpenv = getenv(farg[1]);
+    if (tmpenv) {
+        copyStr(tmpenv, outbuf);
+    } else {
+        outbuf[0] = 0;
+    }
+    goto fexit;
+}
+if (chkCmd(1, farg[0], "_ENVSET")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    char* tmpenv = getenv(farg[1]);
+    outbuf[1] = 0;
+    if (tmpenv) {
+        outbuf[0] = '1';
+    } else {
+        outbuf[0] = '0';
+    }
     goto fexit;
 }
 if (chkCmd(1, farg[0], "_PROMPT$")) {

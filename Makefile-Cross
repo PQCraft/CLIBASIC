@@ -25,4 +25,4 @@ debug:
 	wine clibasic.exe --debug
 
 clean:
-	rm -f clibasic.exe
+	rm -f clibasic.exe *.dll

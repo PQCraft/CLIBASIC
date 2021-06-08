@@ -60,7 +60,7 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.15.4.1";
+char VER[] = "0.15.5";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -188,13 +188,13 @@ bool autohist = false;
 
 int tab_width = 4;
 
-char* startcmd;
+char** termargs;
 
 bool changedtitle = false;
+bool changedtitlecmd = false;
 
 #ifdef __unix__
 struct termios term, restore;
-static struct termios orig_termios;
 
 void txtqunlock() {if (textlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}}
 
@@ -213,14 +213,20 @@ int kbhit() {
     ioctl(STDIN, FIONREAD, &bytesWaiting);
     return bytesWaiting;
 }
+#endif
+
 int tab_end = 0;
 void strApndChar(char* str, char c);
 char* rl_get_tab(const char* text, int state) {
     char* tab = NULL;
+    rl_filename_quoting_desired = 0;
     if (!state) {
         tab = malloc(strlen(text) + 5);
         strcpy(tab, text);
         tab_end = tab_width - (tab_end % tab_width) - 1;
+        //printf("\e[s\e[H[%d]\e[u", tab_end);
+        if (!tab_end) tab_end = tab_width;
+        fflush(stdout);
         for (int i = 0; i < tab_end; i++) {
             strApndChar(tab, ' ');
         }
@@ -234,7 +240,6 @@ char** rl_tab(const char* text, int start, int end) {
     tab = rl_completion_matches(text, rl_get_tab);
     return tab;
 }
-#endif
 
 #ifdef _WIN32
 //(https://pbs.twimg.com/media/CRcU7BKWwAEQZIE.jpg)
@@ -250,6 +255,10 @@ void setcsr() {
 void rl_sigh(int sig) {signal(sig, rl_sigh);}
 void txtqunlock() {}
 //(https://i.kym-cdn.com/entries/icons/original/000/027/746/crying.jpg)
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+#endif
+char kbinbuf[256];
 #endif
 
 struct timeval time1;
@@ -279,7 +288,7 @@ void cleanExit() {
     SetFileAttributesA(HIST_FILE, FILE_ATTRIBUTE_HIDDEN);
     #endif
     #ifdef CHANGE_TITLE
-    if (changedtitle) printf("\e[23;0t");
+    if (changedtitle) fputs("\e[23;0t", stdout);
     #endif
     if (!keep) printf("\e[0m");
     //fflush(stdout);
@@ -323,27 +332,31 @@ char* gethome() {
     return homepath;
 }
 
-int main(int argc, char* argv[]) {
-    startcmd = argv[0];
+int main(int argc, char** argv) {
     #ifdef __unix__
     if (system("tty -s 1> /dev/null 2> /dev/null")) {
         char command[CB_BUF_SIZE];
         copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e 'echo -e -n \"\x1b[\x33 q\" && ", command);
-        copyStrApnd(startcmd, command);
+        copyStrApnd(argv[0], command);
         strApndChar(command, '\'');
         exit(system(command));
     }
-    rl_readline_name = "CLIBASIC";
-    rl_attempted_completion_function = (rl_completion_func_t*)rl_tab;
-    rl_getc_function = getc;
     #endif
     if (!isatty(STDERR_FILENO)) {exit(EIO);}
-    if (!isatty(STDIN_FILENO)) {fputs("CLIBASIC does not support pipes.\n", stderr); exit(EIO);}
-    if (!isatty(STDOUT_FILENO)) {fputs("CLIBASIC does not support redirects.\n", stderr); exit(EIO);}
+    if (!isatty(STDIN_FILENO)) {fputs("CLIBASIC does not support pipes.\n", stderr); exit(1);}
+    if (!isatty(STDOUT_FILENO)) {fputs("CLIBASIC does not support redirects.\n", stderr); exit(1);}
     signal(SIGINT, cleanExit);
     signal(SIGKILL, cleanExit);
     signal(SIGTERM, cleanExit);
-    #ifdef _WIN32 // Copied from Microsoft docs
+    rl_readline_name = "CLIBASIC";
+    char* rl_tmpptr = calloc(1, 1);
+    rl_completion_entry_function = rl_get_tab;
+    rl_attempted_completion_function = (rl_completion_func_t*)rl_tab;
+    rl_getc_function = getc;
+    rl_special_prefixes = rl_tmpptr;
+    rl_completer_quote_characters = rl_tmpptr;
+    rl_completer_word_break_characters = rl_tmpptr;
+    #ifdef _WIN32
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) {
         exit(GetLastError());
@@ -363,13 +376,13 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
         if (argv[i][0] == '-' && strcmp(argv[i], "--file") && strcmp(argv[i], "-f")) {
             if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
-                if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
+                if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = 1; cleanExit();}
                 printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
                 puts("Copyright (C) 2021 PQCraft");
                 puts("This software is licensed under the GNU GPL v3.");
                 exit = true;
             } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
-                if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
+                if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = 1; cleanExit();}
                 printf("Usage: %s [options] [{--file|-f}] [file] [options]\n", argv[0]);
                 puts("Options:");
                 puts("    {-f|--file} <file>          Loads and runs <file>.");
@@ -380,37 +393,38 @@ int main(int argc, char* argv[]) {
                 puts("    {-d|--debug}                Enables the printing of debug information.");
                 exit = true;
             } else if (!strcmp(argv[i], "--debug") || !strcmp(argv[i], "-d")) {
-                if (debug) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
+                if (debug) {fputs("Incorrect number of options passed.\n", stderr); err = 1; cleanExit();}
                 debug = true;
             } else if (!strcmp(argv[i], "--keep") || !strcmp(argv[i], "-k")) {
-                if (keep) {fputs("Incorrect number of options passed.\n", stderr); err = EINVAL; cleanExit();}
+                if (keep) {fputs("Incorrect number of options passed.\n", stderr); err = 1; cleanExit();}
                 keep = true;
             } else if (!strcmp(argv[i], "--command") || !strcmp(argv[i], "-c")) {
                 i++;
-                if (!argv[i]) {fputs( "No command provided.\n", stderr); err = EINVAL; cleanExit();}
+                if (!argv[i]) {fputs( "No command provided.\n", stderr); err = 1; cleanExit();}
                 inProg = true;
                 runfile = true;
                 argptr = argv[i];
             } else {
-                fprintf(stderr, "Invalid option '%s'\n", argv[i]); err = EINVAL; cleanExit();
+                fprintf(stderr, "Invalid option '%s'\n", argv[i]); err = 1; cleanExit();
             }
         } else {
             if (runfile) {free(progFilename); fputs("Incorrect number of options passed.\n", stderr); cleanExit();}
             if (!strcmp(argv[i], "--file") || !strcmp(argv[i], "-f")) {
                 i++;
-                if (!argv[i]) {fputs( "No filename provided.\n", stderr); err = EINVAL; cleanExit();}
+                if (!argv[i]) {fputs( "No filename provided.\n", stderr); err = 1; cleanExit();}
             }
             inProg = true;
             runfile = true;
             prog = fopen(argv[i], "r");
             progFilename = malloc(strlen(argv[i]) + 1);
             copyStr(argv[i], progFilename);
-            if (!prog) {fprintf(stderr, "File not found: '%s'.\n", progFilename); free(progFilename); err = ENOENT; cleanExit();}
-            if (!isFile(progFilename)) {puts("Expected file instead of directory."); err = EISDIR; cleanExit();}
+            if (!prog) {fprintf(stderr, "File not found: '%s'.\n", progFilename); free(progFilename); err = 1; cleanExit();}
+            if (!isFile(progFilename)) {puts("Expected file instead of directory."); err = 1; cleanExit();}
         }
     }
     if (exit) cleanExit();
     updateTxtAttrib();
+    termargs = argv;
     if (!runfile) {
         printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
         strcpy(prompt, "\"CLIBASIC> \"");
@@ -525,6 +539,23 @@ int main(int argc, char* argv[]) {
         progLine = 1;
         bool comment = false;
         while (1) {
+            #ifdef _WIN32
+            if (!textlock) {
+                char kbc;
+                int kbh = kbhit();
+                for (int i = 0; i < kbh; i++) {
+                    kbc = _getch();
+                    kbinbuf[i] = kbc;
+                    //printf("[%d]: [%d]\n", i, kbc);
+                    putchar(kbc);
+                    if (kbc == 3) {
+                        if (inProg) {goto brkproccmd;}
+                        else {cmdIntHndl();}
+                    }
+                }
+                fflush(stdout);
+            }
+            #endif
             if (inProg) {
                 if (progbuf[cp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((progbuf[cp] == ':' && !inStr) || progbuf[cp] == '\n' || progbuf[cp] == 0) {
@@ -637,28 +668,6 @@ void getCurPos() {
         curx = con.dwCursorPosition.X + 1;
         cury = con.dwCursorPosition.Y + 1;
     }
-    #endif
-}
-
-void enableRawMode() {
-    #ifdef __unix__
-    struct termios raw;
-    if (!isatty(STDIN_FILENO)) return;
-    if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) return;
-    raw = orig_termios;
-    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    raw.c_oflag &= ~(OPOST);
-    raw.c_cflag |= (CS8);
-    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-    raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = 1;
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0) return;
-    #endif
-}
-
-void disableRawMode() {
-    #ifdef __unix__
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
     #endif
 }
 
@@ -883,9 +892,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
         if (j == 0) {
             flen[0] = i;
             farg[0] = (char*)malloc((flen[0] + 1) * sizeof(char));
-            errstr = realloc(errstr, (flen[0] + 1) * sizeof(char));
             copyStrSnip(inbuf, 0, i, farg[0]);
-            copyStrSnip(inbuf, 0, i, errstr);
         } else {
             getArg(j - 1, gftmp[0], gftmp[1]);
             fargt[j] = getVal(gftmp[1], gftmp[1]);
@@ -900,6 +907,8 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     }
     outbuf[0] = 0;
     cerr = 127;
+    errstr = realloc(errstr, (flen[0] + 1) * sizeof(char));
+    copyStr(farg[0], errstr);
     #include "functions.c"
     fexit:
     for (int j = 0; j <= ftmpct; j++) {
@@ -1073,7 +1082,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     if ((isSpChar(inbuf[0]) && inbuf[0] != '-') || isSpChar(inbuf[strlen(inbuf) - 1])) {cerr = 1; dt = 0; goto gvreturn;}
     int tmpct = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = '"'; tmp[3][1] = 0;
-    bool* tmpseenStr = malloc(1 * sizeof(bool));
+    bool* tmpseenStr = malloc(sizeof(bool));
     tmpseenStr[0] = false;
     for (int i = 0; inbuf[i]; i++) {
         if (inbuf[i] == '"') {
@@ -1097,6 +1106,8 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             tmpct--;
             tmpseenStr = realloc(tmpseenStr, (tmpct + 1) * sizeof(bool));
             if (tmpct == 0 && (ip == 0 || isSpChar(inbuf[ip - 1]))) {
+                int tmplen[2];
+                tmplen[0] = strlen(inbuf);
                 jp = i;
                 copyStrSnip(inbuf, ip + 1, jp, tmp[0]);
                 t = getVal(tmp[0], tmp[0]);
@@ -1113,6 +1124,8 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 copyStrApnd(tmp[1], tmp[2]);
                 copyStr(tmp[2], inbuf);
                 tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
+                tmplen[1] = strlen(inbuf);
+                i -= tmplen[0] - tmplen[1];
             }
         }
     }
@@ -1520,7 +1533,7 @@ void runcmd() {
     if (debug) printf("C [%d]: {%s}\n", 0, arg[0]);
     cerr = 255;
     #include "commands.c"
-    if (debug) printf("no error");
+    if (debug) printf("no error\n");
     cmderr:
     if (debug) printf("cerr: [%d]\n", cerr);
     if (cerr) {
@@ -1609,6 +1622,7 @@ void runcmd() {
         cp = -1;
         chkinProg = inProg = false;
     }
+    noerr:
     if (lgc) return;
     if (debug) printf("freeing stuff...\n");
     for (int i = 0; i <= argct; i++) {

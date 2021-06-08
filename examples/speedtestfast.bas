@@ -1,1 +1,1 @@
-score=0:resettimer:dowhile timer()<5:score=score+1:loop:put "Score: ",score,"\n"
+SCORE=0:RESETTIMER:DOWHILE TIMER()<5:SCORE=SCORE+1:LOOP:PRINT "Score: ";SCORE
