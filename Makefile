@@ -22,6 +22,7 @@ build32:
 	$(BUILD32)
 
 update:
+	rm -rf .
 	git clone https://github.com/PQCraft/clibasic .
 
 install:
