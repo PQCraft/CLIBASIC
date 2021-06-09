@@ -60,7 +60,7 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.15.5";
+char VER[] = "0.15.6";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -188,7 +188,8 @@ bool autohist = false;
 
 int tab_width = 4;
 
-char** termargs;
+char** termargs = NULL;
+char* startcmd = NULL;
 
 bool changedtitle = false;
 bool changedtitlecmd = false;
@@ -425,6 +426,14 @@ int main(int argc, char** argv) {
     if (exit) cleanExit();
     updateTxtAttrib();
     termargs = argv;
+    if (argv[0][0] == '.') {
+        #ifdef _WIN32
+        startcmd = _fullpath(NULL, argv[0], CB_BUF_SIZE);
+        #else
+        startcmd = realpath(argv[0], NULL);
+        #endif
+    }
+    if (!startcmd) startcmd = argv[0];
     if (!runfile) {
         printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
         strcpy(prompt, "\"CLIBASIC> \"");
@@ -1588,7 +1597,7 @@ void runcmd() {
                 fputs("Reached FOR limit", stdout);
                 break;
             case 15:
-                printf("File not found or permission denied: '%s'", errstr);
+                printf("File not found: '%s'", errstr);
                 break;
             case 16:
                 fputs("Invalid data or data range exceeded", stdout);
@@ -1604,6 +1613,9 @@ void runcmd() {
                 break;
             case 20:
                 fputs("File or directory error.", stdout);
+                break;
+            case 21:
+                printf("Permission error: '%s'", errstr);
                 break;
             case 127:
                 printf("Not a function: '%s'", errstr);

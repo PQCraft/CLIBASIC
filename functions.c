@@ -95,7 +95,6 @@ if (chkCmd(2, farg[0], "SH", "EXEC")) {
     #else
     if (sh_silent) {farg[1] = realloc(farg[1], sizeof(farg[1]) + 13); copyStrApnd(farg[1], " &>/dev/null");}
     #endif
-    outbuf[0] = 0;
     sprintf(outbuf, "%d", system(farg[1]));
     if (sh_restoreAttrib) updateTxtAttrib();
     goto fexit;
@@ -409,7 +408,6 @@ if (chkCmd(1, farg[0], "INPUT$")) {
         farg[1] = malloc(4);
         strcpy(farg[1], "?: ");
     }
-    outbuf[0] = 0;
     char* tmp = NULL;
     #ifndef _WIN32
     getCurPos();
@@ -437,7 +435,6 @@ if (chkCmd(1, farg[0], "LINES")) {
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     int cl = 1;
     if (!farg[1][0]) {strcpy(outbuf, "0"); goto fexit;}
-    outbuf[0] = 0;
     for (i = 0; farg[1][i]; i++) {
         if (farg[1][i] == '\n') {
             cl++;
@@ -454,7 +451,6 @@ if (chkCmd(1, farg[0], "LINE$")) {
     int cl = 0, tl = atoi(farg[1]);
     if (tl < 0) {cerr = 16; goto fexit;}
     int i;
-    outbuf[0] = 0;
     for (i = 0; farg[2][i]; i++) {
         if (farg[2][i] == '\n') {
             cl++;
@@ -533,8 +529,6 @@ if (chkCmd(1, farg[0], "_ENV$")) {
     char* tmpenv = getenv(farg[1]);
     if (tmpenv) {
         copyStr(tmpenv, outbuf);
-    } else {
-        outbuf[0] = 0;
     }
     goto fexit;
 }
@@ -544,12 +538,12 @@ if (chkCmd(1, farg[0], "_ENVSET")) {
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     char* tmpenv = getenv(farg[1]);
-    outbuf[1] = 0;
     if (tmpenv) {
         outbuf[0] = '1';
     } else {
         outbuf[0] = '0';
     }
+    outbuf[1] = 0;
     goto fexit;
 }
 if (chkCmd(1, farg[0], "_PROMPT$")) {
@@ -593,5 +587,12 @@ if (chkCmd(1, farg[0], "_OS$")) {
     ftype = 1;
     if (fargct) {cerr = 3; goto fexit;}
     copyStr(OSVER, outbuf);
+    goto fexit;
+}
+if (chkCmd(1, farg[0], "_STARTCMD$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct) {cerr = 3; goto fexit;}
+    copyStr(startcmd, outbuf);
     goto fexit;
 }

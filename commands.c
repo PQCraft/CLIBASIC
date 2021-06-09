@@ -158,7 +158,9 @@ if (chkCmd(1, arg[0], "CALL")) {
     if (!prog) {
         errstr = realloc(errstr, (argl[1] + 1) * sizeof(char));
         copyStr(arg[1], errstr);
-        cerr = 15;
+        cerr = 20;
+        if (errno == EACCES) cerr = 21;
+        if (errno == ENOENT) cerr = 15;
         goto cmderr;
     }
     progFilename = malloc(argl[1] + 1);
@@ -166,6 +168,32 @@ if (chkCmd(1, arg[0], "CALL")) {
     if (!isFile(progFilename)) {cerr = 18; goto cmderr;}
     loadProg();
     chkinProg = true;
+    goto noerr;
+}
+if (chkCmd(1, arg[0], "RUN")) {
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    prog = fopen(arg[1], "r");
+    if (!prog) {
+        errstr = realloc(errstr, (argl[1] + 1) * sizeof(char));
+        copyStr(arg[1], errstr);
+        cerr = 20;
+        if (errno == EACCES) cerr = 21;
+        if (errno == ENOENT) cerr = 15;
+        goto cmderr;
+    }
+    if (!isFile(arg[1])) {cerr = 18; goto cmderr;}
+    progFilename = malloc(argl[1] + strlen(startcmd) + 7);
+    copyStr(startcmd, progFilename);
+    copyStrApnd(" -f \"", progFilename);
+    copyStrApnd(arg[1], progFilename);
+    copyStrApnd("\"", progFilename);
+    int ret = system(progFilename);
+    (void)ret;
+    free(progFilename);
+    progFilename = NULL;
     goto noerr;
 }
 if (chkCmd(2, arg[0], "SH", "EXEC")) {
@@ -184,30 +212,6 @@ if (chkCmd(2, arg[0], "SH", "EXEC")) {
     cerr = system(arg[1]);
     if (sh_restoreAttrib) updateTxtAttrib();
     cerr = 0;
-    goto noerr;
-}
-if (chkCmd(1, arg[0], "RUN")) {
-    cerr = 0;
-    if (argct != 1) {cerr = 3; goto cmderr;}
-    if (!solvearg(1)) goto cmderr;
-    if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    prog = fopen(arg[1], "r");
-    if (!prog) {
-        errstr = realloc(errstr, (argl[1] + 1) * sizeof(char));
-        copyStr(arg[1], errstr);
-        cerr = 15;
-        goto cmderr;
-    }
-    if (!isFile(arg[1])) {cerr = 18; goto cmderr;}
-    progFilename = malloc(argl[1] + strlen(termargs[0]) + 7);
-    copyStr(termargs[0], progFilename);
-    copyStrApnd(" -f \"", progFilename);
-    copyStrApnd(arg[1], progFilename);
-    copyStrApnd("\"", progFilename);
-    int ret = system(progFilename);
-    (void)ret;
-    free(progFilename);
-    progFilename = NULL;
     goto noerr;
 }
 if (chkCmd(1, arg[0], "FILES")) {
