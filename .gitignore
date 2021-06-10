@@ -8,4 +8,4 @@
 *.so
 *.so.*
 *.dylib
-.github
+.github/
