@@ -27,7 +27,7 @@ Windows 7-10 (`choco`): `mingw`, `make` <br>
 MacOS Mojave-Big Sur (`brew`): `gcc`, `make`, `readline` <br>
 <br>
 ### Notes <br>
-- **Important:** MacOS support has not been tested but *should* work *in theory*.
+- **Important:** MacOS support has not been tested but *should* work *in theory*. (MacOS refused to install in my VM even after I applied the correct settings, it would hang after running `boot.efi` for about 30 seconds. If you know a solution (other than "Buy a Mac") please mention me in a discussion.)
 - On Linux if CLIBASIC is not run in a terminal it will attempt to open in XTerm. CLIBASIC will only read arguments if it is run in a terminal.
 - If the file `.clibasic_history` is present in the user's home directory CLIBASIC will automatically save history there. Run `_AUTOCMDHIST`, `_SAVECMDHIST` (without any arguments), or create the file `.clibasic_history` in your home/user folder to enable this feature. Remove the file to disable this feature.
 - CLIBASIC will look for `AUTORUN.BAS` (and `autorun.bas` on Linux) in the user's home directory and run the file if present.
