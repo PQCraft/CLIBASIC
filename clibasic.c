@@ -31,6 +31,12 @@
     Small CB_BUF_SIZE (Buffers will be small and may cause issues).
 #endif
 
+#if defined(unix) || defined(__unix) || defined(__APPLE__)
+    #ifndef __unix__
+        #define __unix__
+    #endif
+#endif
+
 #include <math.h>
 #include <time.h>
 #include <stdio.h>
@@ -60,18 +66,27 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.15.6";
+char VER[] = "0.15.6.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
+    #ifndef __unix__
+        #define __unix__
+    #endif
 #elif defined(BSD)
     char OSVER[] = "BSD";
+    #ifndef __unix__
+        #define __unix__
+    #endif
+#elif defined(__APPLE__)
+    char OSVER[] = "MacOS";
+    #ifndef __unix__
+        #define __unix__
+    #endif
 #elif defined(__unix__)
     char OSVER[] = "Unix";
 #elif defined(_WIN32)
     char OSVER[] = "Windows";
-#elif defined(__APPLE__)
-    char OSVER[] = "MacOS";
 #else
     #warning /* No matching operating system defines */ \
     Could not detect operating system. (No matching operating system defines; this may cause compilation failure)
@@ -220,7 +235,9 @@ int tab_end = 0;
 void strApndChar(char* str, char c);
 char* rl_get_tab(const char* text, int state) {
     char* tab = NULL;
+    #ifndef __APPLE__
     rl_filename_quoting_desired = 0;
+    #endif
     if (!state) {
         tab = malloc(strlen(text) + 5);
         strcpy(tab, text);
@@ -349,14 +366,24 @@ int main(int argc, char** argv) {
     signal(SIGINT, cleanExit);
     signal(SIGKILL, cleanExit);
     signal(SIGTERM, cleanExit);
+    #ifndef __APPLE__
     rl_readline_name = "CLIBASIC";
     char* rl_tmpptr = calloc(1, 1);
+    #ifndef __APPLE__
     rl_completion_entry_function = rl_get_tab;
+    #else
+    rl_completion_entry_function = (Function*)rl_get_tab;
+    #endif
+    #ifndef __APPLE__
     rl_attempted_completion_function = (rl_completion_func_t*)rl_tab;
+    #else
+    rl_attempted_completion_function = rl_tab;
+    #endif
     rl_getc_function = getc;
     rl_special_prefixes = rl_tmpptr;
     rl_completer_quote_characters = rl_tmpptr;
     rl_completer_word_break_characters = rl_tmpptr;
+    #endif
     #ifdef _WIN32
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) {
@@ -628,7 +655,7 @@ void resetTimer() {
     tval = usTime();
 }
 
-void wait(uint64_t d) {
+void cb_wait(uint64_t d) {
     #ifdef __unix__
     struct timespec dts;
     dts.tv_sec = d / 1000000;

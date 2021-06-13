@@ -73,7 +73,7 @@ if (chkCmd(1, arg[0], "LOCATE")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     else {
         tmp = atoi(arg[1]);
-        if (tmp < 0) {cerr = 16; goto cmderr;}
+        if (tmp < 1) {cerr = 16; goto cmderr;}
         curx = tmp;
     }
     if (argct > 1) {
@@ -82,7 +82,7 @@ if (chkCmd(1, arg[0], "LOCATE")) {
         if (argt[2] != 2) {cerr = 2; goto cmderr;}
         else {
             tmp = atoi(arg[2]);
-            if (tmp < 0) {cerr = 16; goto cmderr;}
+            if (tmp < 1) {cerr = 16; goto cmderr;}
             cury = tmp;
         }
     }
@@ -110,7 +110,7 @@ if (chkCmd(1, arg[0], "WAITUS")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
-    wait(d);
+    cb_wait(d);
     goto noerr;
 }
 if (chkCmd(1, arg[0], "WAITMS")) {
@@ -120,7 +120,7 @@ if (chkCmd(1, arg[0], "WAITMS")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
-    wait(d * 1000);
+    cb_wait(d * 1000);
     goto noerr;
 }
 if (chkCmd(1, arg[0], "WAIT")) {
@@ -130,7 +130,7 @@ if (chkCmd(1, arg[0], "WAIT")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
-    wait(d * 1000000);
+    cb_wait(d * 1000000);
     goto noerr;
 }
 if (chkCmd(1, arg[0], "RESETTIMER")) {
