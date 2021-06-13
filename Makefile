@@ -22,8 +22,8 @@ build32:
 	$(BUILD32)
 
 update:
-	printf "\\e[0m\\e[1mAre you sure? [y/N]: "; read -n 1 I; printf "\\e[0m\\n";\
-	([[ ! "$$I" =~ ^[^Yy]$$ ]] && rm -rf ./[!.]* ./.[!.]* && git clone https://github.com/PQCraft/clibasic . && chmod +x *.sh) || exit 0
+	printf "\\e[0m\\e[1mAre you sure? [y/N]: "; read -n 1 I; [ ! "$$I" == "" ] && printf "\\e[0m\\n" &&\
+(([[ ! "$$I" =~ ^[^Yy]$$ ]]) && rm -rf ./[!.]* ./.[!.]* && git clone https://github.com/PQCraft/clibasic . && chmod +x *.sh) || exit 0
 
 install:
 	if [ ! -f ./clibasic ]; then $(BUILD__); fi
