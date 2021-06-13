@@ -19,7 +19,7 @@ To build then run, use `make -f Makefile-Windows` (same as `make -f Makefile-Win
 #### Linux <br>
 Debian (`apt`): `build-essential`, `libreadline-dev` <br>
 Arch (`pacman`): `base-devel`, `readline` <br>
-Apline (`apk`): `build-base`, `readline-dev` <br>
+Alpine (`apk`): `build-base`, `readline-dev` <br>
 #### Windows <br>
 Wimdows NT-10 (download): [`MinGW`](http://mingw-w64.org/doku.php/download/mingw-builds), [`Make for Windows`](http://gnuwin32.sourceforge.net/packages/make.htm) <br>
 Windows 7-10 (`choco`): `mingw`, `make` <br>
@@ -27,8 +27,8 @@ Windows 7-10 (`choco`): `mingw`, `make` <br>
 MacOS Mojave-Big Sur (`brew`): `gcc`, `make`, `readline` <br>
 <br>
 ### Notes <br>
-- **Important:** MacOS support has not been tested but *should* work *in theory*.
 - On Linux if CLIBASIC is not run in a terminal it will attempt to open in XTerm. CLIBASIC will only read arguments if it is run in a terminal.
 - If the file `.clibasic_history` is present in the user's home directory CLIBASIC will automatically save history there. Run `_AUTOCMDHIST`, `_SAVECMDHIST` (without any arguments), or create the file `.clibasic_history` in your home/user folder to enable this feature. Remove the file to disable this feature.
 - CLIBASIC will look for `AUTORUN.BAS` (and `autorun.bas` on Linux) in the user's home directory and run the file if present.
+- MacOS is supported but readline will behave a bit differently due to a segmentation fault that has not been fixed yet.
 - The development scripts are `build.sh` which is for testing if CLIBASIC compiles correctly for Linux and Windows, and `package.sh` which creates the zip files for making a CLIBASIC release.
