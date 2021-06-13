@@ -22,10 +22,10 @@ build32:
 	$(BUILD32)
 
 update:
-	CB_DIR = $(shell pwd)
-	rm -rf $(CB_DIR)
-	mkdir -p $(CB_DIR)
-	cd $(CB_DIR)
+	CB_DIR=$$(pwd);\
+	rm -rf $$CB_DIR;\
+	mkdir -p $$CB_DIR;\
+	cd $$CB_DIR;\
 	git clone https://github.com/PQCraft/clibasic .
 
 install:
