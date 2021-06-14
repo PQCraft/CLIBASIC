@@ -1,18 +1,16 @@
-'_txtlock
-print "Press Ctrl+C to exit..."
-do
-    k$ = inkey$()
-    l = len(k$)
-    if asc(k$) <> 0
-        p = 0
-        locate curx() - 1
-        if asc(k$, len(k$) - 1) = 10: locate , cury() - 1: endif
-        put "\t  [", len(k$), "]"
-        dowhile p < l
-            put ", ", asc(k$, p)
-            p = p + 1
-        loop
-        put "\n"
-    endif
-loop
-'run "examples/input.bas"
+PRINT "Press Ctrl+C to exit..."
+DO
+    K$ = INKEY$()
+    L = LEN(K$)
+    IF ASC(K$) <> 0
+        P = 0
+        LOCATE CURX()
+        IF ASC(K$, LEN(K$) - 1) = 10: LOCATE , CURY() - 1: ENDIF
+        PUT "\t  [", LEN(K$), "]"
+        DOWHILE P < L
+            PUT ", ", ASC(K$, P)
+            P = P + 1
+        LOOP
+        PUT "\n"
+    ENDIF
+LOOP
