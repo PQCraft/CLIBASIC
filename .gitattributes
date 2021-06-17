@@ -1,6 +1,6 @@
 *.c linguist-language=C
 *.h linguist-language=C
-*.bas linguist-language=BASIC
+*.bas linguist-language=CLIBASIC
 Makefile* linguist-detectable=false
 *.txt linguist-detectable=false
 *.md linguist-detectable=false
