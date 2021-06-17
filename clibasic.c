@@ -66,7 +66,7 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.15.6.1";
+char VER[] = "0.15.7";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -235,9 +235,7 @@ int tab_end = 0;
 void strApndChar(char* str, char c);
 char* rl_get_tab(const char* text, int state) {
     char* tab = NULL;
-    #ifndef __APPLE__
     rl_filename_quoting_desired = 0;
-    #endif
     if (!state) {
         tab = malloc(strlen(text) + 5);
         strcpy(tab, text);
@@ -360,47 +358,37 @@ int main(int argc, char** argv) {
         exit(system(command));
     }
     #endif
-    if (!isatty(STDERR_FILENO)) {exit(EIO);}
-    if (!isatty(STDIN_FILENO)) {fputs("CLIBASIC does not support pipes.\n", stderr); exit(1);}
-    if (!isatty(STDOUT_FILENO)) {fputs("CLIBASIC does not support redirects.\n", stderr); exit(1);}
     signal(SIGINT, cleanExit);
     signal(SIGKILL, cleanExit);
     signal(SIGTERM, cleanExit);
-    #ifndef __APPLE__
     rl_readline_name = "CLIBASIC";
     char* rl_tmpptr = calloc(1, 1);
-    #ifndef __APPLE__
     rl_completion_entry_function = rl_get_tab;
-    #else
-    rl_completion_entry_function = (Function*)rl_get_tab;
-    #endif
-    #ifndef __APPLE__
     rl_attempted_completion_function = (rl_completion_func_t*)rl_tab;
-    #else
-    rl_attempted_completion_function = rl_tab;
-    #endif
     rl_getc_function = getc;
     rl_special_prefixes = rl_tmpptr;
     rl_completer_quote_characters = rl_tmpptr;
     rl_completer_word_break_characters = rl_tmpptr;
-    #endif
     #ifdef _WIN32
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) {
-        exit(GetLastError());
+        err = GetLastError();
+        cleanExit();
     }
     DWORD dwMode = 0;
     if (!GetConsoleMode(hOut, &dwMode)){
-        exit(GetLastError());
+        err = GetLastError();
+        cleanExit();
     }
     dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
     if (!SetConsoleMode(hOut, dwMode)) {
-        exit(GetLastError());
+        err = GetLastError();
+        cleanExit();
     }
     #endif
     getCurPos();
     if (curx != 1) putchar('\n');
-    bool exit = false;
+    bool pexit = false;
     for (int i = 1; i < argc; i++) {
         if (argv[i][0] == '-' && strcmp(argv[i], "--file") && strcmp(argv[i], "-f")) {
             if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
@@ -408,7 +396,7 @@ int main(int argc, char** argv) {
                 printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
                 puts("Copyright (C) 2021 PQCraft");
                 puts("This software is licensed under the GNU GPL v3.");
-                exit = true;
+                pexit = true;
             } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
                 if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = 1; cleanExit();}
                 printf("Usage: %s [options] [{--file|-f}] [file] [options]\n", argv[0]);
@@ -419,7 +407,7 @@ int main(int argc, char** argv) {
                 puts("    {-h|--help}                 Shows this help text.");
                 puts("    {-v|--version}              Shows the version and license information.");
                 puts("    {-d|--debug}                Enables the printing of debug information.");
-                exit = true;
+                pexit = true;
             } else if (!strcmp(argv[i], "--debug") || !strcmp(argv[i], "-d")) {
                 if (debug) {fputs("Incorrect number of options passed.\n", stderr); err = 1; cleanExit();}
                 debug = true;
@@ -450,7 +438,10 @@ int main(int argc, char** argv) {
             if (!isFile(progFilename)) {puts("Expected file instead of directory."); err = 1; cleanExit();}
         }
     }
-    if (exit) cleanExit();
+    if (pexit) cleanExit();
+    if (!isatty(STDERR_FILENO) && !inProg) {exit(1);}
+    if (!isatty(STDIN_FILENO) && !inProg) {fputs("CLIBASIC does not support piping in shell mode.\n", stderr); exit(1);}
+    if (!isatty(STDOUT_FILENO) && !inProg) {fputs("CLIBASIC does not support redirection in shell mode.\n", stderr); exit(1);}
     updateTxtAttrib();
     termargs = argv;
     if (argv[0][0] == '.') {
@@ -521,7 +512,7 @@ int main(int argc, char** argv) {
         }
     }
     resetTimer();
-    while (!exit) {
+    while (!pexit) {
         fchkint:
         conbuf[0] = 0;
         if (chkinProg) {inProg = true; chkinProg = false;}

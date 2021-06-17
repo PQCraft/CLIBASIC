@@ -1,6 +1,12 @@
-C = gcc
+ifndef OS
 
-CFLAGS = -Wall -Wextra -O2 -s -no-pie -lm -lreadline --std=c99
+C = gcc
+CFLAGS = -Wall -Wextra -O2 -lm -lreadline --std=c99
+ifeq ($(shell uname -s), Darwin)
+CFLAGS += -I/usr/local/opt/readline/include -L/usr/local/opt/readline/lib
+else
+CFLAGS += -s -no-pie
+endif
 
 CBITS = $(shell getconf LONG_BIT)
 
@@ -41,3 +47,33 @@ debug:
 
 clean:
 	rm -f ./clibasic
+
+else
+
+C = gcc
+
+CFLAGS = -Wall -Wextra -O2 -Ilib -s -lm -lreadline --std=c99
+
+BUILD64 = xcopy lib\win64\*.dll . /Y && $(C) clibasic.c -m64 $(CFLAGS) -Llib\win64 -DB64 -o clibasic.exe
+BUILD32 = xcopy lib\win32\*.dll . /Y && $(C) clibasic.c -m32 $(CFLAGS) -Llib\win32 -DB32 -o clibasic.exe
+
+all: clean build run
+
+all32: clean build32 run
+
+build:
+	$(BUILD64)
+
+build32:
+	$(BUILD32)
+
+run:
+	.\clibasic.exe
+
+debug:
+	.\clibasic.exe --debug
+
+clean:
+	del /q /f .\clibasic.exe
+
+endif
