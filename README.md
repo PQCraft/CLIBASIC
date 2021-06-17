@@ -28,14 +28,10 @@ Mojave - Big Sur (`brew`): `git` <br>
 
 ---
 ### Building and Running <br>
-#### Linux/MacOS <br>
+#### Linux/Windows/MacOS <br>
 To build, use `make build`. <br>
 To run, use `make run` or `./clibasic`. <br>
 To build then run, use `make` (same as `make all`). <br>
-#### Windows <br>
-To build, use `make -f Makefile-Windows build`. <br>
-To run, use `make -f Makefile-Windows run` or `.\clibasic.exe`. <br>
-To build then run, use `make -f Makefile-Windows` (same as `make -f Makefile-Windows all`). <br>
 
 ---
 ### Notes <br>
