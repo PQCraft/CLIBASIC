@@ -1,0 +1,9 @@
+*.c linguist-language=C
+*.h linguist-language=C
+*.bas linguist-language=BASIC
+Makefile* linguist-language=Makefile
+*.txt linguist-detectable=false
+*.md linguist-detectable=false
+LICENSE linguist-detectable=false
+README linguist-detectable=false
+CONTRIBUTING linguist-detectable=false
