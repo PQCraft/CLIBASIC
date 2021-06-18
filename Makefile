@@ -67,6 +67,9 @@ build:
 build32:
 	$(BUILD32)
 
+update:
+	git restore . & git pull
+
 run:
 	.\clibasic.exe
 
