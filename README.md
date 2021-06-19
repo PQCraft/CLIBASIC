@@ -25,7 +25,7 @@ Arch (`pacman`): `git` <br>
 Alpine (`apk`): `git` <br>
 #### Windows <br>
 NT - 10 (download): [`git`](https://git-scm.com/download/win) <br>
-NT - 10 (`choco`): `git` <br>
+7 - 10 (`choco`): `git` <br>
 #### MacOS <br>
 Mojave - Big Sur (`brew`): `git` <br>
 
