@@ -41,6 +41,5 @@ To build then run, use `make` (same as `make all`). <br>
 - On Linux if CLIBASIC is not run in a terminal it will attempt to open in XTerm. CLIBASIC will only read arguments if it is run in a terminal.
 - If the file `.clibasic_history` is present in the user's home directory CLIBASIC will automatically save history there. Run `_AUTOCMDHIST`, `_SAVECMDHIST` (without any arguments), or create the file `.clibasic_history` in your home/user folder to enable this feature. Remove the file to disable this feature.
 - CLIBASIC will look for `AUTORUN.BAS` (and `autorun.bas` on Linux) in the user's home directory and run the file if present.
-- MacOS is supported but readline will behave a bit differently due to a segmentation fault that has not been fixed yet.
 - Any Windows before Windows 10 build 16257 will not display correctly due to the lack of ANSI escape code sequnce support.
 - The development scripts are `build.sh` which is for testing if CLIBASIC compiles correctly for Linux and Windows, and `package.sh` which creates the zip files for making a CLIBASIC release.
