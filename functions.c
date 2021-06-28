@@ -89,11 +89,13 @@ if (chkCmd(2, farg[0], "SH", "EXEC")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;} 
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    #ifndef _WIN_NO_VT
     if (sh_clearAttrib) fputs("\e[0m", stdout);
-    #ifdef _WIN32
-    if (sh_silent) {farg[1] = realloc(farg[1], sizeof(farg[1]) + 13); copyStrApnd(farg[1], " 1>nul 2>nul");}
-    #else
+    #endif
+    #ifndef _WIN32
     if (sh_silent) {farg[1] = realloc(farg[1], sizeof(farg[1]) + 13); copyStrApnd(farg[1], " &>/dev/null");}
+    #else
+    if (sh_silent) {farg[1] = realloc(farg[1], sizeof(farg[1]) + 13); copyStrApnd(farg[1], " 1>nul 2>nul");}
     #endif
     sprintf(outbuf, "%d", system(farg[1]));
     if (sh_restoreAttrib) updateTxtAttrib();
@@ -363,6 +365,40 @@ if (chkCmd(1, farg[0], "CURY")) {
     sprintf(outbuf, "%d", cury);
     goto fexit;
 }
+if (chkCmd(1, farg[0], "WIDTH")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct) {cerr = 3; goto fexit;}
+    #ifdef __unix__
+    struct winsize max;
+    ioctl(0, TIOCGWINSZ , &max);
+    sprintf(outbuf, "%d", max.ws_col);
+    #else
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    int tmpret;
+    tmpret = GetConsoleScreenBufferInfo(hConsole, &csbi);
+    (void)tmpret;
+    sprintf(outbuf, "%d", csbi.dwSize.X);
+    #endif
+    goto fexit;
+}
+if (chkCmd(1, farg[0], "HEIGHT")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct) {cerr = 3; goto fexit;}
+    #ifdef __unix__
+    struct winsize max;
+    ioctl(0, TIOCGWINSZ , &max);
+    sprintf(outbuf, "%d", max.ws_row);
+    #else
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    int tmpret;
+    tmpret = GetConsoleScreenBufferInfo(hConsole, &csbi);
+    (void)tmpret;
+    sprintf(outbuf, "%d", csbi.dwSize.Y);
+    #endif
+    goto fexit;
+}
 if (chkCmd(1, farg[0], "HEX$")) {
     cerr = 0;
     ftype = 1;
@@ -425,7 +461,7 @@ if (chkCmd(1, farg[0], "INPUT$")) {
         putchar('\n');
     }
     if (fargct != 1) free(farg[1]);
-    if (debug) printf("input output: {%s}\n", outbuf);
+    if (debug) printf("INPUT$ output: {%s}\n", outbuf);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "LINES")) {

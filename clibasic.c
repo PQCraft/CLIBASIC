@@ -14,10 +14,16 @@
 /* Changes the terminal title to display the CLIBASIC version and bits */
 #define CHANGE_TITLE // Comment out this line to disable changing the terminal/console title
 
+#ifdef _WIN32 // Avoids defining _WIN_NO_VT on a non-Windows operating system
+    /* Enables support for Windows before Windows 10 build 16257 (no VT escape code support) */
+    //#define _WIN_NO_VT // Un-comment this line if you are using a version of Windows proceeding Windows 10 build 16257
+#endif
+
 /* ------------------------ */
 
-/* Always use latest POSIX features */
+/* Fix implicit declaration issues */
 #define _POSIX_C_SOURCE 999999L
+#define _XOPEN_SOURCE 999999L
 
 /* Check if the buffer size is usable */
 #if (CB_BUF_SIZE < 0)
@@ -31,7 +37,7 @@
     Small CB_BUF_SIZE (Buffers will be small and may cause issues).
 #endif
 
-#if defined(unix) || defined(__unix) || defined(__APPLE__)
+#ifndef _WIN32 // NOTE: Assumes Unix-based system on anything except Windows
     #ifndef __unix__
         #define __unix__
     #endif
@@ -66,23 +72,14 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.15.7";
+char VER[] = "0.15.8";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
-    #ifndef __unix__
-        #define __unix__
-    #endif
 #elif defined(BSD)
     char OSVER[] = "BSD";
-    #ifndef __unix__
-        #define __unix__
-    #endif
 #elif defined(__APPLE__)
     char OSVER[] = "MacOS";
-    #ifndef __unix__
-        #define __unix__
-    #endif
 #elif defined(__unix__)
     char OSVER[] = "Unix";
 #elif defined(_WIN32)
@@ -190,6 +187,8 @@ bool txt_dim = false;
 bool txt_blink = false;
 bool txt_hidden = false;
 bool txt_reverse = false;
+bool txt_fgc = true;
+bool txt_bgc = false;
 int  txt_underlncolor = 0;
 
 bool textlock = false;
@@ -240,7 +239,6 @@ char* rl_get_tab(const char* text, int state) {
         tab = malloc(strlen(text) + 5);
         strcpy(tab, text);
         tab_end = tab_width - (tab_end % tab_width) - 1;
-        //printf("\e[s\e[H[%d]\e[u", tab_end);
         if (!tab_end) tab_end = tab_width;
         fflush(stdout);
         for (int i = 0; i < tab_end; i++) {
@@ -270,9 +268,10 @@ void setcsr() {
 }
 void rl_sigh(int sig) {signal(sig, rl_sigh);}
 void txtqunlock() {}
+HANDLE hConsole;
 //(https://i.kym-cdn.com/entries/icons/original/000/027/746/crying.jpg)
 #ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
-#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 4
 #endif
 char kbinbuf[256];
 #endif
@@ -303,13 +302,17 @@ void cleanExit() {
     #ifdef _WIN32
     SetFileAttributesA(HIST_FILE, FILE_ATTRIBUTE_HIDDEN);
     #endif
-    #ifdef CHANGE_TITLE
+    #if defined(CHANGE_TITLE) && !defined(_WIN_NO_VT)
     if (changedtitle) fputs("\e[23;0t", stdout);
     #endif
-    if (!keep) printf("\e[0m");
-    //fflush(stdout);
+    #ifndef _WIN_NO_VT
+    if (!keep) fputs("\e[0m", stdout);
+    #endif
     getCurPos();
-    if (curx != 1) printf("\n");
+    if (curx != 1) putchar('\n');
+    #ifndef _WIN_NO_VT
+    fputs("\e[2K", stdout);
+    #endif
     exit(err);
 }
 
@@ -365,23 +368,30 @@ int main(int argc, char** argv) {
     char* rl_tmpptr = calloc(1, 1);
     rl_completion_entry_function = rl_get_tab;
     rl_attempted_completion_function = (rl_completion_func_t*)rl_tab;
+    #ifdef __unix__
     rl_getc_function = getc;
+    #endif
     rl_special_prefixes = rl_tmpptr;
     rl_completer_quote_characters = rl_tmpptr;
     rl_completer_word_break_characters = rl_tmpptr;
     #ifdef _WIN32
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut == INVALID_HANDLE_VALUE) {
+    hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hConsole == INVALID_HANDLE_VALUE) {
+        fputs("Failed to open a valid console handle.\n", stderr);
         err = GetLastError();
         cleanExit();
     }
+    #endif
+    #if defined(_WIN32) && !defined(_WIN_NO_VT)
     DWORD dwMode = 0;
-    if (!GetConsoleMode(hOut, &dwMode)){
+    if (!GetConsoleMode(hConsole, &dwMode)){
+        fputs("Failed to get the console mode.\n", stderr);
         err = GetLastError();
         cleanExit();
     }
     dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    if (!SetConsoleMode(hOut, dwMode)) {
+    if (!SetConsoleMode(hConsole, dwMode)) {
+        fputs("Failed to set the console mode.\n", stderr);
         err = GetLastError();
         cleanExit();
     }
@@ -456,11 +466,17 @@ int main(int argc, char** argv) {
         printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
         strcpy(prompt, "\"CLIBASIC> \"");
         #ifdef CHANGE_TITLE
-        printf("\e[22;0t");
-        fflush(stdout);
+        #ifndef _WIN_NO_VT
+        fputs("\e[22;0t", stdout);
         changedtitle = true;
         printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
         fflush(stdout);
+        #else
+        char* tmpstr = malloc(CB_BUF_SIZE);
+        sprintf(tmpstr, "CLIBASIC %s (%s-bit)", VER, BVER);
+        SetConsoleTitleA(tmpstr);
+        free(tmpstr);
+        #endif
         #endif
     }
     if (debug) printf("Running in debug mode\n");
@@ -664,10 +680,14 @@ bool isFile(char* path) {
     return !(S_ISDIR(pathstat.st_mode));
 }
 
+void getTermSize() {
+
+}
+
 void getCurPos() {
     fflush(stdout);
     cury = 0; curx = 0;
-    #ifdef __unix__
+    #ifndef _WIN32
     char buf[16];
     register int ret, i;
     i = kbhit();
@@ -680,21 +700,16 @@ void getCurPos() {
     }
     fputs("\e[6n", stdout);
     fflush(stdout);
-    ret = read(1, &buf, 16);
-    if (!ret) {
-        if (!textlock) tcsetattr(0, TCSANOW, &restore);
-        return;
-    }
-	if (!textlock) tcsetattr(0, TCSANOW, &restore);
+    while (!(i = kbhit())) {}
+    ret = read(1, &buf, i);
+    if (!textlock) tcsetattr(0, TCSANOW, &restore);
+    if (!ret) return;
     sscanf(buf, "\e[%d;%dR", &cury, &curx);
-    return;
     #else
     CONSOLE_SCREEN_BUFFER_INFO con;
-    HANDLE hcon = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hcon != INVALID_HANDLE_VALUE && GetConsoleScreenBufferInfo(hcon, &con)) {
-        curx = con.dwCursorPosition.X + 1;
-        cury = con.dwCursorPosition.Y + 1;
-    }
+    GetConsoleScreenBufferInfo(hConsole, &con);
+    curx = con.dwCursorPosition.X + 1;
+    cury = con.dwCursorPosition.Y + 1;
     #endif
 }
 
@@ -709,14 +724,22 @@ void loadProg() {
     uint64_t fsize = (uint64_t)ftell(prog);
     uint64_t time2 = usTime();
     fseek(prog, 0, SEEK_SET);
+    #ifndef _WIN_NO_VT
     printf("\e[%d;%dH", tmpy, tmpx);
+    #else
+    SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
+    #endif
     printf("(%llu bytes)...", (long long unsigned)fsize);
     fflush(stdout);
     progbuf = realloc(progbuf, fsize + 1);
     int64_t j = 0;
     bool comment = false;
     bool inStr = false;
+    #ifndef _WIN_NO_VT
     printf("\e[%d;%dH", tmpy, tmpx);
+    #else
+    SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
+    #endif
     printf("(0/%llu bytes)...", (long long unsigned)fsize);
     fflush(stdout);
     while (!feof(prog)) {
@@ -728,18 +751,36 @@ void loadProg() {
         if (!comment) {progbuf[j] = (char)tmpc; j++;}
         if (usTime() - time2 >= 250000) {
             time2 = usTime();
+            #ifndef _WIN_NO_VT
             printf("\e[%d;%dH", tmpy, tmpx);
+            #else
+            SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
+            #endif
             printf("(%lld/%lld bytes)...", (long long unsigned)ftell(prog), (long long unsigned)fsize);
         }
         fflush(stdout);
     }
+    #ifndef _WIN_NO_VT
     printf("\e[%d;%dH", tmpy, tmpx);
+    #else
+    SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
+    #endif
     printf("(%lld/%lld bytes)...", (long long unsigned)ftell(prog), (long long unsigned)fsize);
-    fflush(stdout);
-    printf("\e[%d;%dH", tmpy, 1);
+    #ifndef _WIN_NO_VT
     fputs("\e[2K", stdout);
     fflush(stdout);
-    if (j == 0) j = 1;
+    #else
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    int ret = GetConsoleScreenBufferInfo(hConsole, &csbi);
+    getCurPos();
+    DWORD ret2;
+    ret = FillConsoleOutputCharacter(hConsole, ' ', csbi.dwSize.X, (COORD){0, cury - 1}, &ret2);
+    (void)ret;
+    (void)ret2;
+    #endif
+    putchar('\r');
+    fflush(stdout);
+    if (j < 1) j = 1;
     progbuf[j - 1] = 0;
 }
 
@@ -831,8 +872,10 @@ void lowCase(char* str) {
 }
 
 void updateTxtAttrib() {
+    #ifndef _WIN_NO_VT
     fputs("\e[0m", stdout);
-    printf("\e[0m\e[38;5;%um\e[48;5;%um", fgc, bgc);
+    if (txt_fgc) printf("\e[38;5;%um", fgc);
+    if (txt_bgc) printf("\e[48;5;%um", bgc);
     if (txt_bold) fputs("\e[1m", stdout);
     if (txt_italic) fputs("\e[3m", stdout);
     if (txt_underln) fputs("\e[4m", stdout);
@@ -845,6 +888,32 @@ void updateTxtAttrib() {
     if (txt_hidden) fputs("\e[8m", stdout);
     if (txt_reverse) fputs("\e[7m", stdout);
     if (txt_underlncolor) printf("\e[58:5:%um", txt_underlncolor);
+    #else
+    uint8_t tfgc, tbgc;
+    switch (fgc % 16) {
+        case 1: tfgc = 4; break;
+        case 3: tfgc = 6; break;
+        case 4: tfgc = 1; break;
+        case 6: tfgc = 3; break;
+        case 9: tfgc = 12; break;
+        case 11: tfgc = 14; break;
+        case 12: tfgc = 9; break;
+        case 14: tfgc = 11; break;
+        default: tfgc = fgc; break;
+    }
+    switch (bgc % 16) {
+        case 1: tbgc = 4; break;
+        case 3: tbgc = 6; break;
+        case 4: tbgc = 1; break;
+        case 6: tbgc = 3; break;
+        case 9: tbgc = 12; break;
+        case 11: tbgc = 14; break;
+        case 12: tbgc = 9; break;
+        case 14: tbgc = 11; break;
+        default: tbgc = bgc; break;
+    }
+	SetConsoleTextAttribute(hConsole, (tfgc % 16) + (tbgc % 16) * 16);
+    #endif
     fflush(stdout);
 }
 
@@ -863,6 +932,7 @@ void getStr(char* str1, char* str2) {
                 case 'r': c = '\r'; break;
                 case 'f': c = '\f'; break;
                 case 't': c = '\t'; break;
+                case 'v': c = '\v'; break;
                 case 'b': c = '\b'; break;
                 case 'e': c = '\e'; break;
                 case 'x':
@@ -1109,29 +1179,29 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     if ((isSpChar(inbuf[0]) && inbuf[0] != '-') || isSpChar(inbuf[strlen(inbuf) - 1])) {cerr = 1; dt = 0; goto gvreturn;}
     int tmpct = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = '"'; tmp[3][1] = 0;
-    bool* tmpseenStr = malloc(sizeof(bool));
-    tmpseenStr[0] = false;
+    bool* tmpSeenStr = malloc(sizeof(bool));
+    tmpSeenStr[0] = false;
     for (int i = 0; inbuf[i]; i++) {
         if (inbuf[i] == '"') {
             inStr = !inStr;
-            if (tmpseenStr[tmpct] && inStr) {
-                free(tmpseenStr);
+            if (inStr && tmpSeenStr[tmpct]) {
+                free(tmpSeenStr);
                 dt = 0;
                 cerr = 1;
                 goto gvreturn;
             }
-            tmpseenStr[tmpct] = true;
+            tmpSeenStr[tmpct] = true;
         }
-        if (isSpChar(inbuf[i]) && !inStr && tmpct == 0) tmpseenStr[tmpct] = false;
+        if (isSpChar(inbuf[i]) && !inStr) tmpSeenStr[tmpct] = false;
         if (inbuf[i] == '(' && !inStr) {
             if (tmpct == 0) {ip = i;}
             tmpct++;
-            tmpseenStr = realloc(tmpseenStr, (tmpct + 1) * sizeof(bool));
-            tmpseenStr[tmpct] = false;
+            tmpSeenStr = realloc(tmpSeenStr, (tmpct + 1) * sizeof(bool));
+            tmpSeenStr[tmpct] = false;
         }
         if (inbuf[i] == ')' && !inStr) {
             tmpct--;
-            tmpseenStr = realloc(tmpseenStr, (tmpct + 1) * sizeof(bool));
+            tmpSeenStr = realloc(tmpSeenStr, (tmpct + 1) * sizeof(bool));
             if (tmpct == 0 && (ip == 0 || isSpChar(inbuf[ip - 1]))) {
                 int tmplen[2];
                 tmplen[0] = strlen(inbuf);
@@ -1143,7 +1213,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 if (t == 255) {t = 1; dt = 1;}
                 if (t != dt) {cerr = 2; dt = 0; goto gvreturn;}
                 copyStrSnip(inbuf, 0, ip, tmp[1]);
-                copyStrApnd(tmp[1], tmp[2]);
+                copyStrApnd(tmp[1], tmp[2]);    
                 if (t == 1) copyStrApnd(tmp[3], tmp[2]);
                 copyStrApnd(tmp[0], tmp[2]);
                 if (t == 1) copyStrApnd(tmp[3], tmp[2]);
@@ -1161,29 +1231,13 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
     while (1) {
         int pct = 0;
-        bool* seenStr = malloc(1 * sizeof(bool));
-        seenStr[0] = false;
         while (1) {
-            if (inbuf[jp] == '"') {
-                inStr = !inStr;
-                if (seenStr[pct] && inStr) {
-                    free(seenStr);
-                    dt = 0;
-                    cerr = 1;
-                    goto gvreturn;
-                }
-                seenStr[pct] = true;
-            }
-            if (inbuf[jp] == '(') {
-                pct++;
-                seenStr = realloc(seenStr, (pct + 1) * sizeof(bool));
-                seenStr[pct] = false;
-            }
-            if (inbuf[jp] == ')') {pct--; seenStr = realloc(seenStr, (pct + 1) * sizeof(bool));}
-            if ((isSpChar(inbuf[jp]) && !inStr && pct == 0) || inbuf[jp] == 0) {break;}
+            if (inbuf[jp] == '"') inStr = !inStr;
+            if (inbuf[jp] == '(') pct++;
+            if (inbuf[jp] == ')') pct--;
+            if ((isSpChar(inbuf[jp]) && !inStr && pct == 0) || inbuf[jp] == 0) break;
             jp++;
         }
-        free(seenStr);
         if (inStr) {dt = 0; cerr = 1; goto gvreturn;}
         copyStrSnip(inbuf, ip, jp, tmp[0]);
         t = getType(tmp[0]);
@@ -1663,3 +1717,4 @@ void runcmd() {
     }
     return;
 }
+

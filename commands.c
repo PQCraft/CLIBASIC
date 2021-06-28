@@ -48,7 +48,11 @@ if (chkCmd(1, arg[0], "COLOR")) {
         tmp = atoi(arg[1]);
         if (tmp < 0 || tmp > 255) {cerr = 16; goto cmderr;}
         fgc = (uint8_t)tmp;
-        printf("\e[38;5;%um", fgc);
+        #ifndef _WIN_NO_VT
+        if (txt_fgc) printf("\e[38;5;%um", fgc);
+        #else
+        updateTxtAttrib();
+        #endif
     }
     if (argct > 1) {
         if (!solvearg(2)) goto cmderr;
@@ -58,7 +62,11 @@ if (chkCmd(1, arg[0], "COLOR")) {
             tmp = atoi(arg[2]);
             if (tmp < 0 || tmp > 255) {cerr = 16; goto cmderr;}
             bgc = (uint8_t)tmp;
-            printf("\e[48;5;%um", bgc);
+            #ifndef _WIN_NO_VT
+            if (txt_bgc) printf("\e[48;5;%um", bgc);
+            #else
+            updateTxtAttrib();
+            #endif
         }
     }
     fflush(stdout);
@@ -86,7 +94,11 @@ if (chkCmd(1, arg[0], "LOCATE")) {
             cury = tmp;
         }
     }
+    #ifndef _WIN_NO_VT
     printf("\e[%d;%dH", cury, curx);
+    #else
+    SetConsoleCursorPosition(hConsole, (COORD){curx - 1, cury - 1});
+    #endif
     fflush(stdout);
     goto noerr;
 }
@@ -99,8 +111,16 @@ if (chkCmd(1, arg[0], "CLS")) {
         if (argt[1] != 2) {cerr = 2; goto cmderr;}
         tbgc = (uint8_t)atoi(arg[1]);
     }
-    printf("\e[48;5;%um\e[H\e[2J\e[3J\e[48;5;%um", tbgc, bgc);
+    #ifndef _WIN_NO_VT
+    if (argct) printf("\e[48;5;%um", tbgc);
+    fputs("\e[H\e[2J\e[3J", stdout);
+    if (txt_bgc) printf("\e[48;5;%um", bgc);
     fflush(stdout);
+    #else
+	SetConsoleTextAttribute(hConsole, (fgc % 16) + (tbgc % 16) * 16);
+    system("cls");
+    updateTxtAttrib();
+    #endif
     goto noerr;
 }
 if (chkCmd(1, arg[0], "WAITUS")) {
@@ -201,7 +221,9 @@ if (chkCmd(2, arg[0], "SH", "EXEC")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    #ifndef _WIN_NO_VT
     if (sh_clearAttrib) fputs("\e[0m", stdout);
+    #endif
     fflush(stdout);
     #ifdef _WIN32
     if (sh_silent) {arg[1] = realloc(arg[1], sizeof(arg[1]) + 13); copyStrApnd(arg[1], " 1>nul 2>nul");}
@@ -257,12 +279,19 @@ if (chkCmd(1, arg[0], "_RESETTITLE")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
+    #ifndef _WIN_NO_VT
     if (!changedtitle) {
         if (changedtitlecmd) fputs("\e[23;0t", stdout);
         goto noerr;
     }
     printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
     fflush(stdout);
+    #else
+    char* tmpstr = malloc(CB_BUF_SIZE);
+    sprintf(tmpstr, "CLIBASIC %s (%s-bit)", VER, BVER);
+    SetConsoleTitleA(tmpstr);
+    free(tmpstr);
+    #endif
     goto noerr;
 }
 if (chkCmd(1, arg[0], "_TITLE")) {
@@ -271,6 +300,7 @@ if (chkCmd(1, arg[0], "_TITLE")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    #ifndef _WIN_NO_VT
     if (!changedtitle) {
         fputs("\e[22;0t", stdout);
         fflush(stdout);
@@ -278,6 +308,9 @@ if (chkCmd(1, arg[0], "_TITLE")) {
     }
     changedtitlecmd = true;
     printf("\e]2;%s%c", arg[1], 7);
+    #else
+    SetConsoleTitleA(arg[1]);
+    #endif
     goto noerr;
 }
 if (chkCmd(1, arg[0], "_PROMPT")) {
@@ -389,6 +422,8 @@ if (chkCmd(1, arg[0], "_TXTATTRIB")) {
         if (!strcmp(arg[1], "HIDDEN")) attrib = 10; else
         if (!strcmp(arg[1], "REVERSE")) attrib = 11; else
         if (!strcmp(arg[1], "UNDERLINE_COLOR")) attrib = 12; else
+        if (!strcmp(arg[1], "FGC")) attrib = 13; else
+        if (!strcmp(arg[1], "BGC")) attrib = 14; else
         {cerr = 16; goto cmderr;}
     } else {
         attrib = atoi(arg[1]);
@@ -408,6 +443,8 @@ if (chkCmd(1, arg[0], "_TXTATTRIB")) {
         txt_blink = false;
         txt_hidden = false;
         txt_reverse = false;
+        txt_fgc = true;
+        txt_bgc = false;
         txt_underlncolor = 0;
         goto cmderr;
     } else if (argct != 2) {
@@ -444,6 +481,8 @@ if (chkCmd(1, arg[0], "_TXTATTRIB")) {
         case 9: txt_hidden = (bool)val; break;
         case 11: txt_reverse = (bool)val; break;
         case 12: txt_underlncolor = val; break;
+        case 13: txt_fgc = (bool)val; break;
+        case 14: txt_bgc = (bool)val; break;
     }
     updateTxtAttrib();
     goto noerr;
