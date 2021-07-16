@@ -46,7 +46,7 @@
     #endif
 #endif
 
-#ifndef _WIN_VT // Lazy patch to keep the user-defined macros consistent
+#if !defined(_WIN_VT) && defined(_WIN32) // Lazy patch to keep the user-defined macros consistent
     #define _WIN_NO_VT
 #endif
 
@@ -79,7 +79,7 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.16.1";
+char VER[] = "0.16.1.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -417,9 +417,10 @@ int main(int argc, char** argv) {
     bool pexit = false;
     for (int i = 1; i < argc; i++) {
         int shortopti = 0;
+        bool shortopt;
         if (argv[i][0] == '-' && strcmp(argv[i], "--file") && strcmp(argv[i], "-f")) {
             chkshortopt:
-            bool shortopt = false;
+            shortopt = false;
             if (argv[i][1] != '-') {shortopt = true; shortopti++;}
             if (!argv[i][shortopti]) continue;
             if (!strcmp(argv[i], "--version")) {
