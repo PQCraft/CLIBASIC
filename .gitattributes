@@ -1,8 +1,8 @@
 *.c linguist-language=C
 *.cpp linguist-language=C++
 *.h linguist-language=C
-*.bas linguist-language=CLIBASIC
-*.BAS linguist-language=CLIBASIC
+*.bas linguist-language=BASIC
+*.BAS linguist-language=BASIC
 Makefile* linguist-detectable=false
 *.txt linguist-detectable=false
 *.md linguist-detectable=false
