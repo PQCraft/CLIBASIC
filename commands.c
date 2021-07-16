@@ -14,21 +14,19 @@ if (chkCmd(1, arg[0], "PUT")) {
 if (chkCmd(2, arg[0], "SET", "LET")) {
     if (argct != 2) {cerr = 3; goto cmderr;}
     cerr = 0;
-    solvearg(1);
     if (!solvearg(2)) goto cmderr;
-    if (argt[1] == 0 || argt[2] == 0) {cerr = 1; goto cmderr;}
-    int v = -1;
-    for (int i = 0; i < varmaxct; i++) {
-        if (varinuse[i] && !strcmp(arg[1], varname[i])) {v = i; break;}
-    }
-    if (argt[1] != argt[2] && v != -1) {cerr = 2; goto cmderr;}
-    if (getType(tmpargs[1]) != 255) {
-        cerr = 4;
-        errstr = realloc(errstr, (strlen(tmpargs[1]) + 1) * sizeof(char));
-        copyStr(tmpargs[1], errstr);
-        goto cmderr;
-    }
-    if (!setVar(tmpargs[1], arg[2], argt[2])) goto cmderr;
+    if (!setVar(tmpargs[1], arg[2], argt[2], -1)) goto cmderr;
+    goto noerr;
+}
+if (chkCmd(1, arg[0], "DIM")) {
+    if (argct != 3) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    if (!solvearg(2)) goto cmderr;
+    if (!solvearg(3)) goto cmderr;
+    if (argt[2] != 2) {cerr = 2; goto cmderr;}
+    int32_t asize = atoi(arg[2]);
+    if (asize < 0) {cerr = 16; goto cmderr;}
+    if (!setVar(tmpargs[1], arg[3], argt[3], asize)) goto cmderr;
     goto noerr;
 }
 if (chkCmd(1, arg[0], "DEL")) {
@@ -176,8 +174,7 @@ if (chkCmd(1, arg[0], "CALL")) {
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     prog = fopen(arg[1], "r");
     if (!prog) {
-        errstr = realloc(errstr, (argl[1] + 1) * sizeof(char));
-        copyStr(arg[1], errstr);
+        seterrstr(arg[1]);
         cerr = 20;
         if (errno == EACCES) cerr = 21;
         if (errno == ENOENT) cerr = 15;
@@ -197,8 +194,7 @@ if (chkCmd(1, arg[0], "RUN")) {
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     prog = fopen(arg[1], "r");
     if (!prog) {
-        errstr = realloc(errstr, (argl[1] + 1) * sizeof(char));
-        copyStr(arg[1], errstr);
+        seterrstr(arg[1]);
         cerr = 20;
         if (errno == EACCES) cerr = 21;
         if (errno == ENOENT) cerr = 15;
@@ -268,8 +264,7 @@ if (chkCmd(2, arg[0], "CHDIR", "CD")) {
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     if (chdir(arg[1])) {
-        errstr = realloc(errstr, (argl[1] + 1) * sizeof(char));
-        copyStr(arg[1], errstr);
+        seterrstr(arg[1]);
         cerr = 17;
         goto cmderr;
     }

@@ -240,7 +240,9 @@ if (chkCmd(1, farg[0], "SINH")) {
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
     double dbl;
     sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%lf", sinh(dbl));
+    dbl = sinh(dbl);
+    if (!isfinite(dbl)) {cerr = 5; goto fexit;}
+    sprintf(outbuf, "%lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "COSH")) {
@@ -250,7 +252,9 @@ if (chkCmd(1, farg[0], "COSH")) {
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
     double dbl;
     sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%lf", cosh(dbl));
+    dbl = cosh(dbl);
+    if (!isfinite(dbl)) {cerr = 5; goto fexit;}
+    sprintf(outbuf, "%lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "TANH")) {
@@ -270,7 +274,9 @@ if (chkCmd(1, farg[0], "LOG")) {
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
     double dbl;
     sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%lf", log(dbl));
+    dbl = log(dbl);
+    if (!isfinite(dbl)) {cerr = 5; goto fexit;}
+    sprintf(outbuf, "%lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "LOG10")) {
@@ -280,7 +286,9 @@ if (chkCmd(1, farg[0], "LOG10")) {
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
     double dbl;
     sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%lf", log10(dbl));
+    dbl = log10(dbl);
+    if (!isfinite(dbl)) {cerr = 5; goto fexit;}
+    sprintf(outbuf, "%lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "EXP")) {
@@ -290,7 +298,9 @@ if (chkCmd(1, farg[0], "EXP")) {
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
     double dbl;
     sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%lf", exp(dbl));
+    dbl = exp(dbl);
+    if (!isfinite(dbl)) {cerr = 5; goto fexit;}
+    sprintf(outbuf, "%lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, farg[0], "UCASE$")) {
