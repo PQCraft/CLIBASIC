@@ -1,6 +1,6 @@
 /* USER RE-DEFINABLE MACROS */
 
-#ifndef CB_BUF_SIZE // Avoids redefinition error if '-D CB_BUF_SIZE=<number>' is used
+#ifndef CB_BUF_SIZE // Avoids redefinition error if '-DCB_BUF_SIZE=<number>' is used
     /* Sets the size of text buffers */
     #define CB_BUF_SIZE 32768 // Change the value to change the size of text buffers
 #endif
@@ -19,7 +19,7 @@
 
 #ifdef _WIN32 // Avoids defining _WIN_NO_VT on a non-Windows operating system
     /* Enables support for Windows before Windows 10 build 16257 (no VT escape code support) */
-    //#define _WIN_NO_VT // Uncomment this line if you are using a version of Windows proceeding Windows 10 build 16257
+    #define _WIN_VT // Comment out this line if you are using a version of Windows before Windows 10 build 16257
 #endif
 
 /* ------------------------ */
@@ -44,6 +44,10 @@
     #ifndef __unix__
         #define __unix__
     #endif
+#endif
+
+#ifndef _WIN_VT // Lazy patch to keep the user-defined macros consistent
+    #define _WIN_NO_VT
 #endif
 
 #include <math.h>
@@ -75,7 +79,7 @@
 #define SIGKILL 9
 #endif
 
-char VER[] = "0.16";
+char VER[] = "0.16.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -266,7 +270,6 @@ char** rl_tab(const char* text, int start, int end) {
 }
 
 #ifdef _WIN32
-//(https://pbs.twimg.com/media/CRcU7BKWwAEQZIE.jpg)
 char* rlptr;
 bool inrl = false;
 void cleanExit();
@@ -279,7 +282,6 @@ void setcsr() {
 void rl_sigh(int sig) {signal(sig, rl_sigh);}
 void txtqunlock() {}
 HANDLE hConsole;
-//(https://i.kym-cdn.com/entries/icons/original/000/027/746/crying.jpg)
 #ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
 #define ENABLE_VIRTUAL_TERMINAL_PROCESSING 4
 #endif
@@ -414,30 +416,37 @@ int main(int argc, char** argv) {
     if (curx != 1) putchar('\n');
     bool pexit = false;
     for (int i = 1; i < argc; i++) {
+        int shortopti = 0;
         if (argv[i][0] == '-' && strcmp(argv[i], "--file") && strcmp(argv[i], "-f")) {
-            if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
+            chkshortopt:
+            bool shortopt = false;
+            if (argv[i][1] != '-') {shortopt = true; shortopti++;}
+            if (!argv[i][shortopti]) continue;
+            if (!strcmp(argv[i], "--version")) {
                 if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = 1; cleanExit();}
                 printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
                 puts("Copyright (C) 2021 PQCraft");
                 puts("This software is licensed under the GNU GPL v3.");
                 pexit = true;
-            } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
+            } else if (!strcmp(argv[i], "--help")) {
                 if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); err = 1; cleanExit();}
                 printf("Usage: %s [options] [{--file|-f}] [file] [options]\n", argv[0]);
                 puts("Options:");
+                puts("    --help                      Shows this help text.");
+                puts("    --version                   Shows the version and license information.");
                 puts("    {-f|--file} <file>          Loads and runs <file>.");
                 puts("    {-c|--command} <command>    Runs <command> and exits.");
                 puts("    {-k|--keep}                 Stops CLIBASIC from resetting text attributes.");
-                puts("    {-h|--help}                 Shows this help text.");
-                puts("    {-v|--version}              Shows the version and license information.");
                 puts("    {-d|--debug}                Enables the printing of debug information.");
                 pexit = true;
-            } else if (!strcmp(argv[i], "--debug") || !strcmp(argv[i], "-d")) {
+            } else if (!strcmp(argv[i], "--debug") || (shortopt && argv[i][shortopti] == 'd')) {
                 if (debug) {fputs("Incorrect number of options passed.\n", stderr); err = 1; cleanExit();}
                 debug = true;
-            } else if (!strcmp(argv[i], "--keep") || !strcmp(argv[i], "-k")) {
+                if (shortopt) goto chkshortopt;
+            } else if (!strcmp(argv[i], "--keep") || (shortopt && argv[i][shortopti] == 'k')) {
                 if (keep) {fputs("Incorrect number of options passed.\n", stderr); err = 1; cleanExit();}
                 keep = true;
+                if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--command") || !strcmp(argv[i], "-c")) {
                 i++;
                 if (!argv[i]) {fputs( "No command provided.\n", stderr); err = 1; cleanExit();}
@@ -479,8 +488,7 @@ int main(int argc, char** argv) {
     if (!runfile) {
         printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
         strcpy(prompt, "\"CLIBASIC> \"");
-        #ifdef CHANGE_TITLE
-        #ifndef _WIN_NO_VT
+        #if defined(CHANGE_TITLE) && !defined(_WIN_NO_VT)
         fputs("\e[22;0t", stdout);
         changedtitle = true;
         printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
@@ -490,7 +498,6 @@ int main(int argc, char** argv) {
         sprintf(tmpstr, "CLIBASIC %s (%s-bit)", VER, BVER);
         SetConsoleTitleA(tmpstr);
         free(tmpstr);
-        #endif
         #endif
     }
     if (debug) printf("Running in debug mode\n");
@@ -604,7 +611,6 @@ int main(int argc, char** argv) {
                 for (int i = 0; i < kbh; i++) {
                     kbc = _getch();
                     kbinbuf[i] = kbc;
-                    //printf("[%d]: [%d]\n", i, kbc);
                     putchar(kbc);
                     if (kbc == 3) {
                         if (inProg) {goto brkproccmd;}
@@ -842,14 +848,12 @@ static inline bool isValidVarChar(char bfr) {
 
 #ifndef BUILT_IN_STRING_FUNCS
 static inline void copyStr(char* str1, char* str2) {
-    //if (!str1) {str2[0] = 0; return;}
     int i;
     for (i = 0; str1[i]; i++) {str2[i] = str1[i];}
     str2[i] = 0;
 }
 
 static inline void copyStrApnd(char* str1, char* str2) {
-    //if (!str1) {str2[0] = 0; return;}
     int j = 0, i = 0;
     for (i = strlen(str2); str1[j]; i++) {str2[i] = str1[j]; j++;}
     str2[i] = 0;
@@ -857,14 +861,12 @@ static inline void copyStrApnd(char* str1, char* str2) {
 #endif
 
 static inline void copyStrSnip(char* str1, int i, int j, char* str2) {
-    //if (!str1) {str2[0] = 0; return;}
     int i2 = 0;
     for (int i3 = i; i3 < j; i3++) {str2[i2] = str1[i3]; i2++;}
     str2[i2] = 0;
 }
 
 static inline void copyStrTo(char* str1, int i, char* str2) {
-    //if (!str1) {str2[0] = 0; return;}
     int i2 = 0;
     int i3;
     for (i3 = i; str1[i]; i++) {str2[i3] = str1[i2]; i2++; i3++;}
