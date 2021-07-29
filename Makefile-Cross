@@ -19,10 +19,7 @@ build32:
 	$(BUILD32)
 
 run:
-	wine clibasic.exe
-
-debug:
-	wine clibasic.exe --debug
+	wineconsole clibasic.exe
 
 clean:
 	rm -f clibasic.exe *.dll

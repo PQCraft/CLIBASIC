@@ -5,7 +5,7 @@ CFLAGS = -Wall -Wextra -O2 -lm -lreadline --std=c99
 ifeq ($(shell uname -s), Darwin)
 CFLAGS += -I/usr/local/opt/readline/include -L/usr/local/opt/readline/lib
 else
-CFLAGS += -s -no-pie
+CFLAGS += -g -no-pie
 endif
 
 CBITS = $(shell getconf LONG_BIT)
@@ -42,9 +42,6 @@ install32:
 run:
 	./clibasic
 
-debug:
-	./clibasic --debug
-
 clean:
 	rm -f ./clibasic
 
@@ -71,12 +68,9 @@ update:
 	git restore . & git pull
 
 run:
-	.\clibasic.exe
-
-debug:
-	.\clibasic.exe --debug
+	.\\clibasic.exe
 
 clean:
-	del /q /f .\clibasic.exe
+	del /q /f .\\clibasic.exe
 
 endif

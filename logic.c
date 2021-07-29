@@ -1,22 +1,5 @@
-if (chkCmd(1, ltmp[0], "REM")) return true;
-if (chkCmd(2, ltmp[0], "?;", "PRINT;")) {
-    if (dlstackp > -1) {
-        if (dldcmd[dlstackp]) return true;
-    }
-    if (itstackp > -1) {
-        if (itdcmd[itstackp]) return true;
-    }
-    if (fnstackp > -1) {
-        if (fndcmd[fnstackp]) return true;
-    }
-    for (int i = j; cmd[i]; i++) {
-        if (cmd[i] != ' ') {cerr = 1; return true;}
-    }
-    fputs("", stdout);
-    fflush(stdout);
-    return true;
-}
-if (chkCmd(2, ltmp[0], "?", "PRINT")) {
+if (chkCmd(1, "REM")) return true;
+if (chkCmd(2, "?", "PRINT")) {
     if (dlstackp > -1) {
         if (dldcmd[dlstackp]) return true;
     }
@@ -31,8 +14,8 @@ if (chkCmd(2, ltmp[0], "?", "PRINT")) {
     else {j--;}
     bool inStr = false;
     int pct = 0;
-    int ptr = 0;
-    int i = j;
+    int32_t ptr = 0;
+    int32_t i = j;
     while (cmd[i]) {
         i++;
         if (cmd[i] == '"') {inStr = !inStr;}
@@ -41,11 +24,9 @@ if (chkCmd(2, ltmp[0], "?", "PRINT")) {
         if (cmd[i] == ' ' && !inStr) {} else
         if ((cmd[i] == ',' || cmd[i] == ';' || cmd[i] == 0) && !inStr && pct == 0) {
             ltmp[1][ptr] = 0; ptr = 0;
-            int len = strlen(ltmp[1]);
+            int32_t len = strlen(ltmp[1]);
             int tmpt;
-            if (debug) printf(">ltmp[1]: {%s}\n", ltmp[1]);
             if (!(tmpt = getVal(ltmp[1], ltmp[1]))) return true;
-            if (debug) printf(">ltmp[1]: {%s}\n", ltmp[1]);
             if (cmd[j] == ',') {
                 if (tmpt != 255) {putchar('\t');}
                 else {putchar('\n');}
@@ -54,13 +35,13 @@ if (chkCmd(2, ltmp[0], "?", "PRINT")) {
             if (cmd[i] == 0 && len > 0) putchar('\n');
             j = i;
         } else
-        {ltmp[1][ptr] = cmd[i]; ptr++; if (debug) printf("ltmp[1]: {%s}\n", ltmp[1]);}
+        {ltmp[1][ptr] = cmd[i]; ptr++;}
     }
     if (pct || inStr) {cerr = 1; return true;}
     fflush(stdout);
     return true;
 }
-if (chkCmd(1, ltmp[0], "DO")) {
+if (chkCmd(1, "DO")) {
     if (dlstackp >= 255) {cerr = 12; return true;}
     dlstackp++;
     if (itstackp > -1) {
@@ -72,14 +53,14 @@ if (chkCmd(1, ltmp[0], "DO")) {
     if (fnstackp > -1) {
         if (fndcmd[fnstackp]) return true;
     }
-    int p = j;
+    int32_t p = j;
     while (cmd[p]) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
     dldcmd[dlstackp] = false;
     dlstack[dlstackp] = cmdpos;
     dlpline[dlstackp] = progLine;
     return true;
 }
-if (chkCmd(1, ltmp[0], "DOWHILE")) {
+if (chkCmd(1, "DOWHILE")) {
     if (dlstackp >= 255) {cerr = 12; return true;}
     dlstackp++;
     if (itstackp > -1) {
@@ -100,7 +81,7 @@ if (chkCmd(1, ltmp[0], "DOWHILE")) {
     dldcmd[dlstackp] = !dldcmd[dlstackp];
     return true;
 }
-if (chkCmd(1, ltmp[0], "LOOP")) {
+if (chkCmd(1, "LOOP")) {
     if (dlstackp <= -1) {cerr = 6; return true;}
     if (dlstackp > -1) {
         if (dldcmd[dlstackp]) {dlstackp--; return true;}
@@ -111,17 +92,21 @@ if (chkCmd(1, ltmp[0], "LOOP")) {
     if (fnstackp > -1) {
         if (fndcmd[fnstackp]) return true;
     }
-    cp = dlstack[dlstackp];
+    if (inProg) {
+        cp = dlstack[dlstackp];
+    } else {
+        concp = dlstack[dlstackp];
+    }
     progLine = dlpline[dlstackp];
     lockpl = true;
     dldcmd[dlstackp] = false;
     dlstackp--;
-    int p = j;
+    int32_t p = j;
     while (cmd[p]) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
     didloop = true;
     return true;
 }
-if (chkCmd(1, ltmp[0], "LOOPWHILE")) {
+if (chkCmd(1, "LOOPWHILE")) {
     if (dlstackp <= -1) {cerr = 6; return true;}
     if (itstackp > -1) {
         if (itdcmd[itstackp]) return true;
@@ -135,13 +120,21 @@ if (chkCmd(1, ltmp[0], "LOOPWHILE")) {
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     uint8_t testval = logictest(ltmp[1]);
     if (testval != 1 && testval) return true;
-    if (testval == 1) {cp = dlstack[dlstackp]; progLine = dlpline[dlstackp]; lockpl = true;}
+    if (testval == 1) {
+        if (inProg) {
+            cp = dlstack[dlstackp];
+        } else {
+            concp = dlstack[dlstackp];
+        }
+        progLine = dlpline[dlstackp];
+        lockpl = true;
+    }
     dldcmd[dlstackp] = false;
     dlstackp--;
     didloop = true;
     return true;
 }
-if (chkCmd(1, ltmp[0], "IF")) {
+if (chkCmd(1, "IF")) {
     if (itstackp >= 255) {cerr = 13; return true;}
     itstackp++;
     if (itstackp > 0) {
@@ -159,7 +152,7 @@ if (chkCmd(1, ltmp[0], "IF")) {
     itdcmd[itstackp] = (bool)!testval;
     return true;
 }
-if (chkCmd(1, ltmp[0], "ELSE")) {
+if (chkCmd(1, "ELSE")) {
     if (itstackp <= -1) {cerr = 8; return true;}
     if (itstackp > 0) {
         if (itdcmd[itstackp - 1]) return true;
@@ -175,7 +168,7 @@ if (chkCmd(1, ltmp[0], "ELSE")) {
     itdcmd[itstackp] = !itdcmd[itstackp];
     return true;
 }
-if (chkCmd(1, ltmp[0], "ENDIF")) {
+if (chkCmd(1, "ENDIF")) {
     if (itstackp <= -1) {cerr = 7; return true;}
     if (fnstackp > -1) {
         if (fndcmd[fnstackp]) return true;
@@ -185,7 +178,7 @@ if (chkCmd(1, ltmp[0], "ENDIF")) {
     itstackp--;
     return true;
 }
-if (chkCmd(1, ltmp[0], "FOR")) {
+if (chkCmd(1, "FOR")) {
     if (itstackp >= 255) {cerr = 13; return true;}
     fnstackp++;
     if (itstackp > -1) {
@@ -211,13 +204,15 @@ if (chkCmd(1, ltmp[0], "FOR")) {
         copyStr(forbuf[1], forbuf[0]);
     }
     getArg(2, ltmp[1], forbuf[2]);
-    sprintf(forbuf[0], "%lf", atof(forbuf[0]) + atof(forbuf[3]));
-    setVar(fnvar, forbuf[0], 2, -1);
+    if (fninfor[fnstackp]) {
+        sprintf(forbuf[0], "%lf", atof(forbuf[0]) + atof(forbuf[3]));
+        setVar(fnvar, forbuf[0], 2, -1);
+    }
     int testval = logictest(forbuf[2]);
     if (testval == -1) return true;
     fndcmd[fnstackp] = !(bool)testval;
     if (!(fninfor[fnstackp] = (bool)testval)) {cerr = 0; return true;}
-    if (fnstack[fnstackp] == -1) {
+    if (!fninfor[fnstackp] && fnstack[fnstackp] == -1) {
         sprintf(forbuf[0], "%lf", atof(forbuf[0]) - atof(forbuf[3]));
         setVar(fnvar, forbuf[0], 2, -1);
     }
@@ -226,10 +221,14 @@ if (chkCmd(1, ltmp[0], "FOR")) {
     cerr = 0;
     return true;
 }
-if (chkCmd(1, ltmp[0], "NEXT")) {
+if (chkCmd(1, "NEXT")) {
     if (fnstackp <= -1) {cerr = 9; return true;}
     if (fninfor[fnstackp]) {
-        cp = fnstack[fnstackp];
+        if (inProg) {
+            cp = fnstack[fnstackp];
+        } else {
+            concp = fnstack[fnstackp];
+        }
         progLine = fnpline[fnstackp];
         lockpl = true;
         didloop = true;

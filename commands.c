@@ -1,24 +1,24 @@
-if (chkCmd(2, arg[0], "EXIT", "QUIT")) {
+if (chkCmd(2, "EXIT", "QUIT")) {
     if (argct > 1) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (argct == 1) {if (!solvearg(1)) goto cmderr; err = atoi(arg[1]);}
     if (inProg) {inProg = false; goto cmderr;}
     cleanExit();
 }
-if (chkCmd(1, arg[0], "PUT")) {
+if (chkCmd(1, "PUT")) {
     cerr = 0;
     for (int i = 1; i <= argct; i++) {if (!solvearg(i)) {goto cmderr;} fputs(arg[i], stdout);}
     fflush(stdout);
     goto noerr;
 }
-if (chkCmd(2, arg[0], "SET", "LET")) {
+if (chkCmd(2, "SET", "LET")) {
     if (argct != 2) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (!solvearg(2)) goto cmderr;
     if (!setVar(tmpargs[1], arg[2], argt[2], -1)) goto cmderr;
     goto noerr;
 }
-if (chkCmd(1, arg[0], "DIM")) {
+if (chkCmd(1, "DIM")) {
     if (argct != 3) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (!solvearg(2)) goto cmderr;
@@ -29,13 +29,13 @@ if (chkCmd(1, arg[0], "DIM")) {
     if (!setVar(tmpargs[1], arg[3], argt[3], asize)) goto cmderr;
     goto noerr;
 }
-if (chkCmd(1, arg[0], "DEL")) {
+if (chkCmd(1, "DEL")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!delVar(tmpargs[1])) goto cmderr;
     goto noerr;
 }
-if (chkCmd(1, arg[0], "COLOR")) {
+if (chkCmd(1, "COLOR")) {
     if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (!solvearg(1)) goto cmderr;
@@ -70,7 +70,7 @@ if (chkCmd(1, arg[0], "COLOR")) {
     fflush(stdout);
     goto noerr;
 }
-if (chkCmd(1, arg[0], "LOCATE")) {
+if (chkCmd(1, "LOCATE")) {
     cerr = 0;
     int tmp = 0;
     if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
@@ -100,7 +100,7 @@ if (chkCmd(1, arg[0], "LOCATE")) {
     fflush(stdout);
     goto noerr;
 }
-if (chkCmd(1, arg[0], "CLS")) {
+if (chkCmd(1, "CLS")) {
     cerr = 0;
     if (argct > 1) {cerr = 3; goto cmderr;}
     uint8_t tbgc = bgc;
@@ -121,7 +121,7 @@ if (chkCmd(1, arg[0], "CLS")) {
     #endif
     goto noerr;
 }
-if (chkCmd(1, arg[0], "WAITUS")) {
+if (chkCmd(1, "WAITUS")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -131,7 +131,7 @@ if (chkCmd(1, arg[0], "WAITUS")) {
     cb_wait(d);
     goto noerr;
 }
-if (chkCmd(1, arg[0], "WAITMS")) {
+if (chkCmd(1, "WAITMS")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -141,7 +141,7 @@ if (chkCmd(1, arg[0], "WAITMS")) {
     cb_wait(d * 1000);
     goto noerr;
 }
-if (chkCmd(1, arg[0], "WAIT")) {
+if (chkCmd(1, "WAIT")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -151,13 +151,13 @@ if (chkCmd(1, arg[0], "WAIT")) {
     cb_wait(d * 1000000);
     goto noerr;
 }
-if (chkCmd(1, arg[0], "RESETTIMER")) {
+if (chkCmd(1, "RESETTIMER")) {
     cerr = 0;
     if (argct) {cerr = 3; goto cmderr;}
     resetTimer();
     goto noerr;
 }
-if (chkCmd(2, arg[0], "SRAND", "SRND")) {
+if (chkCmd(2, "SRAND", "SRND")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -167,52 +167,36 @@ if (chkCmd(2, arg[0], "SRAND", "SRND")) {
     srand(rs);
     goto noerr;
 }
-if (chkCmd(1, arg[0], "CALL")) {
+if (chkCmd(1, "CALL")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    prog = fopen(arg[1], "r");
-    if (!prog) {
-        seterrstr(arg[1]);
-        cerr = 20;
-        if (errno == EACCES) cerr = 21;
-        if (errno == ENOENT) cerr = 15;
-        goto cmderr;
-    }
-    progFilename = malloc(argl[1] + 1);
-    copyStr(arg[1], progFilename);
-    if (!isFile(progFilename)) {cerr = 18; goto cmderr;}
-    loadProg();
+    inprompt = !runfile;
+    signal(SIGINT, cleanExit);
+    if (!loadProg(arg[1])) goto cmderr;
     chkinProg = true;
+    cp = 0;
+    didloop = true;
     goto noerr;
 }
-if (chkCmd(1, arg[0], "RUN")) {
+if (chkCmd(1, "RUN")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    prog = fopen(arg[1], "r");
-    if (!prog) {
-        seterrstr(arg[1]);
-        cerr = 20;
-        if (errno == EACCES) cerr = 21;
-        if (errno == ENOENT) cerr = 15;
-        goto cmderr;
-    }
-    if (!isFile(arg[1])) {cerr = 18; goto cmderr;}
-    progFilename = malloc(argl[1] + strlen(startcmd) + 7);
-    copyStr(startcmd, progFilename);
-    copyStrApnd(" -f \"", progFilename);
-    copyStrApnd(arg[1], progFilename);
-    copyStrApnd("\"", progFilename);
-    int ret = system(progFilename);
+    char* tmpcmd = malloc(argl[1] + strlen(startcmd) + 7);
+    copyStr(startcmd, tmpcmd);
+    copyStrApnd(" -f \"", tmpcmd);
+    copyStrApnd(arg[1], tmpcmd);
+    copyStrApnd("\"", tmpcmd);
+    int ret = system(tmpcmd);
     (void)ret;
-    free(progFilename);
-    progFilename = NULL;
+    updateTxtAttrib();
+    free(tmpcmd);
     goto noerr;
 }
-if (chkCmd(2, arg[0], "SH", "EXEC")) {
+if (chkCmd(2, "SH", "EXEC")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -221,18 +205,24 @@ if (chkCmd(2, arg[0], "SH", "EXEC")) {
     if (sh_clearAttrib) fputs("\e[0m", stdout);
     #endif
     fflush(stdout);
+    arg[1] = realloc(arg[1], strlen(arg[1]) + 6); copyStrApnd(" 2>&1", arg[1]);
     #ifdef _WIN32
-    if (sh_silent) {arg[1] = realloc(arg[1], sizeof(arg[1]) + 13); copyStrApnd(arg[1], " 1>nul 2>nul");}
+    if (sh_silent) {arg[1] = realloc(arg[1], strlen(arg[1]) + 13); copyStrApnd(" 1>nul 2>nul", arg[1]);}
     #else
-    if (sh_silent) {arg[1] = realloc(arg[1], sizeof(arg[1]) + 13); copyStrApnd(arg[1], " &>/dev/null");}
+    if (sh_silent) {arg[1] = realloc(arg[1], strlen(arg[1]) + 13); copyStrApnd(" &>/dev/null", arg[1]);}
     #endif
     fflush(stdout);
+    int duperr;
+    duperr = dup(2);
+    close(2);
     cerr = system(arg[1]);
+    dup2(duperr, 2);
+    close(duperr);
     if (sh_restoreAttrib) updateTxtAttrib();
     cerr = 0;
     goto noerr;
 }
-if (chkCmd(1, arg[0], "FILES")) {
+if (chkCmd(1, "FILES")) {
     cerr = 0;
     DIR* cwd = opendir(".");
     if (!cwd) {cerr = 20; goto cmderr;}
@@ -258,7 +248,7 @@ if (chkCmd(1, arg[0], "FILES")) {
     closedir(cwd);
     goto noerr;
 }
-if (chkCmd(2, arg[0], "CHDIR", "CD")) {
+if (chkCmd(2, "CHDIR", "CD")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
@@ -270,7 +260,7 @@ if (chkCmd(2, arg[0], "CHDIR", "CD")) {
     }
     goto noerr;
 }
-if (chkCmd(1, arg[0], "_RESETTITLE")) {
+if (chkCmd(1, "_RESETTITLE")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
@@ -289,7 +279,7 @@ if (chkCmd(1, arg[0], "_RESETTITLE")) {
     #endif
     goto noerr;
 }
-if (chkCmd(1, arg[0], "_TITLE")) {
+if (chkCmd(1, "_TITLE")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
@@ -308,7 +298,7 @@ if (chkCmd(1, arg[0], "_TITLE")) {
     #endif
     goto noerr;
 }
-if (chkCmd(1, arg[0], "_PROMPT")) {
+if (chkCmd(1, "_PROMPT")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
@@ -317,7 +307,7 @@ if (chkCmd(1, arg[0], "_PROMPT")) {
     copyStr(tmpargs[1], prompt);
     goto noerr;
 }
-if (chkCmd(1, arg[0], "_PROMPTTAB")) {
+if (chkCmd(1, "_PROMPTTAB")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
@@ -325,14 +315,14 @@ if (chkCmd(1, arg[0], "_PROMPTTAB")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     tab_width = atoi(arg[1]);
 }
-if (chkCmd(1, arg[0], "_AUTOCMDHIST")) {
+if (chkCmd(1, "_AUTOCMDHIST")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct != 0) {cerr = 3; goto cmderr;}
     autohist = true;
     goto noerr;
 }
-if (chkCmd(1, arg[0], "_SAVECMDHIST")) {
+if (chkCmd(1, "_SAVECMDHIST")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct > 1) {cerr = 3; goto cmderr;}
@@ -352,7 +342,7 @@ if (chkCmd(1, arg[0], "_SAVECMDHIST")) {
     }
     goto noerr;
 }
-if (chkCmd(1, arg[0], "_LOADCMDHIST")) {
+if (chkCmd(1, "_LOADCMDHIST")) {
     if (inProg) {cerr = 254; goto cmderr;}
     cerr = 0;
     if (argct > 1) {cerr = 3; goto cmderr;}
@@ -370,7 +360,7 @@ if (chkCmd(1, arg[0], "_LOADCMDHIST")) {
     }
     goto noerr;
 }
-if (chkCmd(1, arg[0], "_TXTLOCK")) {
+if (chkCmd(1, "_TXTLOCK")) {
     if (argct) {cerr = 3; goto cmderr;}
     cerr = 0;
     #ifndef _WIN32
@@ -384,7 +374,7 @@ if (chkCmd(1, arg[0], "_TXTLOCK")) {
     textlock = true;
     goto noerr;
 }
-if (chkCmd(1, arg[0], "_TXTUNLOCK")) {
+if (chkCmd(1, "_TXTUNLOCK")) {
     if (argct) {cerr = 3; goto cmderr;}
     cerr = 0;
     #ifndef _WIN32
@@ -393,14 +383,14 @@ if (chkCmd(1, arg[0], "_TXTUNLOCK")) {
     textlock = false;
     goto noerr;
 }
-if (chkCmd(1, arg[0], "_TXTATTRIB")) {
+if (chkCmd(1, "_TXTATTRIB")) {
     if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (!solvearg(1)) goto cmderr;
     if (argt[1] == 0) {cerr = 3; goto cmderr;}
     int attrib = 0;
     if (argt[1] == 1) {
-        for (int i = 0; arg[1][i]; i++) {
+        for (int32_t i = 0; arg[1][i]; i++) {
             if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
             if (arg[1][i] == ' ') arg[1][i] = '_';
         }
@@ -482,14 +472,14 @@ if (chkCmd(1, arg[0], "_TXTATTRIB")) {
     updateTxtAttrib();
     goto noerr;
 }
-if (chkCmd(1, arg[0], "_SHATTRIB")) {
+if (chkCmd(1, "_SHATTRIB")) {
     if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (!solvearg(1)) goto cmderr;
     if (argt[1] == 0) {cerr = 3; goto cmderr;}
     int attrib = 0;
     if (argt[1] == 1) {
-        for (int i = 0; arg[1][i]; i++) {
+        for (int32_t i = 0; arg[1][i]; i++) {
             if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
             if (arg[1][i] == ' ') arg[1][i] = '_';
         }
@@ -531,21 +521,5 @@ if (chkCmd(1, arg[0], "_SHATTRIB")) {
         case 3: sh_restoreAttrib = (bool)val; break;
     }
     updateTxtAttrib();
-    goto noerr;
-}
-if (chkCmd(1, arg[0], "_DEBUGON")) {
-    if (inProg) {cerr = 254; goto cmderr;}
-    cerr = 0;
-    if (argct) {cerr = 3; goto cmderr;}
-    if (!debug) puts("Enabled debug mode.");
-    debug = true;
-    goto noerr;
-}
-if (chkCmd(1, arg[0], "_DEBUGOFF")) {
-    if (inProg) {cerr = 254; goto cmderr;}
-    cerr = 0;
-    if (argct) {cerr = 3; goto cmderr;}
-    if (debug) puts("Disabled debug mode.");
-    debug = false;
     goto noerr;
 }
