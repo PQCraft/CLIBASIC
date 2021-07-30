@@ -24,6 +24,8 @@
 
 /* ------------------------ */
 
+// Patch/Error checking defines
+
 /* Fix implicit declaration issues */
 #define _POSIX_C_SOURCE 999999L
 #define _XOPEN_SOURCE 999999L
@@ -50,6 +52,8 @@
     #define _WIN_NO_VT
 #endif
 
+// Needed includes
+
 #include <math.h>
 #include <time.h>
 #include <stdio.h>
@@ -69,6 +73,8 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
+// OS-specific includes and definitions
+
 #ifndef _WIN32
     #include <termios.h>
     #include <sys/ioctl.h>
@@ -82,7 +88,9 @@
     #define SIGKILL 9
 #endif
 
-char VER[] = "0.17";
+// Base defines
+
+char VER[] = "0.17.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -109,6 +117,8 @@ char VER[] = "0.17";
     Could not detect architecture bits. Please use '-DB64' or '-DB32' when compiling. (Neither B32 or B64 was defined)
     char BVER[] = "?";
 #endif
+
+// Global vars and functions
 
 int progindex = -1;
 char** progbuf = NULL;
@@ -683,7 +693,7 @@ int main(int argc, char** argv) {
                 {cmdl++;}
                 if (!didloop) {cp++;} else {didloop = false;}
             } else {
-                if (!inStr && conbuf[concp] == '\'') comment = true;
+                if (!inStr && (conbuf[concp] == '\'' || conbuf[concp] == '#')) comment = true;
                 if (conbuf[concp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((conbuf[concp] == ':' && !inStr) || conbuf[concp] == 0) {
                     comment = false;
@@ -920,7 +930,7 @@ bool loadProg(char* filename) {
     while (!feof(prog)) {
         int tmpc = fgetc(prog);
         if (tmpc == '"') inStr = !inStr;
-        if (tmpc == '\'' && !inStr) comment = true;
+        if (!inStr && (tmpc == '\'' || tmpc == '#')) comment = true;
         if (tmpc == '\n') comment = false;
         if (tmpc == '\r' || tmpc == '\t') tmpc = ' ';
         if (!comment) {progbuf[progindex][j] = (char)tmpc; j++;}
