@@ -182,18 +182,63 @@ if (chkCmd(1, "CALL")) {
 }
 if (chkCmd(1, "RUN")) {
     cerr = 0;
-    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (argct < 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    char* tmpcmd = malloc(argl[1] + strlen(startcmd) + 7);
+    #ifndef _WIN32
+    char** runargs = (char**)malloc((argct + 3) * sizeof(char*));
+    runargs[0] = startcmd;
+    runargs[1] = "-x";
+    runargs[2] = arg[1];
+    argct += 2;
+    int argno;
+    for (argno = 3; argno < argct; argno++) {
+        if (!solvearg(argno - 1)) {free(runargs); goto cmderr;}
+        runargs[argno] = arg[argno - 1];
+    }
+    argct -= 2;
+    runargs[argno] = NULL;
+    int status;
+    pid_t pid = fork();
+    if (pid == 0) {
+        execvp(startcmd, runargs);
+        exit(0);
+    }
+    if (pid > 0) {
+        pid = wait(&status);
+        (void)status;
+    }
+    free(runargs);
+    if (pid < 0) {
+        cerr = -1;
+        goto cmderr;
+    }
+    #else
+    char* tmpcmd = malloc(CB_BUF_SIZE);
     copyStr(startcmd, tmpcmd);
-    copyStrApnd(" -f \"", tmpcmd);
+    copyStrApnd(" -x ", tmpcmd);
     copyStrApnd(arg[1], tmpcmd);
-    copyStrApnd("\"", tmpcmd);
+    int32_t strpos = strlen(tmpcmd);
+    for (int argno = 2; argno <= argct; argno++) {
+        tmpcmd[strpos] = ' ';
+        strpos++;
+        solvearg(argno);
+        for (int32_t i = 0; arg[argno][i] && strpos < CB_BUF_SIZE - 1; i++) {
+            if (arg[argno][i] == ' ' || arg[argno][i] == '^') {
+                tmpcmd[strpos] = '^';
+                strpos++;
+            }
+            tmpcmd[strpos] = arg[argno][i];
+            strpos++;
+        }
+    }
+    tmpcmd[strpos] = 0;
+    puts(tmpcmd);
     int ret = system(tmpcmd);
     (void)ret;
-    updateTxtAttrib();
     free(tmpcmd);
+    #endif
+    updateTxtAttrib();
     goto noerr;
 }
 if (chkCmd(2, "SH", "EXEC")) {

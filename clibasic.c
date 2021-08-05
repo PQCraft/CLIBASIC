@@ -5,6 +5,11 @@
     #define CB_BUF_SIZE 262144 // Change the value to change the size of text buffers
 #endif
 
+#ifndef CB_PROG_LOGIC_MAX // Avoids redefinition error if '-DCB_PROG_LOGIC_MAX=<number>' is used
+    /* Sets the size of logic command buffers */
+    #define CB_PROG_LOGIC_MAX 256 // Change the value to change how far logic commands can be nested
+#endif
+
 /* Uses strcpy and strcat in place of copyStr and copyStrApnd */
 #define BUILT_IN_STRING_FUNCS // Comment out this line to use CLIBASIC string functions
 
@@ -19,7 +24,7 @@
 
 #ifdef _WIN32 // Avoids defining _WIN_NO_VT on a non-Windows operating system
     /* Enables support for Windows before Windows 10 build 16257 (no VT escape code support) */
-    #define _WIN_VT // Comment out this line if you are using a version of Windows before Windows 10 build 16257
+    //#define _WIN_VT // Comment out this line if you are using a version of Windows before Windows 10 build 16257
 #endif
 
 /* ------------------------ */
@@ -38,8 +43,20 @@
     #error /* Buffers only have room for NULL char */ \
     Unusable CB_BUF_SIZE (Buffers only have room for NULL char).
 #elif (CB_BUF_SIZE < 256)
-    #warning /* Buffers will be small and may cause issues. */ \
+    #warning /* Buffers will be small and may cause issues */ \
     Small CB_BUF_SIZE (Buffers will be small and may cause issues).
+#endif
+
+/* Check if the logic command buffer sizes are usable */
+#if (CB_PROG_LOGIC_MAX < 1)
+    #error /* CB_PROG_LOGIC_MAX cannot be less than 1 */ \
+    Invalid value for CB_PROG_LOGIC_MAX (CB_PROG_LOGIC_MAX cannot be less than 1).
+#elif (CB_PROG_LOGIC_MAX < 2)
+    #warning /* Logic commands cannot be nested */ \
+    Microscopic CB_PROG_LOGIC_MAX (Logic commands cannot be nested).
+#elif (CB_PROG_LOGIC_MAX < 16)
+    #warning /* Logic commands will max out easily */ \
+    Small CB_PROG_LOGIC_MAX (Logic commands will max out easily).
 #endif
 
 #ifndef _WIN32 // NOTE: Assumes Unix-based system on anything except Windows
@@ -78,11 +95,18 @@
 #ifndef _WIN32
     #include <termios.h>
     #include <sys/ioctl.h>
+    #include <sys/wait.h>
 #else
     #include <windows.h>
     #include <conio.h>
     #include <fileapi.h>
 #endif
+
+#ifdef __APPLE__
+    #include <mach-o/dyld.h>
+#endif
+
+// SIGKILL is not defined sometimes
 
 #ifndef SIGKILL
     #define SIGKILL 9
@@ -90,7 +114,7 @@
 
 // Base defines
 
-char VER[] = "0.17.1";
+char VER[] = "0.18";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -128,8 +152,6 @@ int64_t* progcp = NULL;
 int* progcmdl = NULL;
 int* proglinebuf = NULL;
 
-FILE** f = NULL;
-
 int err = 0;
 int cerr;
 
@@ -164,19 +186,19 @@ int cmdpos;
 bool didloop = false;
 bool lockpl = false;
 
-int dlstack[256];
-int dlpline[256];
-bool dldcmd[256];
+int dlstack[CB_PROG_LOGIC_MAX];
+int dlpline[CB_PROG_LOGIC_MAX];
+bool dldcmd[CB_PROG_LOGIC_MAX];
 int dlstackp = -1;
 
-bool itdcmd[256];
+bool itdcmd[CB_PROG_LOGIC_MAX];
 int itstackp = -1;
 bool didelse = false;
 
-int fnstack[256];
-bool fndcmd[256];
-bool fninfor[256];
-int fnpline[256];
+int fnstack[CB_PROG_LOGIC_MAX];
+bool fndcmd[CB_PROG_LOGIC_MAX];
+bool fninfor[CB_PROG_LOGIC_MAX];
+int fnpline[CB_PROG_LOGIC_MAX];
 int fnstackp = -1;
 char fnvar[CB_BUF_SIZE];
 char forbuf[4][CB_BUF_SIZE];
@@ -202,6 +224,7 @@ bool inprompt = false;
 jmp_buf ctrlc_buf;
 
 bool runfile = false;
+bool runc = false;
 
 bool sh_silent = false;
 bool sh_clearAttrib = true;
@@ -234,6 +257,8 @@ bool autohist = false;
 
 int tab_width = 4;
 
+int progargc = 0;
+char** progargs = NULL;
 char** termargs = NULL;
 char* startcmd = NULL;
 
@@ -263,7 +288,7 @@ int kbhit() {
 #endif
 
 int tab_end = 0;
-static inline void strApndChar(char* str, char c);
+static inline void strApndChar(char*, char);
 char* rl_get_tab(const char* text, int state) {
     char* tab = NULL;
     rl_filename_quoting_desired = 0;
@@ -323,11 +348,13 @@ char* gethome();
 inline void initBaseMem();
 inline void freeBaseMem();
 
-void printError(int error);
+void printError(int);
 
-static inline void seterrstr(char* newstr);
+static inline void seterrstr(char*);
 
 void unloadAllProg();
+
+char* basefilename(char*);
 
 void cleanExit() {
     txtqunlock();
@@ -426,7 +453,7 @@ int main(int argc, char** argv) {
     #endif
     bool pexit = false;
     bool skip = false;
-    bool runc = false;
+    bool info = false;
     for (int i = 1; i < argc; i++) {
         int shortopti = 0;
         bool shortopt;
@@ -449,15 +476,42 @@ int main(int argc, char** argv) {
                 pexit = true;
             } else if (!strcmp(argv[i], "--help")) {
                 if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
-                printf("Usage: %s [options] [{--file|-f}] [file] [options]\n", argv[0]);
+                printf("Usage: %s [options] {[[{-f|--file}] FILE] [options] [--args [ARG...]] | --exec FILE [ARG...]}\n", argv[0]);
                 puts("Options:");
                 puts("    --help                      Shows this help text.");
                 puts("    --version                   Shows the version and license information.");
-                puts("    {-f|--file} <file>          Loads and runs <file>.");
-                puts("    {-c|--command} <command>    Runs <command> and exits.");
+                puts("    --args [ARG...]             Passes ARGs to the program.");
+                puts("    {-x|--exec} FILE [ARG...]   Runs and passes ARGs to FILE.");
+                puts("    {-f|--file} FILE            Runs FILE.");
+                puts("    {-c|--command} COMMAND      Runs COMMAND and exits.");
                 puts("    {-k|--keep}                 Stops CLIBASIC from resetting text attributes.");
-                puts("    {-s|--skip}                 Stops CLIBASIC from searching for autorun files.");
+                puts("    {-s|--skip}                 Skips searching for autorun programs.");
+                puts("    {-i|--info}                 Enables the info text.");
                 pexit = true;
+            } else if (!strcmp(argv[i], "--args")) {
+                if (runc || !runfile) {fputs("Args can only be passed when running a program.\n", stderr); exit(1);}
+                progargs = (char**)malloc((argc - i) * sizeof(char*));
+                for (progargc = 1; progargc < argc - i; progargc++) {
+                    progargs[progargc] = argv[i + progargc];
+                }
+                progargs[0] = progfn[progindex];
+                i = argc;
+            } else if (!strcmp(argv[i], "--exec") || !strcmp(argv[i], "-x")) {
+                if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
+                if (runfile) {fputs("Program already loaded, use --args.\n", stderr); exit(1); unloadAllProg();}
+                ttycheck();
+                if (runfile) {unloadProg(); fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                i++;
+                if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
+                if (!loadProg(argv[i])) {printError(cerr); exit(1);}
+                inProg = true;
+                runfile = true;
+                progargs = (char**)malloc((argc - i) * sizeof(char*));
+                for (progargc = 1; progargc < argc - i; progargc++) {
+                    progargs[progargc] = argv[i + progargc];
+                }
+                progargs[0] = progfn[progindex];
+                i = argc;
             } else if (!strcmp(argv[i], "--keep") || (shortopt && argv[i][shortopti] == 'k')) {
                 if (keep) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
                 keep = true;
@@ -466,7 +520,12 @@ int main(int argc, char** argv) {
                 if (skip) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
                 skip = true;
                 if (shortopt) goto chkshortopt;
+            } else if (!strcmp(argv[i], "--info") || (shortopt && argv[i][shortopti] == 'i')) {
+                if (info) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                info = true;
+                if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--command") || !strcmp(argv[i], "-c")) {
+                if (runfile) {fputs("Cannot run file and command.\n", stderr); exit(1);}
                 ttycheck();
                 if (runc) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
                 i++;
@@ -474,7 +533,7 @@ int main(int argc, char** argv) {
                 runc = true;
                 runfile = true;
                 copyStr(argv[i], conbuf);
-            } else if (shortopt && (argv[i][shortopti] == 'c' || argv[i][shortopti] == 'f')) {
+            } else if (shortopt && (argv[i][shortopti] == 'c' || argv[i][shortopti] == 'f' || argv[i][shortopti] == 'x')) {
                 fprintf(stderr, "Short option '%c' requires argument and cannot be grouped.\n", argv[i][shortopti]); exit(1);
             } else {
                 if (shortopt) {
@@ -484,6 +543,7 @@ int main(int argc, char** argv) {
                 }
             }
         } else {
+            if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
             ttycheck();
             if (runfile) {unloadProg(); fputs("Incorrect number of options passed.\n", stderr); exit(1);}
             if (!strcmp(argv[i], "--file") || !strcmp(argv[i], "-f")) {
@@ -497,6 +557,39 @@ int main(int argc, char** argv) {
     }
     if (pexit) exit(0);
     ttycheck();
+    startcmd = malloc(CB_BUF_SIZE);
+    #ifndef _WIN32
+    #ifndef __APPLE__
+    int32_t scsize;
+    if ((scsize = readlink("/proc/self/exe", startcmd, CB_BUF_SIZE)) == -1) {
+        #ifndef __linux__
+        if ((scsize = readlink("/proc/curproc/file", startcmd, CB_BUF_SIZE)) == -1) {
+        #endif
+            if (strcmp(argv[0], basefilename(argv[0]))) {
+                free(startcmd);
+                startcmd = realpath(argv[0], NULL);
+            } else {
+                startcmd = argv[0];
+            }
+        #ifndef __linux__
+        } else {
+            startcmd = realloc(startcmd, scsize + 1);
+        }
+        #endif
+    } else {
+        startcmd = realloc(startcmd, scsize + 1);
+    }
+    #else
+    uint32_t tmpsize = CB_BUF_SIZE;
+    if (_NSGetExecutablePath(startcmd, &size)) {
+        startcmd = argv[0];
+    }
+    startcmd = realloc(startcmd, strlen(startcmd) + 1);
+    #endif
+    #else
+    GetModuleFileName(NULL, startcmd, CB_BUF_SIZE);
+    startcmd = realloc(startcmd, strlen(startcmd) + 1);
+    #endif
     signal(SIGINT, cleanExit);
     signal(SIGKILL, cleanExit);
     signal(SIGTERM, cleanExit);
@@ -533,16 +626,8 @@ int main(int argc, char** argv) {
     if (curx != 1) putchar('\n');
     updateTxtAttrib();
     termargs = argv;
-    if (argv[0][0] == '.') {
-        #ifdef _WIN32
-        startcmd = _fullpath(NULL, argv[0], CB_BUF_SIZE);
-        #else
-        startcmd = realpath(argv[0], NULL);
-        #endif
-    }
-    if (!startcmd) startcmd = argv[0];
     if (!runfile) {
-        printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
+        if (info) printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
         strcpy(prompt, "\"CLIBASIC> \"");
         #ifdef CHANGE_TITLE
         #ifdef __unix__
@@ -632,7 +717,7 @@ int main(int argc, char** argv) {
             dlstackp = -1;
             itstackp = -1;
             fnstackp = -1;
-            for (int i = 0; i < 256; i++) {
+            for (int i = 0; i < CB_PROG_LOGIC_MAX; i++) {
                 dlstack[i] = 0;
                 dldcmd[i] = false;
                 fnstack[i] = -1;
@@ -694,9 +779,9 @@ int main(int argc, char** argv) {
                 if (!didloop) {cp++;} else {didloop = false;}
             } else {
                 if (!inStr && (conbuf[concp] == '\'' || conbuf[concp] == '#')) comment = true;
+                if (!inStr && conbuf[concp] == '\n') comment = false;
                 if (conbuf[concp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((conbuf[concp] == ':' && !inStr) || conbuf[concp] == 0) {
-                    comment = false;
                     while (conbuf[concp - cmdl] == ' ' && cmdl > 0) {cmdl--;}
                     cmd = (char*)realloc(cmd, cmdl + 1);
                     cmdpos = concp - cmdl;
@@ -810,6 +895,7 @@ static inline void getCurPos() {
 }
 
 void unloadProg() {
+    if (progindex > 0) progfnstr = progfn[progindex - 1];
     free(progbuf[progindex]);
     free(progfn[progindex]);
     progbuf[progindex] = NULL;
@@ -820,15 +906,7 @@ void unloadProg() {
     progLine = proglinebuf[progindex];
     progcp = (int64_t*)realloc(progcp, progindex * sizeof(int64_t));
     progcmdl = (int*)realloc(progcmdl, progindex * sizeof(int));
-    proglinebuf = (int*)realloc(progcmdl, progindex * sizeof(int));
-    if (progindex > 0) {
-        if (!progfnstr) progfnstr = malloc(CB_BUF_SIZE);
-        #ifdef _WIN32
-        _fullpath(progfnstr, progfn[progindex], CB_BUF_SIZE);
-        #else
-        realpath(progfn[progindex], progfnstr);
-        #endif
-    }
+    proglinebuf = (int*)realloc(proglinebuf, progindex * sizeof(int));
     progindex--;
     if (progindex < 0) inProg = false;
 }
@@ -891,8 +969,11 @@ bool loadProg(char* filename) {
     printf("\b\b\b   \b\b");
     fflush(stdout);
     progfn = (char**)realloc(progfn, (progindex + 1) * sizeof(char*));
-    progfn[progindex] = (char*)malloc(strlen(filename) + 1);
-    copyStr(filename, progfn[progindex]);
+    #ifdef _WIN32
+    progfn[progindex] = _fullpath(NULL, filename, CB_BUF_SIZE);
+    #else
+    progfn[progindex] = realpath(filename, NULL);
+    #endif
     progfnstr = progfn[progindex];
     progbuf = (char**)realloc(progbuf, (progindex + 1) * sizeof(char*));
     progcp = (int64_t*)realloc(progcp, (progindex + 1) * sizeof(int64_t));
@@ -1013,8 +1094,8 @@ static inline bool isSpChar(char bfr) {
 
 static inline bool isValidVarChar(char bfr) {
     return ((bfr >= 'A' && bfr <= 'Z') || (bfr >= '0' && bfr <= '9')
-    || (bfr >= '#' && bfr <= '&') || bfr == '!' || bfr == '?' || bfr == '@'
-    || bfr == '[' || bfr == ']');
+    || (bfr >= '#' && bfr < '&') || bfr == '!' || bfr == '?' || bfr == '@'
+    || bfr == '[' || bfr == ']' || bfr == '_');
 }
 
 #ifndef BUILT_IN_STRING_FUNCS
@@ -1165,8 +1246,8 @@ uint8_t getType(char* str) {
     return 2;
 }
 
-static inline int getArg(int num, char* inbuf, char* outbuf);
-static inline int getArgCt(char* inbuf);
+static inline int getArg(int, char*, char*);
+static inline int getArgCt(char*);
 
 uint16_t getFuncIndex = 0;
 char* getFunc_gftmp[2] = {NULL, NULL};
@@ -1215,7 +1296,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     chkCmdPtr = farg[0];
     #include "functions.c"
     fexit:
-    if (cerr == 127) seterrstr(farg[0]);
+    if (cerr > 124 && cerr < 128) seterrstr(farg[0]);
     for (int j = 0; j <= ftmpct; j++) {
         free(farg[j]);
     }
@@ -1309,7 +1390,7 @@ uint8_t getVar(char* vn, char* varout) {
     return 0;
 }
 
-bool delVar(char* vn);
+bool delVar(char*);
 
 bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
     int32_t vnlen = strlen(vn);
@@ -1550,10 +1631,10 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         int bct = 0;
         while (1) {
             if (inbuf[jp] == '"') inStr = !inStr;
-            if (inbuf[jp] == '(') pct++;
-            if (inbuf[jp] == ')') pct--;
-            if (inbuf[jp] == '[') bct++;
-            if (inbuf[jp] == ']') bct--;
+            if (inbuf[jp] == '(' && !inStr) pct++;
+            if (inbuf[jp] == ')' && !inStr) pct--;
+            if (inbuf[jp] == '[' && !inStr) bct++;
+            if (inbuf[jp] == ']' && !inStr) bct--;
             if ((isSpChar(inbuf[jp]) && !inStr && !pct && !bct) || !inbuf[jp]) break;
             jp++;
         }
@@ -1589,27 +1670,27 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 p1 = 0, p2 = 0, p3 = 0;
                 for (register int32_t i = 0; tmp[0][i] && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '(') {pct++;}
-                    if (tmp[0][i] == ')') {pct--;}
-                    if (tmp[0][i] == '[') {bct++;}
-                    if (tmp[0][i] == ']') {bct--;}
+                    if (tmp[0][i] == '(' && !inStr) {pct++;}
+                    if (tmp[0][i] == ')' && !inStr) {pct--;}
+                    if (tmp[0][i] == '[' && !inStr) {bct++;}
+                    if (tmp[0][i] == ']' && !inStr) {bct--;}
                     if (tmp[0][i] == '^' && !inStr && !pct && !bct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 4;}
                 }
                 for (register int32_t i = 0; tmp[0][i] && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '(') {pct++;}
-                    if (tmp[0][i] == ')') {pct--;}
-                    if (tmp[0][i] == '[') {bct++;}
-                    if (tmp[0][i] == ']') {bct--;}
+                    if (tmp[0][i] == '(' && !inStr) {pct++;}
+                    if (tmp[0][i] == ')' && !inStr) {pct--;}
+                    if (tmp[0][i] == '[' && !inStr) {bct++;}
+                    if (tmp[0][i] == ']' && !inStr) {bct--;}
                     if (tmp[0][i] == '*' && !inStr && !pct && !bct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 2;}
                     if (tmp[0][i] == '/' && !inStr && !pct && !bct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 3;}
                 }
                 for (register int32_t i = 0; tmp[0][i] && p2 == 0; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '(') {pct++;}
-                    if (tmp[0][i] == ')') {pct--;}
-                    if (tmp[0][i] == '[') {bct++;}
-                    if (tmp[0][i] == ']') {bct--;}
+                    if (tmp[0][i] == '(' && !inStr) {pct++;}
+                    if (tmp[0][i] == ')' && !inStr) {pct--;}
+                    if (tmp[0][i] == '[' && !inStr) {bct++;}
+                    if (tmp[0][i] == ']' && !inStr) {bct--;}
                     if (tmp[0][i] == '+' && !inStr && !pct && !bct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 0;}
                     if (tmp[0][i] == '-' && !inStr && !pct && !bct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 1;}
                 }
@@ -1630,18 +1711,18 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
                 for (register int32_t i = p2 - 1; i > 0; i--) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '(') {pct++;}
-                    if (tmp[0][i] == ')') {pct--;}
-                    if (tmp[0][i] == '[') {bct++;}
-                    if (tmp[0][i] == ']') {bct--;}
+                    if (tmp[0][i] == '(' && !inStr) {pct++;}
+                    if (tmp[0][i] == ')' && !inStr) {pct--;}
+                    if (tmp[0][i] == '[' && !inStr) {bct++;}
+                    if (tmp[0][i] == ']' && !inStr) {bct--;}
                     if (isSpChar(tmp[0][i]) && !inStr && !pct && !bct) {p1 = i; break;}
                 }
                 for (register int32_t i = p2 + 1; true; i++) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '(') {pct++;}
-                    if (tmp[0][i] == ')') {pct--;}
-                    if (tmp[0][i] == '[') {bct++;}
-                    if (tmp[0][i] == ']') {bct--;}
+                    if (tmp[0][i] == '(' && !inStr) {pct++;}
+                    if (tmp[0][i] == ')' && !inStr) {pct--;}
+                    if (tmp[0][i] == '[' && !inStr) {bct++;}
+                    if (tmp[0][i] == ']' && !inStr) {bct--;}
                     if ((isSpChar(tmp[0][i]) && i != p2 + 1 && !inStr && !pct && !bct) || tmp[0][i] == 0) {p3 = i; break;}
                 }
                 if (tmp[0][p1] == '+') p1++;
@@ -1812,6 +1893,7 @@ void mkargs() {
     for (int i = 0; i <= argct; i++) {tmpargs[i][argl[i]] = 0;}
 }
 
+int ltIndex = 0;
 char lttmp[3][CB_BUF_SIZE];
 
 uint8_t logictest(char* inbuf) {
@@ -1821,13 +1903,14 @@ uint8_t logictest(char* inbuf) {
     int32_t p = 0;
     bool inStr = false;
     int pct = 0;
+    ltIndex++;
     while (inbuf[p] == ' ') {p++;}
-    if (p >= (int32_t)strlen(inbuf)) {cerr = 10; return -1;}
+    if (p >= (int32_t)strlen(inbuf)) {cerr = 10; goto ltreturn;}
     for (int32_t i = p; true; i++) {
         if (inbuf[i] == '(' && !inStr) {pct++;}
         if (inbuf[i] == ')' && !inStr) {pct--;}
         if (inbuf[i] == '"') {inStr = !inStr;}
-        if (inbuf[i] == 0) {cerr = 1; return -1;}
+        if (inbuf[i] == 0) {cerr = 1; goto ltreturn;}
         if ((inbuf[i] == '<' || inbuf[i] == '=' || inbuf[i] == '>') && !inStr && pct == 0) {p = i; break;}
         if (inbuf[i] == ' ' && !inStr) {} else
         {lttmp[0][tmpp] = inbuf[i]; tmpp++;}
@@ -1835,7 +1918,7 @@ uint8_t logictest(char* inbuf) {
     lttmp[0][tmpp] = 0;
     tmpp = 0;
     for (int32_t i = p; true; i++) {
-        if (tmpp > 2) {cerr = 1; return -1;}
+        if (tmpp > 2) {cerr = 1; goto ltreturn;}
         if (inbuf[i] != '<' && inbuf[i] != '=' && inbuf[i] != '>') {p = i; break;} else
         {lttmp[1][tmpp] = inbuf[i]; tmpp++;}
     }
@@ -1848,52 +1931,61 @@ uint8_t logictest(char* inbuf) {
     }
     lttmp[2][tmpp] = 0;
     t1 = getVal(lttmp[0], lttmp[0]);
-    if (t1 == 0) return -1;
+    if (t1 == 0) goto ltreturn;
     t2 = getVal(lttmp[2], lttmp[2]);
-    if (t2 == 0) return -1;
-    if (t1 != t2) {cerr = 2; return -1;}
+    if (t2 == 0) goto ltreturn;
+    if (t1 != t2) {cerr = 2; goto ltreturn;}
     if (!strcmp(lttmp[1], "=")) {
+        ltIndex--;
         return (uint8_t)(bool)!strcmp(lttmp[0], lttmp[2]);
     } else if (!strcmp(lttmp[1], "<>")) {
+        ltIndex--;
         return (uint8_t)(bool)strcmp(lttmp[0], lttmp[2]);
     } else if (!strcmp(lttmp[1], ">")) {
-        if (t1 == 1) {cerr = 2; return -1;}
+        if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
+        ltIndex--;
         return num1 > num2;
     } else if (!strcmp(lttmp[1], "<")) {
-        if (t1 == 1) {cerr = 2; return -1;}
+        if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
+        ltIndex--;
         return num1 < num2;
     } else if (!strcmp(lttmp[1], ">=")) {
-        if (t1 == 1) {cerr = 2; return -1;}
+        if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
+        ltIndex--;
         return num1 >= num2;
     } else if (!strcmp(lttmp[1], "<=")) {
-        if (t1 == 1) {cerr = 2; return -1;}
+        if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
+        ltIndex--;
         return num1 <= num2;
     } else if (!strcmp(lttmp[1], "=>")) {
-        if (t1 == 1) {cerr = 2; return -1;}
+        if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
+        ltIndex--;
         return num1 >= num2;
     } else if (!strcmp(lttmp[1], "=<")) {
-        if (t1 == 1) {cerr = 2; return -1;}
+        if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
+        ltIndex--;
         return num1 <= num2;
     }
     cerr = 1;
+    ltreturn:
     return -1;
 }
 
@@ -2045,6 +2137,12 @@ void printError(int error) {
         case 27:
             printf("Failed to open file '%s' (errno: [%d] %s)", errstr, errno, strerror(errno));
             break;
+        case 125:
+            printf("Function only valid in program: '%s'", errstr);
+            break;
+        case 126:
+            printf("Function not valid in program: '%s'", errstr);
+            break;
         case 127:
             printf("Not a function: '%s'", errstr);
             break;
@@ -2056,6 +2154,9 @@ void printError(int error) {
             break;
         case 255:
             printf("Not a command: '%s'", arg[0]);
+            break;
+        case -1:
+            fputs("Internal error.", stdout);
             break;
     }
     putchar('\n');
@@ -2080,6 +2181,7 @@ void runcmd() {
     #include "commands.c"
     cmderr:
     if (cerr) {
+        if (runc || runfile) err = 1;
         printError(cerr);
         cp = -1;
         concp = -1;

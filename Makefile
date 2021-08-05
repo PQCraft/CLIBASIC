@@ -49,7 +49,7 @@ else
 
 C = gcc
 
-CFLAGS = -Wall -Wextra -O2 -Ilib -s -lm -lreadline --std=c99
+CFLAGS = -Wall -Wextra -O2 -Ilib -s -lm -lreadline --std=c99 -D_CRT_NONSTDC_NO_WARNINGS
 
 BUILD64 = xcopy lib\win64\*.dll . /Y && $(C) clibasic.c -m64 $(CFLAGS) -Llib\win64 -DB64 -o clibasic.exe
 BUILD32 = xcopy lib\win32\*.dll . /Y && $(C) clibasic.c -m32 $(CFLAGS) -Llib\win32 -DB32 -o clibasic.exe
@@ -71,6 +71,6 @@ run:
 	.\\clibasic.exe
 
 clean:
-	del /q /f .\\clibasic.exe
+	del /q /f clibasic.exe *.dll
 
 endif

@@ -16,23 +16,23 @@ zip -r examples.zip examples
 rm -f clibasic
 make build 1> /dev/null
 zip clibasic-linux-x64.zip clibasic
+make clean 1> /dev/null
 
 rm -f clibasic
 make build32 1> /dev/null
 zip clibasic-linux-x86.zip clibasic
+make clean 1> /dev/null
 
 rm -f clibasic.exe
 make -f Makefile-Cross build 1> /dev/null
 zip clibasic-windows-x64.zip clibasic.exe *.dll
+make -f Makefile-Cross clean 1> /dev/null
 
 rm -f clibasic.exe
 make -f Makefile-Cross build32 1> /dev/null
 zip clibasic-windows-x86.zip clibasic.exe *.dll
+make -f Makefile-Cross clean 1> /dev/null
 
 # clean up
-rm -f clibasic
-rm -f clibasic.exe
-
-# restore built executables
 mv clibasic.tmp clibasic 2> /dev/null
 mv clibasic.exe.tmp clibasic.exe 2> /dev/null

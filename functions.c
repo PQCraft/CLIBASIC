@@ -127,6 +127,7 @@ if (chkCmd(2, "SH$", "EXEC$")) {
     int duperr;
     duperr = dup(2);
     close(2);
+    outbuf[0] = 0;
     FILE* p = popen(farg[1], "r");
     if (p) {
         outbuf[fread(outbuf, 1, CB_BUF_SIZE, p)] = 0;
@@ -613,74 +614,103 @@ if (chkCmd(2, "CHDIR", "CD")) {
     sprintf(outbuf, "%d", errno);
     goto fexit;
 }
-if (chkCmd(1, "_HOME$")) {
-    cerr = 0;
-    ftype = 1;
-    if (fargct) {cerr = 3; goto fexit;}
-    copyStr(gethome(), outbuf);
-    goto fexit;
-}
-if (chkCmd(1, "_ENV$")) {
-    cerr = 0;
-    ftype = 1;
-    if (fargct != 1) {cerr = 3; goto fexit;}
-    if (fargt[1] != 1) {cerr = 2; goto fexit;}
-    char* tmpenv = getenv(farg[1]);
-    if (tmpenv) {
-        copyStr(tmpenv, outbuf);
+if (chkCmdPtr[0] == '_') {
+    if (chkCmd(1, "_HOME$")) {
+        cerr = 0;
+        ftype = 1;
+        if (fargct) {cerr = 3; goto fexit;}
+        copyStr(gethome(), outbuf);
+        goto fexit;
     }
-    goto fexit;
-}
-if (chkCmd(1, "_ENVSET")) {
-    cerr = 0;
-    ftype = 2;
-    if (fargct != 1) {cerr = 3; goto fexit;}
-    if (fargt[1] != 1) {cerr = 2; goto fexit;}
-    char* tmpenv = getenv(farg[1]);
-    outbuf[0] = '0' + (tmpenv != NULL);
-    outbuf[1] = 0;
-    goto fexit;
-}
-if (chkCmd(1, "_PROMPT$")) {
-    cerr = 0;
-    ftype = 1;
-    if (fargct) {cerr = 3; goto fexit;}
-    int tmpt = getVal(prompt, outbuf);
-    if (tmpt != 1) strcpy(outbuf, "CLIBASIC> ");
-    goto fexit;
-}
-if (chkCmd(1, "_TXTLOCK")) {
-    cerr = 0;
-    ftype = 2;
-    if (fargct) {cerr = 3; goto fexit;}
-    sprintf(outbuf, "%d", (int)textlock);
-    goto fexit;
-}
-if (chkCmd(1, "_VER$")) {
-    cerr = 0;
-    ftype = 1;
-    if (fargct) {cerr = 3; goto fexit;}
-    copyStr(VER, outbuf);
-    goto fexit;
-}
-if (chkCmd(1, "_BITS$")) {
-    cerr = 0;
-    ftype = 1;
-    if (fargct) {cerr = 3; goto fexit;}
-    copyStr(BVER, outbuf);
-    goto fexit;
-}
-if (chkCmd(1, "_OS$")) {
-    cerr = 0;
-    ftype = 1;
-    if (fargct) {cerr = 3; goto fexit;}
-    copyStr(OSVER, outbuf);
-    goto fexit;
-}
-if (chkCmd(1, "_STARTCMD$")) {
-    cerr = 0;
-    ftype = 1;
-    if (fargct) {cerr = 3; goto fexit;}
-    copyStr(startcmd, outbuf);
-    goto fexit;
+    if (chkCmd(1, "_ENV$")) {
+        cerr = 0;
+        ftype = 1;
+        if (fargct != 1) {cerr = 3; goto fexit;}
+        if (fargt[1] != 1) {cerr = 2; goto fexit;}
+        char* tmpenv = getenv(farg[1]);
+        if (tmpenv) {
+            copyStr(tmpenv, outbuf);
+        }
+        goto fexit;
+    }
+    if (chkCmd(1, "_ENVSET")) {
+        cerr = 0;
+        ftype = 2;
+        if (fargct != 1) {cerr = 3; goto fexit;}
+        if (fargt[1] != 1) {cerr = 2; goto fexit;}
+        char* tmpenv = getenv(farg[1]);
+        outbuf[0] = '0' + (tmpenv != NULL);
+        outbuf[1] = 0;
+        goto fexit;
+    }
+    if (chkCmd(1, "_PROMPT$")) {
+        cerr = 0;
+        ftype = 1;
+        if (fargct) {cerr = 3; goto fexit;}
+        int tmpt = getVal(prompt, outbuf);
+        if (tmpt != 1) strcpy(outbuf, "CLIBASIC> ");
+        goto fexit;
+    }
+    if (chkCmd(1, "_TXTLOCK")) {
+        cerr = 0;
+        ftype = 2;
+        if (fargct) {cerr = 3; goto fexit;}
+        sprintf(outbuf, "%d", (int)textlock);
+        goto fexit;
+    }
+    if (chkCmd(1, "_VER$")) {
+        cerr = 0;
+        ftype = 1;
+        if (fargct) {cerr = 3; goto fexit;}
+        copyStr(VER, outbuf);
+        goto fexit;
+    }
+    if (chkCmd(1, "_BITS$")) {
+        cerr = 0;
+        ftype = 1;
+        if (fargct) {cerr = 3; goto fexit;}
+        copyStr(BVER, outbuf);
+        goto fexit;
+    }
+    if (chkCmd(1, "_OS$")) {
+        cerr = 0;
+        ftype = 1;
+        if (fargct) {cerr = 3; goto fexit;}
+        copyStr(OSVER, outbuf);
+        goto fexit;
+    }
+    if (chkCmd(1, "_STARTCMD$")) {
+        cerr = 0;
+        ftype = 1;
+        if (fargct) {cerr = 3; goto fexit;}
+        copyStr(startcmd, outbuf);
+        goto fexit;
+    }
+    if (chkCmd(1, "_ARG$")) {
+        if (!inProg) {cerr = 125; goto fexit;}
+        cerr = 0;
+        ftype = 1;
+        if (fargct == 0) {
+            for (int i = 1; i < progargc; i++) {
+                copyStrApnd(progargs[i], outbuf);
+                if (i != progargc - 1) strApndChar(outbuf, ' ');
+            }
+        } else if (fargct == 1) {
+            if (fargt[1] != 2) {cerr = 2; goto fexit;}
+            int i = atoi(farg[1]);
+            if (i < 0) {cerr = 16; goto fexit;}
+            if (i > progargc - 1) {outbuf[0] = 0; goto fexit;}
+            copyStr(progargs[i], outbuf);
+        } else {
+            cerr = 3; goto fexit;
+        }
+    }
+    if (chkCmd(1, "_ARGC")) {
+        if (!inProg) {cerr = 125; goto fexit;}
+        cerr = 0;
+        ftype = 2;
+        if (fargct) {cerr = 3; goto fexit;}
+        sprintf(outbuf, "%d", progargc);
+        goto fexit;
+    }
 }

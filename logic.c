@@ -42,7 +42,7 @@ if (chkCmd(2, "?", "PRINT")) {
     return true;
 }
 if (chkCmd(1, "DO")) {
-    if (dlstackp >= 255) {cerr = 12; return true;}
+    if (dlstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 12; return true;}
     dlstackp++;
     if (itstackp > -1) {
         if (itdcmd[itstackp]) {dldcmd[dlstackp] = true; return true;}
@@ -61,7 +61,7 @@ if (chkCmd(1, "DO")) {
     return true;
 }
 if (chkCmd(1, "DOWHILE")) {
-    if (dlstackp >= 255) {cerr = 12; return true;}
+    if (dlstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 12; return true;}
     dlstackp++;
     if (itstackp > -1) {
         if (itdcmd[itstackp]) {dldcmd[dlstackp] = true; return true;}
@@ -135,7 +135,7 @@ if (chkCmd(1, "LOOPWHILE")) {
     return true;
 }
 if (chkCmd(1, "IF")) {
-    if (itstackp >= 255) {cerr = 13; return true;}
+    if (itstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 13; return true;}
     itstackp++;
     if (itstackp > 0) {
         if (itdcmd[itstackp - 1]) {itdcmd[itstackp] = true; return true;}
@@ -179,7 +179,7 @@ if (chkCmd(1, "ENDIF")) {
     return true;
 }
 if (chkCmd(1, "FOR")) {
-    if (itstackp >= 255) {cerr = 13; return true;}
+    if (itstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 13; return true;}
     fnstackp++;
     if (itstackp > -1) {
         if (itdcmd[itstackp]) {return true;}
@@ -199,8 +199,8 @@ if (chkCmd(1, "FOR")) {
     if (getVal(forbuf[1], forbuf[1]) != 2) return true;
     getArg(3, ltmp[1], forbuf[3]);
     if (getVal(forbuf[3], forbuf[3]) != 2) return true;
+    setVar(fnvar, forbuf[1], 2, -1);
     if (fnstack[fnstackp] == -1) {
-        setVar(fnvar, forbuf[1], 2, -1);
         copyStr(forbuf[1], forbuf[0]);
     }
     getArg(2, ltmp[1], forbuf[2]);
