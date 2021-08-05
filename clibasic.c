@@ -390,6 +390,10 @@ void cleanExit() {
     curx = 0;
     while (!curx) {getCurPos();}
     if (curx != 1) putchar('\n');
+    #ifdef __unix__
+    int i = kbhit();
+    while (i > 0) {getchar(); i--;}
+    #endif
     #ifndef _WIN_NO_VT
     fputs("\e[2K", stdout);
     #endif
