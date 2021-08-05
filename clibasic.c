@@ -114,7 +114,7 @@
 
 // Base defines
 
-char VER[] = "0.18";
+char VER[] = "0.18.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
