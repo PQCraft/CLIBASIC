@@ -1,3 +1,4 @@
+if (chkCmdPtr[0] == '_') goto _cmd;
 if (chkCmd(2, "EXIT", "QUIT")) {
     if (argct > 1) {cerr = 3; goto cmderr;}
     cerr = 0;
@@ -173,7 +174,7 @@ if (chkCmd(1, "CALL")) {
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     inprompt = !runfile;
-    signal(SIGINT, cleanExit);
+    setsig(SIGINT, cleanExit);
     if (!loadProg(arg[1])) goto cmderr;
     chkinProg = true;
     cp = 0;
@@ -191,49 +192,39 @@ if (chkCmd(1, "RUN")) {
     runargs[1] = "-x";
     runargs[2] = arg[1];
     argct += 2;
-    int argno;
-    for (argno = 3; argno < argct; argno++) {
+    int argno = 3;
+    for (; argno < argct; argno++) {
         if (!solvearg(argno - 1)) {free(runargs); goto cmderr;}
         runargs[argno] = arg[argno - 1];
     }
     argct -= 2;
     runargs[argno] = NULL;
-    int status;
     pid_t pid = fork();
-    if (pid == 0) {
+    if (pid < 0) cerr = -1;
+    else if (pid == 0) {
         execvp(startcmd, runargs);
         exit(0);
     }
-    if (pid > 0) {
-        pid = wait(&status);
-        (void)status;
+    else if (pid > 0) {
+        while (wait(NULL) != pid) {}
     }
     free(runargs);
-    if (pid < 0) {
-        cerr = -1;
-        goto cmderr;
-    }
     #else
     char* tmpcmd = malloc(CB_BUF_SIZE);
-    copyStr(startcmd, tmpcmd);
-    copyStrApnd(" -x ", tmpcmd);
-    copyStrApnd(arg[1], tmpcmd);
-    int32_t strpos = strlen(tmpcmd);
-    for (int argno = 2; argno <= argct; argno++) {
-        tmpcmd[strpos] = ' ';
-        strpos++;
-        solvearg(argno);
-        for (int32_t i = 0; arg[argno][i] && strpos < CB_BUF_SIZE - 1; i++) {
-            if (arg[argno][i] == ' ' || arg[argno][i] == '^') {
-                tmpcmd[strpos] = '^';
-                strpos++;
-            }
-            tmpcmd[strpos] = arg[argno][i];
-            strpos++;
-        }
+    tmpcmd[0] = 0;
+    bool nq;
+    if ((nq = winArgNeedsQuotes(startcmd))) copyStrApnd(" \"", tmpcmd);
+    copyStrApnd(startcmd, tmpcmd);
+    if (nq) strApndChar(tmpcmd, '"');
+    copyStrApnd(" -x", tmpcmd);
+    for (int argno = 1; argno <= argct; ++argno) {
+        if (argno > 1) solvearg(argno);
+        strApndChar(tmpcmd, ' ');
+        bool nq = winArgNeedsQuotes(arg[argno]);
+        if (nq) strApndChar(tmpcmd, '"');
+        copyStrApnd(arg[argno], tmpcmd);
+        if (nq) strApndChar(tmpcmd, '"');
     }
-    tmpcmd[strpos] = 0;
-    puts(tmpcmd);
     int ret = system(tmpcmd);
     (void)ret;
     free(tmpcmd);
@@ -241,13 +232,15 @@ if (chkCmd(1, "RUN")) {
     updateTxtAttrib();
     goto noerr;
 }
-if (chkCmd(2, "SH", "EXEC")) {
+if (chkCmd(1, "SH")) {
     cerr = 0;
     if (argct != 1) {cerr = 3; goto cmderr;}
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     #ifndef _WIN_NO_VT
     if (sh_clearAttrib) fputs("\e[0m", stdout);
+    #else
+    if (sh_clearAttrib) SetConsoleTextAttribute(hConsole, ocAttrib);
     #endif
     fflush(stdout);
     arg[1] = realloc(arg[1], strlen(arg[1]) + 6); copyStrApnd(" 2>&1", arg[1]);
@@ -267,10 +260,103 @@ if (chkCmd(2, "SH", "EXEC")) {
     cerr = 0;
     goto noerr;
 }
+if (chkCmd(1, "EXEC")) {
+    cerr = 0;
+    if (argct < 1) {cerr = 3; goto cmderr;}
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    #ifndef _WIN_NO_VT
+    if (sh_clearAttrib) fputs("\e[0m", stdout);
+    #else
+    if (sh_clearAttrib) SetConsoleTextAttribute(hConsole, ocAttrib);
+    #endif
+    fflush(stdout);
+    #ifndef _WIN32
+    char** runargs = (char**)malloc((argct + 1) * sizeof(char*));
+    runargs[0] = arg[1];
+    int argno = 1;
+    for (; argno < argct; ++argno) {
+        if (!solvearg(argno + 1)) {free(runargs); goto cmderr;}
+        runargs[argno] = arg[argno + 1];
+    }
+    runargs[argno] = NULL;
+    int stdout_dup = 0, stderr_dup = 0;
+    if (sh_silent) {
+        stdout_dup = dup(1);
+        stderr_dup = dup(2);
+        int fd = open("/dev/null", O_WRONLY | O_CREAT);
+        dup2(fd, 1);
+        dup2(fd, 2);
+    }
+    pid_t pid = fork();
+    if (pid < 0) cerr = -1;
+    if (pid == 0) {
+        execvp(runargs[0], runargs);
+        exit(0);
+    }
+    else if (pid > 0) {
+        while (wait(NULL) != pid) {}
+    }
+    else if (sh_silent) {
+        dup2(stdout_dup, 1);
+        dup2(stderr_dup, 2);
+    }
+    getCurPos();
+    free(runargs);
+    #else
+    char* tmpcmd = malloc(CB_BUF_SIZE);
+    tmpcmd[0] = 0;
+    bool winecho = false;
+    for (int argno = 1; argno <= argct; ++argno) {
+        if (argno > 1) if (!solvearg(argno)) {free(tmpcmd); goto cmderr;};
+        strApndChar(tmpcmd, ' ');
+        bool nq = winArgNeedsQuotes(arg[argno]);
+        if (argno == 1) {
+            upCase(arg[argno]);
+            winecho = !strcmp(arg[argno], "ECHO");
+        }
+        if (nq && !winecho) copyStrApnd(" \"", tmpcmd);
+        copyStrApnd(arg[argno], tmpcmd);
+        if (nq && !winecho) strApndChar(tmpcmd, '"');
+    }
+    int stdout_dup = 0, stderr_dup = 0;
+    if (sh_silent) {
+        stdout_dup = dup(1);
+        stderr_dup = dup(2);
+        int fd = open("NUL", _O_WRONLY | _O_CREAT);
+        dup2(fd, 1);
+        dup2(fd, 2);
+    }
+    int ret = system(tmpcmd);
+    (void)ret;
+    if (sh_silent) {
+        dup2(stdout_dup, 1);
+        dup2(stderr_dup, 2);
+    }
+    free(tmpcmd);
+    #endif
+    if (sh_restoreAttrib) updateTxtAttrib();
+    if (cerr) goto cmderr;
+    goto noerr;
+}
 if (chkCmd(1, "FILES")) {
     cerr = 0;
+    if (argct > 1) {cerr = 3; goto cmderr;}
+    char* olddn = NULL;
+    if (argct) {
+        if (!solvearg(1)) goto cmderr;
+        if (argt[1] != 1) {cerr = 2; goto cmderr;}
+        olddn = malloc(CB_BUF_SIZE);
+        getcwd(olddn, CB_BUF_SIZE);
+        if (chdir(arg[1])) {
+            free(olddn);
+            seterrstr(arg[1]);
+            cerr = 17;
+            goto cmderr;
+        }
+    }
     DIR* cwd = opendir(".");
-    if (!cwd) {cerr = 20; goto cmderr;}
+    if (!cwd) {if (argct) {free(olddn);} cerr = 20; goto cmderr;}
     DIR* tmpdir;
     struct dirent* dir;
     #ifdef _WIN32
@@ -280,15 +366,19 @@ if (chkCmd(1, "FILES")) {
         #define DIRPFS "%s/\n"
         puts("./\n../");
     #endif
+    long dbegin = telldir(cwd);
     while ((dir = readdir(cwd))) {
         if ((tmpdir = opendir(dir->d_name)) && strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) printf(DIRPFS, dir->d_name);
         if (tmpdir) closedir(tmpdir);
     }
-    closedir(cwd);
-    cwd = opendir(".");
+    seekdir(cwd, dbegin);
     while ((dir = readdir(cwd))) {
         if (!(tmpdir = opendir(dir->d_name))) puts(dir->d_name);
         if (tmpdir) closedir(tmpdir);
+    }
+    if (argct) {
+        chdir(olddn);
+        free(olddn);
     }
     closedir(cwd);
     goto noerr;
@@ -305,251 +395,190 @@ if (chkCmd(2, "CHDIR", "CD")) {
     }
     goto noerr;
 }
-if (arg[0][0] == '_') {
-    if (chkCmd(1, "_RESETTITLE")) {
-        if (inProg) {cerr = 254; goto cmderr;}
-        cerr = 0;
-        if (argct != 0) {cerr = 3; goto cmderr;}
-        #ifndef _WIN_NO_VT
-        if (!changedtitle) {
-            if (changedtitlecmd) fputs("\e[23;0t", stdout);
-            goto noerr;
-        }
-        printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
+goto cmderr;
+_cmd:
+if (chkCmd(1, "_RESETTITLE")) {
+    if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    #ifndef _WIN_NO_VT
+    if (!changedtitle) {
+        if (changedtitlecmd) fputs("\e[23;0t", stdout);
+        goto noerr;
+    }
+    printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
+    fflush(stdout);
+    #else
+    char* tmpstr = malloc(CB_BUF_SIZE);
+    sprintf(tmpstr, "CLIBASIC %s (%s-bit)", VER, BVER);
+    SetConsoleTitleA(tmpstr);
+    free(tmpstr);
+    #endif
+    goto noerr;
+}
+if (chkCmd(1, "_TITLE")) {
+    if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    #ifndef _WIN_NO_VT
+    if (!changedtitle) {
+        fputs("\e[22;0t", stdout);
         fflush(stdout);
-        #else
-        char* tmpstr = malloc(CB_BUF_SIZE);
-        sprintf(tmpstr, "CLIBASIC %s (%s-bit)", VER, BVER);
-        SetConsoleTitleA(tmpstr);
-        free(tmpstr);
-        #endif
-        goto noerr;
+        changedtitle = true;
     }
-    if (chkCmd(1, "_TITLE")) {
-        if (inProg) {cerr = 254; goto cmderr;}
-        cerr = 0;
-        if (argct != 1) {cerr = 3; goto cmderr;}
+    changedtitlecmd = true;
+    printf("\e]2;%s%c", arg[1], 7);
+    #else
+    SetConsoleTitleA(arg[1]);
+    #endif
+    goto noerr;
+}
+if (chkCmd(1, "_PROMPT")) {
+    if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    copyStr(tmpargs[1], prompt);
+    goto noerr;
+}
+if (chkCmd(1, "_PROMPTTAB")) {
+    if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    tab_width = atoi(arg[1]);
+}
+if (chkCmd(1, "_AUTOCMDHIST")) {
+    if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct != 0) {cerr = 3; goto cmderr;}
+    autohist = true;
+    goto noerr;
+}
+if (chkCmd(1, "_SAVECMDHIST")) {
+    if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct > 1) {cerr = 3; goto cmderr;}
+    if (argct) {
         if (!solvearg(1)) goto cmderr;
         if (argt[1] != 1) {cerr = 2; goto cmderr;}
-        #ifndef _WIN_NO_VT
-        if (!changedtitle) {
-            fputs("\e[22;0t", stdout);
-            fflush(stdout);
-            changedtitle = true;
-        }
-        changedtitlecmd = true;
-        printf("\e]2;%s%c", arg[1], 7);
-        #else
-        SetConsoleTitleA(arg[1]);
+        write_history(arg[1]);
+    } else {
+        char* tmpcwd = getcwd(NULL, 0);
+        int ret = chdir(gethome());
+        write_history(HIST_FILE);
+        #ifdef _WIN32
+        SetFileAttributesA(HIST_FILE, FILE_ATTRIBUTE_HIDDEN);
         #endif
-        goto noerr;
+        ret = chdir(tmpcwd);
+        (void)ret;
     }
-    if (chkCmd(1, "_PROMPT")) {
-        if (inProg) {cerr = 254; goto cmderr;}
-        cerr = 0;
-        if (argct != 1) {cerr = 3; goto cmderr;}
+    goto noerr;
+}
+if (chkCmd(1, "_LOADCMDHIST")) {
+    if (inProg) {cerr = 254; goto cmderr;}
+    cerr = 0;
+    if (argct > 1) {cerr = 3; goto cmderr;}
+    clear_history();
+    if (argct) {
         if (!solvearg(1)) goto cmderr;
         if (argt[1] != 1) {cerr = 2; goto cmderr;}
-        copyStr(tmpargs[1], prompt);
-        goto noerr;
+        read_history(arg[1]);
+    } else {
+        char* tmpcwd = getcwd(NULL, 0);
+        int ret = chdir(gethome());
+        read_history(".clibasic_history");
+        ret = chdir(tmpcwd);
+        (void)ret;
     }
-    if (chkCmd(1, "_PROMPTTAB")) {
-        if (inProg) {cerr = 254; goto cmderr;}
-        cerr = 0;
-        if (argct != 1) {cerr = 3; goto cmderr;}
-        if (!solvearg(1)) goto cmderr;
-        if (argt[1] != 2) {cerr = 2; goto cmderr;}
-        tab_width = atoi(arg[1]);
+    goto noerr;
+}
+if (chkCmd(1, "_TXTLOCK")) {
+    if (argct) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    #ifndef _WIN32
+    if (!textlock) {
+        tcgetattr(0, &term);
+        tcgetattr(0, &restore);
+        term.c_lflag &= ~(ICANON|ECHO);
+        tcsetattr(0, TCSANOW, &term);
     }
-    if (chkCmd(1, "_AUTOCMDHIST")) {
-        if (inProg) {cerr = 254; goto cmderr;}
-        cerr = 0;
-        if (argct != 0) {cerr = 3; goto cmderr;}
-        autohist = true;
-        goto noerr;
+    #endif
+    textlock = true;
+    goto noerr;
+}
+if (chkCmd(1, "_TXTUNLOCK")) {
+    if (argct) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    #ifndef _WIN32
+    if (textlock) tcsetattr(0, TCSANOW, &restore);
+    #endif
+    textlock = false;
+    goto noerr;
+}
+if (chkCmd(1, "_TXTATTRIB")) {
+    if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] == 0) {cerr = 3; goto cmderr;}
+    int attrib = 0;
+    if (argt[1] == 1) {
+        for (int32_t i = 0; arg[1][i]; i++) {
+            if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
+            if (arg[1][i] == ' ') arg[1][i] = '_';
+        }
+        if (!strcmp(arg[1], "RESET")) attrib = 0; else
+        if (!strcmp(arg[1], "BOLD")) attrib = 1; else
+        if (!strcmp(arg[1], "ITALIC")) attrib = 2; else
+        if (!strcmp(arg[1], "UNDERLINE")) attrib = 3; else
+        if (!strcmp(arg[1], "DBL_UNDERLINE") || !strcmp(arg[1], "DOUBLE_UNDERLINE")) attrib = 4; else
+        if (!strcmp(arg[1], "SQG_UNDERLINE") || !strcmp(arg[1], "SQUIGGLY_UNDERLINE")) attrib = 5; else
+        if (!strcmp(arg[1], "STRIKETROUGH")) attrib = 6; else
+        if (!strcmp(arg[1], "OVERLINE")) attrib = 7; else
+        if (!strcmp(arg[1], "DIM")) attrib = 8; else
+        if (!strcmp(arg[1], "BLINK")) attrib = 9; else
+        if (!strcmp(arg[1], "HIDDEN")) attrib = 10; else
+        if (!strcmp(arg[1], "REVERSE")) attrib = 11; else
+        if (!strcmp(arg[1], "UNDERLINE_COLOR")) attrib = 12; else
+        if (!strcmp(arg[1], "FGC")) attrib = 13; else
+        if (!strcmp(arg[1], "BGC")) attrib = 14; else
+        {cerr = 16; goto cmderr;}
+    } else {
+        attrib = atoi(arg[1]);
+        if (attrib < 0 || attrib > 12) {cerr = 16; goto cmderr;}
     }
-    if (chkCmd(1, "_SAVECMDHIST")) {
-        if (inProg) {cerr = 254; goto cmderr;}
-        cerr = 0;
-        if (argct > 1) {cerr = 3; goto cmderr;}
-        if (argct) {
-            if (!solvearg(1)) goto cmderr;
-            if (argt[1] != 1) {cerr = 2; goto cmderr;}
-            write_history(arg[1]);
+    int val = 0;
+    if (attrib == 0) {
+        if (argct == 2) {cerr = 3; goto cmderr;}
+        txt_bold = false;
+        txt_italic = false;
+        txt_underln = false;
+        txt_underlndbl = false;
+        txt_underlnsqg = false;
+        txt_strike = false;
+        txt_overln = false;
+        txt_dim = false;
+        txt_blink = false;
+        txt_hidden = false;
+        txt_reverse = false;
+        txt_fgc = true;
+        txt_bgc = false;
+        txt_underlncolor = 0;
+        goto cmderr;
+    } else if (argct != 2) {
+        if (attrib == 12) {cerr = 16; goto cmderr;}
+        val = 1;
+    } else {
+        if (!solvearg(2)) goto cmderr;
+        if (attrib == 12) {
+            if (argt[2] != 2) {cerr = 2; goto cmderr;}
+            val = atoi(arg[2]);
+            if (val < 0 || val > 255) {cerr = 16; goto cmderr;}
         } else {
-            char* tmpcwd = getcwd(NULL, 0);
-            int ret = chdir(gethome());
-            write_history(HIST_FILE);
-            #ifdef _WIN32
-            SetFileAttributesA(HIST_FILE, FILE_ATTRIBUTE_HIDDEN);
-            #endif
-            ret = chdir(tmpcwd);
-            (void)ret;
-        }
-        goto noerr;
-    }
-    if (chkCmd(1, "_LOADCMDHIST")) {
-        if (inProg) {cerr = 254; goto cmderr;}
-        cerr = 0;
-        if (argct > 1) {cerr = 3; goto cmderr;}
-        clear_history();
-        if (argct) {
-            if (!solvearg(1)) goto cmderr;
-            if (argt[1] != 1) {cerr = 2; goto cmderr;}
-            read_history(arg[1]);
-        } else {
-            char* tmpcwd = getcwd(NULL, 0);
-            int ret = chdir(gethome());
-            read_history(".clibasic_history");
-            ret = chdir(tmpcwd);
-            (void)ret;
-        }
-        goto noerr;
-    }
-    if (chkCmd(1, "_TXTLOCK")) {
-        if (argct) {cerr = 3; goto cmderr;}
-        cerr = 0;
-        #ifndef _WIN32
-        if (!textlock) {
-            tcgetattr(0, &term);
-            tcgetattr(0, &restore);
-            term.c_lflag &= ~(ICANON|ECHO);
-            tcsetattr(0, TCSANOW, &term);
-        }
-        #endif
-        textlock = true;
-        goto noerr;
-    }
-    if (chkCmd(1, "_TXTUNLOCK")) {
-        if (argct) {cerr = 3; goto cmderr;}
-        cerr = 0;
-        #ifndef _WIN32
-        if (textlock) tcsetattr(0, TCSANOW, &restore);
-        #endif
-        textlock = false;
-        goto noerr;
-    }
-    if (chkCmd(1, "_TXTATTRIB")) {
-        if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
-        cerr = 0;
-        if (!solvearg(1)) goto cmderr;
-        if (argt[1] == 0) {cerr = 3; goto cmderr;}
-        int attrib = 0;
-        if (argt[1] == 1) {
-            for (int32_t i = 0; arg[1][i]; i++) {
-                if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
-                if (arg[1][i] == ' ') arg[1][i] = '_';
-            }
-            if (!strcmp(arg[1], "RESET")) attrib = 0; else
-            if (!strcmp(arg[1], "BOLD")) attrib = 1; else
-            if (!strcmp(arg[1], "ITALIC")) attrib = 2; else
-            if (!strcmp(arg[1], "UNDERLINE")) attrib = 3; else
-            if (!strcmp(arg[1], "DBL_UNDERLINE") || !strcmp(arg[1], "DOUBLE_UNDERLINE")) attrib = 4; else
-            if (!strcmp(arg[1], "SQG_UNDERLINE") || !strcmp(arg[1], "SQUIGGLY_UNDERLINE")) attrib = 5; else
-            if (!strcmp(arg[1], "STRIKETROUGH")) attrib = 6; else
-            if (!strcmp(arg[1], "OVERLINE")) attrib = 7; else
-            if (!strcmp(arg[1], "DIM")) attrib = 8; else
-            if (!strcmp(arg[1], "BLINK")) attrib = 9; else
-            if (!strcmp(arg[1], "HIDDEN")) attrib = 10; else
-            if (!strcmp(arg[1], "REVERSE")) attrib = 11; else
-            if (!strcmp(arg[1], "UNDERLINE_COLOR")) attrib = 12; else
-            if (!strcmp(arg[1], "FGC")) attrib = 13; else
-            if (!strcmp(arg[1], "BGC")) attrib = 14; else
-            {cerr = 16; goto cmderr;}
-        } else {
-            attrib = atoi(arg[1]);
-            if (attrib < 0 || attrib > 12) {cerr = 16; goto cmderr;}
-        }
-        int val = 0;
-        if (attrib == 0) {
-            if (argct == 2) {cerr = 3; goto cmderr;}
-            txt_bold = false;
-            txt_italic = false;
-            txt_underln = false;
-            txt_underlndbl = false;
-            txt_underlnsqg = false;
-            txt_strike = false;
-            txt_overln = false;
-            txt_dim = false;
-            txt_blink = false;
-            txt_hidden = false;
-            txt_reverse = false;
-            txt_fgc = true;
-            txt_bgc = false;
-            txt_underlncolor = 0;
-            goto cmderr;
-        } else if (argct != 2) {
-            if (attrib == 12) {cerr = 16; goto cmderr;}
-            val = 1;
-        } else {
-            if (!solvearg(2)) goto cmderr;
-            if (attrib == 12) {
-                if (argt[2] != 2) {cerr = 2; goto cmderr;}
-                val = atoi(arg[2]);
-                if (val < 0 || val > 255) {cerr = 16; goto cmderr;}
-            } else {
-                if (argt[2] == 0) {cerr = 3; goto cmderr;}
-                if (argt[2] == 1) {
-                    upCase(arg[2]);
-                    if (!strcmp(arg[2], "ON") || !strcmp(arg[2], "TRUE") || !strcmp(arg[2], "YES")) val = 1; else
-                    if (!strcmp(arg[2], "OFF") || !strcmp(arg[2], "FALSE") || !strcmp(arg[2], "NO")) val = 0; else
-                    {cerr = 16; goto cmderr;}
-                } else {
-                    sscanf(arg[2], "%d", &val);
-                    if (val < 0 || val > 1) {cerr = 16; goto cmderr;}
-                }
-            }
-        }
-        switch (attrib) {
-            case 1: txt_bold = (bool)val; break;
-            case 2: txt_italic = (bool)val; break;
-            case 3: txt_underln = (bool)val; break;
-            case 4: txt_underlndbl = (bool)val; break;
-            case 5: txt_underlnsqg = (bool)val; break;
-            case 6: txt_strike = (bool)val; break;
-            case 7: txt_overln = (bool)val; break;
-            case 8: txt_dim = (bool)val; break;
-            case 9: txt_hidden = (bool)val; break;
-            case 11: txt_reverse = (bool)val; break;
-            case 12: txt_underlncolor = val; break;
-            case 13: txt_fgc = (bool)val; break;
-            case 14: txt_bgc = (bool)val; break;
-        }
-        updateTxtAttrib();
-        goto noerr;
-    }
-    if (chkCmd(1, "_SHATTRIB")) {
-        if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
-        cerr = 0;
-        if (!solvearg(1)) goto cmderr;
-        if (argt[1] == 0) {cerr = 3; goto cmderr;}
-        int attrib = 0;
-        if (argt[1] == 1) {
-            for (int32_t i = 0; arg[1][i]; i++) {
-                if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
-                if (arg[1][i] == ' ') arg[1][i] = '_';
-            }
-            if (!strcmp(arg[1], "RESET")) attrib = 0; else
-            if (!strcmp(arg[1], "SILENT")) attrib = 1; else
-            if (!strcmp(arg[1], "CLEARATTRIB")) attrib = 2; else
-            if (!strcmp(arg[1], "RESTOREATTRIB")) attrib = 3; else
-            {cerr = 16; goto cmderr;}
-        } else {
-            attrib = atoi(arg[1]);
-            if (attrib < 0 || attrib > 12) {cerr = 16; goto cmderr;}
-        }
-        int val = 0;
-        if (attrib == 0) {
-            if (argct == 2) {cerr = 3; goto cmderr;}
-            sh_silent = false;
-            sh_clearAttrib = true;
-            sh_restoreAttrib = true;
-            goto cmderr;
-        } else if (argct != 2) {
-            if (attrib == 12) {cerr = 16; goto cmderr;}
-            val = 1;
-        } else {
-            if (!solvearg(2)) goto cmderr;
             if (argt[2] == 0) {cerr = 3; goto cmderr;}
             if (argt[2] == 1) {
                 upCase(arg[2]);
@@ -561,12 +590,73 @@ if (arg[0][0] == '_') {
                 if (val < 0 || val > 1) {cerr = 16; goto cmderr;}
             }
         }
-        switch (attrib) {
-            case 1: sh_silent = (bool)val; break;
-            case 2: sh_clearAttrib = (bool)val; break;
-            case 3: sh_restoreAttrib = (bool)val; break;
-        }
-        updateTxtAttrib();
-        goto noerr;
     }
+    switch (attrib) {
+        case 1: txt_bold = (bool)val; break;
+        case 2: txt_italic = (bool)val; break;
+        case 3: txt_underln = (bool)val; break;
+        case 4: txt_underlndbl = (bool)val; break;
+        case 5: txt_underlnsqg = (bool)val; break;
+        case 6: txt_strike = (bool)val; break;
+        case 7: txt_overln = (bool)val; break;
+        case 8: txt_dim = (bool)val; break;
+        case 9: txt_hidden = (bool)val; break;
+        case 11: txt_reverse = (bool)val; break;
+        case 12: txt_underlncolor = val; break;
+        case 13: txt_fgc = (bool)val; break;
+        case 14: txt_bgc = (bool)val; break;
+    }
+    updateTxtAttrib();
+    goto noerr;
+}
+if (chkCmd(1, "_SHATTRIB")) {
+    if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] == 0) {cerr = 3; goto cmderr;}
+    int attrib = 0;
+    if (argt[1] == 1) {
+        for (int32_t i = 0; arg[1][i]; i++) {
+            if (arg[1][i] >= 'a' && arg[1][i] <= 'z') arg[1][i] -= 32;
+            if (arg[1][i] == ' ') arg[1][i] = '_';
+        }
+        if (!strcmp(arg[1], "RESET")) attrib = 0; else
+        if (!strcmp(arg[1], "SILENT")) attrib = 1; else
+        if (!strcmp(arg[1], "CLEARATTRIB")) attrib = 2; else
+        if (!strcmp(arg[1], "RESTOREATTRIB")) attrib = 3; else
+        {cerr = 16; goto cmderr;}
+    } else {
+        attrib = atoi(arg[1]);
+        if (attrib < 0 || attrib > 12) {cerr = 16; goto cmderr;}
+    }
+    int val = 0;
+    if (attrib == 0) {
+        if (argct == 2) {cerr = 3; goto cmderr;}
+        sh_silent = false;
+        sh_clearAttrib = true;
+        sh_restoreAttrib = true;
+        goto cmderr;
+    } else if (argct != 2) {
+        if (attrib == 12) {cerr = 16; goto cmderr;}
+        val = 1;
+    } else {
+        if (!solvearg(2)) goto cmderr;
+        if (argt[2] == 0) {cerr = 3; goto cmderr;}
+        if (argt[2] == 1) {
+            upCase(arg[2]);
+            if (!strcmp(arg[2], "ON") || !strcmp(arg[2], "TRUE") || !strcmp(arg[2], "YES")) val = 1; else
+            if (!strcmp(arg[2], "OFF") || !strcmp(arg[2], "FALSE") || !strcmp(arg[2], "NO")) val = 0; else
+            {cerr = 16; goto cmderr;}
+        } else {
+            sscanf(arg[2], "%d", &val);
+            if (val < 0 || val > 1) {cerr = 16; goto cmderr;}
+        }
+    }
+    switch (attrib) {
+        case 1: sh_silent = (bool)val; break;
+        case 2: sh_clearAttrib = (bool)val; break;
+        case 3: sh_restoreAttrib = (bool)val; break;
+    }
+    updateTxtAttrib();
+    goto noerr;
 }

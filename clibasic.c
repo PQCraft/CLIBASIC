@@ -22,14 +22,17 @@
 /* Changes the terminal title to display the CLIBASIC version and bits */
 #define CHANGE_TITLE // Comment out this line to disable changing the terminal/console title
 
+/* Opens in XTerm if CLIBASIC is not started in a terminal */
+#define GUI_CHECK // Comment out this line if you do not have a tty command or your tty command is missing the -s option
+
 #ifdef _WIN32 // Avoids defining _WIN_NO_VT on a non-Windows operating system
-    /* Enables support for Windows before Windows 10 build 16257 (no VT escape code support) */
-    //#define _WIN_VT // Comment out this line if you are using a version of Windows before Windows 10 build 16257
+    /* Disables ANSI/VT escape codes */
+    #define _WIN_NO_VT // Comment out this line if you are using Windows 10 build 16257 or later
 #endif
 
 /* ------------------------ */
 
-// Patch/Error checking defines
+// Patch/checking defines/compares
 
 /* Fix implicit declaration issues */
 #define _POSIX_C_SOURCE 999999L
@@ -65,22 +68,18 @@
     #endif
 #endif
 
-#if !defined(_WIN_VT) && defined(_WIN32) // Lazy patch to keep the user-defined macros consistent
-    #define _WIN_NO_VT
-#endif
-
 // Needed includes
 
 #include <math.h>
 #include <time.h>
 #include <stdio.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
-#include <setjmp.h>
 #include <dirent.h>
 #include <stdbool.h>
 #include <inttypes.h>
@@ -106,15 +105,14 @@
     #include <mach-o/dyld.h>
 #endif
 
-// SIGKILL is not defined sometimes
+// More patch/checking defines/compares
 
-#ifndef SIGKILL
-    #define SIGKILL 9
-#endif
+/* Swap function to swap values */
+#define swap(a, b) __typeof__(a) c = a; a = b; b = c
 
 // Base defines
 
-char VER[] = "0.18.1";
+char VER[] = "0.19";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -138,7 +136,7 @@ char VER[] = "0.18.1";
     char BVER[] = "64";
 #else
     #warning /* Neither B32 or B64 was defined */ \
-    Could not detect architecture bits. Please use '-DB64' or '-DB32' when compiling. (Neither B32 or B64 was defined)
+    Could not detect architecture bits, please use '-DB64' or '-DB32' when compiling (Neither B32 or B64 was defined).
     char BVER[] = "?";
 #endif
 
@@ -221,8 +219,6 @@ int64_t cp = 0;
 bool cmdint = false;
 bool inprompt = false;
 
-jmp_buf ctrlc_buf;
-
 bool runfile = false;
 bool runc = false;
 
@@ -259,7 +255,6 @@ int tab_width = 4;
 
 int progargc = 0;
 char** progargs = NULL;
-char** termargs = NULL;
 char* startcmd = NULL;
 
 bool changedtitle = false;
@@ -287,6 +282,22 @@ int kbhit() {
 }
 #endif
 
+static inline void* setsig(int sig, void* func) {
+    #ifdef __unix__
+    struct sigaction act, old;
+    memset (&act, 0, sizeof(act));
+    memset (&old, 0, sizeof(old));
+    sigemptyset(&act.sa_mask);
+    sigaddset(&act.sa_mask, sig);
+    act.sa_handler = func;
+    act.sa_flags = SA_RESTART;
+    sigaction(sig, &act, &old);
+    return old.sa_handler;
+    #else
+    return signal(sig, func);
+    #endif
+}
+
 int tab_end = 0;
 static inline void strApndChar(char*, char);
 char* rl_get_tab(const char* text, int state) {
@@ -298,7 +309,7 @@ char* rl_get_tab(const char* text, int state) {
         tab_end = tab_width - (tab_end % tab_width) - 1;
         if (!tab_end) tab_end = tab_width;
         fflush(stdout);
-        for (int i = 0; i < tab_end; i++) {
+        for (int i = 0; i < tab_end; ++i) {
             strApndChar(tab, ' ');
         }
     }
@@ -313,6 +324,7 @@ char** rl_tab(const char* text, int start, int end) {
 }
 
 #ifdef _WIN32
+#define hConsole GetStdHandle(STD_OUTPUT_HANDLE)
 char* rlptr;
 bool inrl = false;
 void cleanExit();
@@ -320,23 +332,72 @@ void setcsr() {
     COORD coord;
     coord.X = 0;
     coord.Y = 0;
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
+    SetConsoleCursorPosition(hConsole, coord);
 }
-void rl_sigh(int sig) {signal(sig, rl_sigh);}
+void rl_sigh(int sig) {
+    setsig(sig, rl_sigh);
+    putchar('\n');
+    rl_on_new_line();
+    rl_replace_line("", 0);
+    rl_redisplay();
+}
 void txtqunlock() {}
-HANDLE hConsole;
+//HANDLE hConsole;
 #ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
 #define ENABLE_VIRTUAL_TERMINAL_PROCESSING 4
 #endif
 char kbinbuf[256];
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+bool winArgNeedsQuotes(char* str) {
+    for (int32_t i = 0; str[i]; ++i) {
+        switch (str[i]) {
+            case ' ':
+            case '&':
+            case '(':
+            case ')':
+            case '[':
+            case ']':
+            case '{':
+            case '}':
+            case '^':
+            case '=':
+            case ';':
+            case '!':
+            case '\'':
+            case '+':
+            case ',':
+            case '`':
+            case '~':
+                return true;
+                break;
+        }
+    }
+    return false;
+}
+#pragma GCC diagnostic pop
+#ifdef _WIN_NO_VT
+WORD ocAttrib = 0;
+#endif
 #endif
 
 struct timeval time1;
 uint64_t tval;
 
+void* oldsigh = NULL;
+
+void nokill() {
+    if (!oldsigh) oldsigh = setsig(SIGINT, nokill);
+}
+
+void yeskill() {
+    setsig(SIGINT, oldsigh);
+    oldsigh = NULL;
+}
+
 void forceExit() {
     #ifndef _WIN32
-    tcsetattr(0, TCSANOW, &restore);
+    txtqunlock();
     #endif
     exit(0);
 }
@@ -358,37 +419,37 @@ char* basefilename(char*);
 
 void cleanExit() {
     txtqunlock();
-    #ifndef _WIN32
     if (inprompt) {
-        inprompt = false;
         int i = kbhit();
         while (i > 0) {getchar(); i--;}
         unloadAllProg();
         cmdint = true;
         inProg = false;
         putchar('\n');
-        signal(SIGINT, cleanExit);
-        longjmp(ctrlc_buf, 1);
+        rl_on_new_line();
+        rl_replace_line("", 0);
+        rl_redisplay();
         return;
     }
-    #endif
-    signal(SIGINT, forceExit);
-    signal(SIGKILL, forceExit);
-    signal(SIGTERM, forceExit);
+    setsig(SIGINT, forceExit);
+    setsig(SIGTERM, forceExit);
     int ret = chdir(gethome());
     (void)ret;
-    if (autohist) write_history(HIST_FILE);
-    #ifdef _WIN32
-    SetFileAttributesA(HIST_FILE, FILE_ATTRIBUTE_HIDDEN);
-    #endif
+    if (autohist && !runfile) {
+        write_history(HIST_FILE);
+        #ifdef _WIN32
+        SetFileAttributesA(HIST_FILE, FILE_ATTRIBUTE_HIDDEN);
+        #endif
+    }
     #if defined(CHANGE_TITLE) && !defined(_WIN_NO_VT)
     if (changedtitle) fputs("\e[23;0t", stdout);
     #endif
     #ifndef _WIN_NO_VT
     if (!keep) fputs("\e[0m", stdout);
+    #else
+    if (!keep) SetConsoleTextAttribute(hConsole, ocAttrib);
     #endif
-    curx = 0;
-    while (!curx) {getCurPos();}
+    do {getCurPos();} while (!curx);
     if (curx != 1) putchar('\n');
     #ifdef __unix__
     int i = kbhit();
@@ -402,7 +463,8 @@ void cleanExit() {
 }
 
 void cmdIntHndl() {
-    if (cmdint) signal(SIGINT, cleanExit);
+    setsig(SIGINT, cmdIntHndl);
+    if (cmdint) setsig(SIGINT, cleanExit);
     int i = kbhit();
     while (i > 0) {getchar(); i--;}
     cmdint = true;
@@ -423,6 +485,7 @@ bool loadProg(char* filename);
 void unloadProg();
 void updateTxtAttrib();
 static inline bool isFile();
+static inline uint64_t usTime();
 
 char* gethome() {
     if (!homepath) {
@@ -439,6 +502,34 @@ char* gethome() {
     return homepath;
 }
 
+char* bfnbuf = NULL;
+
+char* basefilename(char* fn) {
+    int32_t fnlen = strlen(fn);
+    int32_t i;
+    for (i = fnlen; i > -1; --i) {
+        if (fn[i] == '/') break;
+        #ifdef _WIN32
+        if (fn[i] == '\\') break;
+        #endif
+    }
+    copyStrSnip(fn, i + 1, fnlen, bfnbuf);
+    return bfnbuf;
+}
+
+char* pathfilename(char* fn) {
+    int32_t fnlen = strlen(fn);
+    int32_t i;
+    for (i = fnlen; i > -1; --i) {
+        if (fn[i] == '/') break;
+        #ifdef _WIN32
+        if (fn[i] == '\\') break;
+        #endif
+    }
+    copyStrSnip(fn, 0, i + 1, bfnbuf);
+    return bfnbuf;
+}
+
 void ttycheck() {
     if (!isatty(STDERR_FILENO)) {exit(1);}
     if (!isatty(STDIN_FILENO)) {fputs("CLIBASIC does not support STDIN redirection.\n", stderr); exit(1);}
@@ -446,32 +537,34 @@ void ttycheck() {
 }
 
 int main(int argc, char** argv) {
-    #ifdef __unix__
+    #if defined(GUI_CHECK) && defined(__unix__)
     if (system("tty -s 1> /dev/null 2> /dev/null")) {
-        char command[CB_BUF_SIZE];
+        char* command = malloc(CB_BUF_SIZE);
         copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e 'echo -e -n \"\x1b[\x33 q\" && ", command);
         copyStrApnd(argv[0], command);
         strApndChar(command, '\'');
-        exit(system(command));
+        int ret = system(command);
+        free(command);
+        exit(ret);
     }
     #endif
     bool pexit = false;
     bool skip = false;
     bool info = false;
-    for (int i = 1; i < argc; i++) {
+    for (int i = 1; i < argc; ++i) {
         int shortopti = 0;
         bool shortopt;
         if (argv[i][0] == '-' && strcmp(argv[i], "--file") && strcmp(argv[i], "-f")) {
-            chkshortopt:
+            chkshortopt:;
             shortopt = false;
             if (!argv[i][1]) {
                 fputs("No short option following dash.\n", stderr); exit(1);
             } else if (argv[i][1] != '-') {
-                shortopt = true; shortopti++;
+                shortopt = true; ++shortopti;
             }
             if (!argv[i][shortopti]) continue;
             if (!strcmp(argv[i], "--")) {
-                fputs("No short option following dash.\n", stderr); exit(1);
+                fputs("No long option following dash.\n", stderr); exit(1);
             } else if (!strcmp(argv[i], "--version")) {
                 if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
                 printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
@@ -495,7 +588,7 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--args")) {
                 if (runc || !runfile) {fputs("Args can only be passed when running a program.\n", stderr); exit(1);}
                 progargs = (char**)malloc((argc - i) * sizeof(char*));
-                for (progargc = 1; progargc < argc - i; progargc++) {
+                for (progargc = 1; progargc < argc - i; ++progargc) {
                     progargs[progargc] = argv[i + progargc];
                 }
                 progargs[0] = progfn[progindex];
@@ -511,7 +604,7 @@ int main(int argc, char** argv) {
                 inProg = true;
                 runfile = true;
                 progargs = (char**)malloc((argc - i) * sizeof(char*));
-                for (progargc = 1; progargc < argc - i; progargc++) {
+                for (progargc = 1; progargc < argc - i; ++progargc) {
                     progargs[progargc] = argv[i + progargc];
                 }
                 progargs[0] = progfn[progindex];
@@ -561,60 +654,19 @@ int main(int argc, char** argv) {
     }
     if (pexit) exit(0);
     ttycheck();
-    startcmd = malloc(CB_BUF_SIZE);
-    #ifndef _WIN32
-    #ifndef __APPLE__
-    int32_t scsize;
-    if ((scsize = readlink("/proc/self/exe", startcmd, CB_BUF_SIZE)) == -1) {
-        #ifndef __linux__
-        if ((scsize = readlink("/proc/curproc/file", startcmd, CB_BUF_SIZE)) == -1) {
-        #endif
-            if (strcmp(argv[0], basefilename(argv[0]))) {
-                free(startcmd);
-                startcmd = realpath(argv[0], NULL);
-            } else {
-                startcmd = argv[0];
-            }
-        #ifndef __linux__
-        } else {
-            startcmd = realloc(startcmd, scsize + 1);
-        }
-        #endif
-    } else {
-        startcmd = realloc(startcmd, scsize + 1);
-    }
-    #else
-    uint32_t tmpsize = CB_BUF_SIZE;
-    if (_NSGetExecutablePath(startcmd, &size)) {
-        startcmd = argv[0];
-    }
-    startcmd = realloc(startcmd, strlen(startcmd) + 1);
-    #endif
-    #else
-    GetModuleFileName(NULL, startcmd, CB_BUF_SIZE);
-    startcmd = realloc(startcmd, strlen(startcmd) + 1);
-    #endif
-    signal(SIGINT, cleanExit);
-    signal(SIGKILL, cleanExit);
-    signal(SIGTERM, cleanExit);
     rl_readline_name = "CLIBASIC";
     char* rl_tmpptr = calloc(1, 1);
     rl_completion_entry_function = rl_get_tab;
     rl_attempted_completion_function = (rl_completion_func_t*)rl_tab;
-    #ifdef __unix__
-    rl_getc_function = getc;
-    #endif
     rl_special_prefixes = rl_tmpptr;
     rl_completer_quote_characters = rl_tmpptr;
     rl_completer_word_break_characters = rl_tmpptr;
     #ifdef _WIN32
-    hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hConsole == INVALID_HANDLE_VALUE) {
         fputs("Failed to open a valid console handle.\n", stderr);
         exit(GetLastError());
     }
-    #endif
-    #if defined(_WIN32) && !defined(_WIN_NO_VT)
+    #ifndef _WIN_NO_VT
     DWORD dwMode = 0;
     if (!GetConsoleMode(hConsole, &dwMode)){
         fputs("Failed to get the console mode.\n", stderr);
@@ -625,11 +677,77 @@ int main(int argc, char** argv) {
         fputs("Failed to set the console mode.\n", stderr);
         exit(GetLastError());
     }
+    #else
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    ocAttrib = csbi.wAttributes;
     #endif
+    #endif
+    setsig(SIGINT, cleanExit);
+    setsig(SIGTERM, cleanExit);
+    #ifndef _WIN32
+    setsig(SIGQUIT, forceExit);
+    #else
+    setsig(SIGABRT, forceExit);
+    #endif
+    startcmd = malloc(CB_BUF_SIZE);
+    #ifndef _WIN32
+        #ifndef __APPLE__
+            #ifndef __FreeBSD__
+                int32_t scsize;
+                if ((scsize = readlink("/proc/self/exe", startcmd, CB_BUF_SIZE)) == -1)
+                    #ifndef __linux__
+                    if ((scsize = readlink("/proc/curproc/file", startcmd, CB_BUF_SIZE)) == -1)
+                    #endif
+                        goto scargv;
+                startcmd = realloc(startcmd, scsize + 1);
+            #else
+                int mib[4];
+                mib[0] = CTL_KERN;
+                mib[1] = KERN_PROC;
+                mib[2] = KERN_PROC_PATHNAME;
+                mib[3] = -1;
+                size_t cb = CB_BUF_SIZE;
+                sysctl(mib, 4, startcmd, &cb, NULL, 0);
+                startcmd = realloc(startcmd, strlen(startcmd) + 1);
+                char* tmpstartcmd = realpath(startcmd, NULL);
+                swap(startcmd, tmpstartcmd);
+                free(tmpstartcmd);
+                startcmd = realloc(startcmd, strlen(startcmd) + 1);
+            #endif
+        #else
+            uint32_t tmpsize = CB_BUF_SIZE;
+            if (_NSGetExecutablePath(startcmd, &size)) {
+                goto scargv;
+            }
+            char* tmpstartcmd = realpath(startcmd, NULL);
+            swap(startcmd, tmpstartcmd);
+            free(tmpstartcmd);
+            startcmd = realloc(startcmd, strlen(startcmd) + 1);
+        #endif
+    #else
+        if (GetModuleFileName(NULL, startcmd, CB_BUF_SIZE)) {
+            startcmd = realloc(startcmd, strlen(startcmd) + 1);
+        } else {
+            goto scargv;
+        }
+    #endif
+    goto skipscargv;
+    scargv:;
+    if (strcmp(argv[0], basefilename(argv[0]))) {
+        free(startcmd);
+        #ifndef _WIN32
+        startcmd = realpath(argv[0], NULL);
+        #else
+        startcmd = _fullpath(NULL, argv[0], CB_BUF_SIZE);
+        #endif
+    } else {
+        startcmd = argv[0];
+    }
+    skipscargv:;
     getCurPos();
     if (curx != 1) putchar('\n');
     updateTxtAttrib();
-    termargs = argv;
     if (!runfile) {
         if (info) printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
         strcpy(prompt, "\"CLIBASIC> \"");
@@ -651,7 +769,7 @@ int main(int argc, char** argv) {
     cmd = NULL;
     argt = NULL;
     arg = NULL;
-    srand(time(0));
+    srand(usTime());
     if (!runfile) {
         if (!gethome()) {
             #ifdef __unix__
@@ -674,7 +792,7 @@ int main(int argc, char** argv) {
     initBaseMem();
     resetTimer();
     while (!pexit) {
-        fchkint:
+        fchkint:;
         cp = 0;
         if (chkinProg) {inProg = true; chkinProg = false;}
         if (!inProg && !runc) {
@@ -693,22 +811,35 @@ int main(int argc, char** argv) {
             #endif
             updateTxtAttrib();
             inprompt = true;
-            #ifdef __unix__
-            setjmp(ctrlc_buf);
-            #else
-            signal(SIGINT, rl_sigh);
+            #ifdef _WIN32
+            setsig(SIGINT, rl_sigh);
             #endif
             conbuf[0] = 0;
             #ifdef __unix__
-            inprompt = true;
-            signal(SIGINT, cleanExit);
+            setsig(SIGINT, cleanExit);
             #endif
             txtqunlock();
             tmpstr = readline(pstr);
             concp = 0;
             inprompt = false;
             if (!tmpstr) cleanExit();
+            int32_t tmpptr;
             if (tmpstr[0] == 0) {free(tmpstr); goto brkproccmd;}
+            for (tmpptr = 0; tmpstr[tmpptr] == ' '; ++tmpptr) {}
+            if (tmpptr) {
+                int32_t iptr;
+                for (iptr = 0; tmpstr[tmpptr]; ++tmpptr, ++iptr) {
+                    tmpstr[iptr] = tmpstr[tmpptr];
+                }
+                tmpstr[iptr] = 0;
+            }
+            if (tmpstr[0] == 0) {free(tmpstr); goto brkproccmd;}
+            tmpptr = strlen(tmpstr);
+            if (tmpptr--) {
+                while (tmpstr[tmpptr] == ' ' && tmpptr) {
+                    tmpstr[tmpptr--] = 0;
+                }
+            }
             HIST_ENTRY* tmphist = history_get(history_length);
             if (!tmphist || strcmp(tmpstr, tmphist->line)) add_history(tmpstr);
             copyStr(tmpstr, conbuf);
@@ -721,7 +852,7 @@ int main(int argc, char** argv) {
             dlstackp = -1;
             itstackp = -1;
             fnstackp = -1;
-            for (int i = 0; i < CB_PROG_LOGIC_MAX; i++) {
+            for (int i = 0; i < CB_PROG_LOGIC_MAX; ++i) {
                 dlstack[i] = 0;
                 dldcmd[i] = false;
                 fnstack[i] = -1;
@@ -733,7 +864,7 @@ int main(int argc, char** argv) {
         didloop = false;
         didelse = false;
         bool inStr = false;
-        if (!runfile) signal(SIGINT, cmdIntHndl);
+        if (!runfile) setsig(SIGINT, cmdIntHndl);
         progLine = 1;
         bool comment = false;
         while (1) {
@@ -741,7 +872,7 @@ int main(int argc, char** argv) {
             if (!textlock) {
                 char kbc;
                 int kbh = kbhit();
-                for (int i = 0; i < kbh; i++) {
+                for (int i = 0; i < kbh; ++i) {
                     kbc = _getch();
                     kbinbuf[i] = kbc;
                     putchar(kbc);
@@ -753,7 +884,7 @@ int main(int argc, char** argv) {
                 fflush(stdout);
             }
             #endif
-            rechk:
+            rechk:;
             if (progindex < 0) {inProg = false;}
             else if (inProg == false) {progindex = - 1;}
             if (inProg) {
@@ -803,9 +934,9 @@ int main(int argc, char** argv) {
                 if (!didloop) {if (comment) {conbuf[concp] = 0;} concp++;} else {didloop = false;}
             }
         }
-        brkproccmd:
+        brkproccmd:;
         #ifdef __unix__
-        signal(SIGINT, cleanExit);
+        setsig(SIGINT, cleanExit);
         #endif
         txtqunlock();
     }
@@ -852,7 +983,8 @@ __sighandler_t gcpoldsigh;
 bool gcpint = false;
 
 void gcpsigh() {
-    signal(SIGINT, gcpsigh);
+    puts("\nOOOOOF\n\n");
+    setsig(SIGINT, gcpsigh);
     gcpoldsigh(0);
     gcpint = true;
     if (gcpret < gcpi + 1) getCurPos();
@@ -868,7 +1000,7 @@ static inline void getCurPos() {
     #ifndef _WIN32
     char buf[16];
     register int i;
-    if (!gcpint) gcpoldsigh = signal(SIGINT, gcpsigh);
+    nokill();
     i = kbhit();
     while (i > 0) {getchar(); i--;}
     if (!textlock) {
@@ -886,7 +1018,7 @@ static inline void getCurPos() {
         tcsetattr(0, TCSANOW, &restore);
         sneaktextlock = false;
     }
-    if (!gcpint) signal(SIGINT, gcpoldsigh);
+    yeskill();
     if (!gcpret) return;
     if (cmdint) {cmdint = false; return;}
     sscanf(buf, "\e[%d;%dR", &cury, &curx);
@@ -916,7 +1048,7 @@ void unloadProg() {
 }
 
 void unloadAllProg() {
-    for (int i = 0; i < progindex; i++) {
+    for (int i = 0; i < progindex; ++i) {
         free(progbuf[i]);
         free(progfn[i]);
     }
@@ -991,7 +1123,7 @@ bool loadProg(char* filename) {
     progLine = 1;
     getCurPos();
     int tmpx = curx, tmpy = cury;
-    uint64_t fsize = (uint64_t)ftell(prog);
+    uint32_t fsize = (uint32_t)ftell(prog);
     uint64_t time2 = usTime();
     fseek(prog, 0, SEEK_SET);
     #ifndef _WIN_NO_VT
@@ -1002,6 +1134,7 @@ bool loadProg(char* filename) {
     printf("(%llu bytes)...", (long long unsigned)fsize);
     fflush(stdout);
     progbuf[progindex] = (char*)malloc(fsize + 1);
+    
     int64_t j = 0;
     bool comment = false;
     bool inStr = false;
@@ -1068,14 +1201,14 @@ static inline bool chkCmd(int ct, ...) {
     va_list args;
     va_start(args, ct);
     #ifdef BUILT_IN_COMMAND_COMPARE
-    for (int32_t i = 0; i < ct; i++) {
+    for (int32_t i = 0; i < ct; ++i) {
         char* str2 = va_arg(args, char*);
         if (!strcmp(chkCmdPtr, str2)) return true;
     }
     return false;
     #else
     bool match = false;
-    for (int i = 0; i < ct; i++) {
+    for (int i = 0; i < ct; ++i) {
         char* str1 = chkCmdPtr;
         char* str2 = va_arg(args, char*);
         while (1) {
@@ -1085,47 +1218,89 @@ static inline bool chkCmd(int ct, ...) {
             str2++;
         }
         match = true;
-        nmatch:
+        nmatch:;
         if (match) return true;
     }
     return false;
     #endif
 }
 
-static inline bool isSpChar(char bfr) {
-    return (bfr == '+' || bfr == '-' || bfr == '*' || bfr == '/' || bfr == '^');
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+static inline bool isSpChar(char c) {
+    switch (c) {
+        case '+':
+        case '-':
+        case '*':
+        case '/':
+        case '^':
+            return true;
+            break;
+        default:
+            return false;
+            break;
+    }
 }
 
-static inline bool isValidVarChar(char bfr) {
-    return ((bfr >= 'A' && bfr <= 'Z') || (bfr >= '0' && bfr <= '9')
-    || (bfr >= '#' && bfr < '&') || bfr == '!' || bfr == '?' || bfr == '@'
-    || bfr == '[' || bfr == ']' || bfr == '_');
+static inline bool isValidVarChar(char c) {
+    switch (c) {
+        case 'A' ... 'Z':
+        case '0' ... '9':
+        case '#':
+        case '$':
+        case '%':
+        case '!':
+        case '?':
+        case '@':
+        case '[':
+        case ']':
+        case '_':
+            return true;
+            break;
+        default:
+            return false;
+            break;
+    }
 }
+
+static inline bool isValidHexChar(char c) {
+    switch (c) {
+        case 'a' ... 'f':
+        case 'A' ... 'F':
+        case '0' ... '9':
+            return true;
+            break;
+        default:
+            return false;
+            break;
+    }
+}
+#pragma GCC diagnostic pop
 
 #ifndef BUILT_IN_STRING_FUNCS
 static inline void copyStr(char* str1, char* str2) {
     int32_t i;
-    for (i = 0; str1[i]; i++) {str2[i] = str1[i];}
+    for (i = 0; str1[i]; ++i) {str2[i] = str1[i];}
     str2[i] = 0;
 }
 
 static inline void copyStrApnd(char* str1, char* str2) {
     int32_t j = 0, i = 0;
-    for (i = strlen(str2); str1[j]; i++) {str2[i] = str1[j]; j++;}
+    for (i = strlen(str2); str1[j]; ++i) {str2[i] = str1[j]; ++j;}
     str2[i] = 0;
 }
 #endif
 
 static inline void copyStrSnip(char* str1, int32_t i, int32_t j, char* str2) {
     int32_t i2 = 0;
-    for (; i < j && str1[i]; i++) {str2[i2] = str1[i]; i2++;}
+    for (; i < j && str1[i]; ++i) {str2[i2] = str1[i]; ++i2;}
     str2[i2] = 0;
 }
 
 static inline void copyStrTo(char* str1, int32_t i, char* str2) {
     int32_t i2 = 0;
     int32_t i3;
-    for (i3 = i; str1[i]; i++) {str2[i3] = str1[i2]; i2++; i3++;}
+    for (i3 = i; str1[i]; ++i) {str2[i3] = str1[i2]; ++i2; ++i3;}
     str2[i3] = 0;
 }
 
@@ -1138,13 +1313,13 @@ static inline void strApndChar(char* str, char c) {
 }
 
 static inline void upCase(char* str) {
-    for (int32_t i = 0; str[i]; i++) {
+    for (int32_t i = 0; str[i]; ++i) {
         if (str[i] >= 'a' && str[i] <= 'z') str[i] -= 32;
     }
 }
 
 static inline void lowCase(char* str) {
-    for (int32_t i = 0; str[i]; i++) {
+    for (int32_t i = 0; str[i]; ++i) {
         if (str[i] >= 'A' && str[i] <= 'Z') str[i] += 32;
     }
 }
@@ -1205,10 +1380,10 @@ char buf[CB_BUF_SIZE];
 
 void getStr(char* str1, char* str2) {
     int32_t j = 0, i;
-    for (i = 0; str1[i]; i++) {
+    for (i = 0; str1[i]; ++i) {
         char c = str1[i];
         if (c == '\\') {
-            i++;
+            ++i;
             char h[5];
             unsigned int tc = 0;
             switch (str1[i]) {
@@ -1221,19 +1396,22 @@ void getStr(char* str1, char* str2) {
                 case 'e': c = '\e'; break;
                 case 'x':
                     h[0] = '0';
-                    h[1] = str1[i]; i++;
-                    h[2] = str1[i]; i++;
+                    h[1] = 'x';
+                    if (!isValidHexChar(str1[++i])) {i -= 2; break;}
+                    h[2] = str1[i];
+                    if (!isValidHexChar(str1[++i])) {i -= 3; break;}
                     h[3] = str1[i];
                     h[4] = 0;
                     sscanf(h, "%x", &tc);
-                    c = (char)tc;
+                    c = tc;
+                    if (!c) ++j;
                     break;
                 case '\\': c = '\\'; break;
-                default: i--; break;
+                default: --i; break;
             }
         }
         buf[j] = c;
-        j++;
+        ++j;
     }
     buf[j] = 0;
     copyStr(buf, str2);
@@ -1242,7 +1420,7 @@ void getStr(char* str1, char* str2) {
 uint8_t getType(char* str) {
     if (str[0] == '"') {if (str[strlen(str) - 1] != '"') {return 0;} return 1;}
     bool p = false;
-    for (int32_t i = 0; str[i]; i++) {
+    for (int32_t i = 0; str[i]; ++i) {
         if (str[i] == '-') {} else
         if ((str[i] < '0' || str[i] > '9') && str[i] != '.') {return 255;} else
         if (str[i] == '.') {if (p) {return 0;} p = true;}
@@ -1271,15 +1449,15 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
         gftmp[0] = getFunc_gftmp[0];
         gftmp[1] = getFunc_gftmp[1];
     }
-    getFuncIndex++;
+    ++getFuncIndex;
     int32_t i;
-    for (i = 0; inbuf[i] != '('; i++) {if (inbuf[i] >= 'a' && inbuf[i] <= 'z') inbuf[i] = inbuf[i] - 32;}
+    for (i = 0; inbuf[i] != '('; ++i) {if (inbuf[i] >= 'a' && inbuf[i] <= 'z') inbuf[i] = inbuf[i] - 32;}
     copyStrSnip(inbuf, i + 1, strlen(inbuf) - 1, gftmp[0]);
     fargct = getArgCt(gftmp[0]);
     farg = malloc((fargct + 1) * sizeof(char*));
     flen = malloc((fargct + 1) * sizeof(int));
     fargt = malloc((fargct + 1) * sizeof(uint8_t));
-    for (int j = 0; j <= fargct; j++) {
+    for (int j = 0; j <= fargct; ++j) {
         if (j == 0) {
             flen[0] = i;
             farg[0] = (char*)malloc(flen[0] + 1);
@@ -1287,7 +1465,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
         } else {
             getArg(j - 1, gftmp[0], gftmp[1]);
             fargt[j] = getVal(gftmp[1], gftmp[1]);
-            if (fargt[j] == 0) goto fexit;
+            if (fargt[j] == 0) goto fnoerrscan;
             if (fargt[j] == 255) fargt[j] = 0;
             flen[j] = strlen(gftmp[1]);
             farg[j] = (char*)malloc(flen[j] + 1);
@@ -1299,15 +1477,16 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     cerr = 127;
     chkCmdPtr = farg[0];
     #include "functions.c"
-    fexit:
+    fexit:;
     if (cerr > 124 && cerr < 128) seterrstr(farg[0]);
-    for (int j = 0; j <= ftmpct; j++) {
+    fnoerrscan:;
+    for (int j = 0; j <= ftmpct; ++j) {
         free(farg[j]);
     }
     free(farg);
     free(flen);
     free(fargt);
-    getFuncIndex--;
+    --getFuncIndex;
     if (getFuncIndex) {free(gftmp[0]); free(gftmp[1]);}
     if (cerr) return 0;
     return ftype;
@@ -1331,7 +1510,7 @@ uint8_t getVar(char* vn, char* varout) {
     }
     bool isArray = false;
     int32_t aindex = 0;
-    for (register int32_t i = 0; vn[i]; i++) {
+    for (register int32_t i = 0; vn[i]; ++i) {
         if (!isValidVarChar(vn[i])) {
             cerr = 4;
             seterrstr(vn);
@@ -1357,7 +1536,7 @@ uint8_t getVar(char* vn, char* varout) {
         }
     }
     int v = -1;
-    for (register int i = 0; i < varmaxct; i++) {
+    for (register int i = 0; i < varmaxct; ++i) {
         if (varinuse[i]) {if (!strcmp(vn, varname[i])) {v = i; break;}}
     }
     if (v == -1) {
@@ -1411,7 +1590,7 @@ bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
     }
     bool isArray = false;
     int32_t aindex = 0;
-    for (register int32_t i = 0; vn[i]; i++) {
+    for (register int32_t i = 0; vn[i]; ++i) {
         if (!isValidVarChar(vn[i])) {
             cerr = 4;
             seterrstr(vn);
@@ -1438,7 +1617,7 @@ bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
         }
     }
     int v = -1;
-    for (register int i = 0; i < varmaxct; i++) {
+    for (register int i = 0; i < varmaxct; ++i) {
         if (!strcmp(vn, varname[i])) {v = i; break;}
     }
     if (v == -1) {
@@ -1448,7 +1627,7 @@ bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
             seterrstr(vn);
             return false;
         }
-        for (register int i = 0; i < varmaxct; i++) {
+        for (register int i = 0; i < varmaxct; ++i) {
             if (!varinuse[i]) {v = i; incmaxct = false; break;}
         }
         if (v == -1) v = varmaxct;
@@ -1465,7 +1644,7 @@ bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
         vardata[v].type = t;
         if (s == -1) s = 0;
         vardata[v].data = (char**)malloc((s + 1) * sizeof(char*));
-        for (int32_t i = 0; i <= s; i++) {
+        for (int32_t i = 0; i <= s; ++i) {
             vardata[v].data[i] = (char*)malloc(strlen(val) + 1);
             if (!vardata[v].data[i]) {
                 delVar(vn);
@@ -1501,7 +1680,7 @@ bool delVar(char* vn) {
         seterrstr(vn);
         return false;
     }
-    for (register int32_t i = 0; vn[i]; i++) {
+    for (register int32_t i = 0; vn[i]; ++i) {
         if (!isValidVarChar(vn[i])) {
             cerr = 4;
             seterrstr(vn);
@@ -1514,13 +1693,13 @@ bool delVar(char* vn) {
         }
     }
     int v = -1;
-    for (register int i = 0; i < varmaxct; i++) {
+    for (register int i = 0; i < varmaxct; ++i) {
         if (!strcmp(vn, varname[i])) {v = i; break;}
     }
     if (v != -1) {
         varinuse[v] = false;
         free(varname[v]);
-        for (int32_t i = 0; i <= vardata[v].size; i++) {
+        for (int32_t i = 0; i <= vardata[v].size; ++i) {
             free(vardata[v].data[i]);
         }
         free(vardata[v].data);
@@ -1534,7 +1713,7 @@ bool delVar(char* vn) {
     return true;
 }
 
-bool gvchkchar(char* tmp, int32_t i) {
+static inline bool gvchkchar(char* tmp, int32_t i) {
     if (isSpChar(tmp[i + 1])) {
         if (tmp[i + 1] == '-') {
             if (isSpChar(tmp[i + 2])) {
@@ -1577,71 +1756,91 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     register double num2 = 0;
     register double num3 = 0;
     int numAct;
-    bool* tmpSeenStr = NULL;
+    bool* seenStr = NULL;
     if ((isSpChar(inbuf[0]) && inbuf[0] != '-') || isSpChar(inbuf[strlen(inbuf) - 1])) {cerr = 1; dt = 0; goto gvreturn;}
-    int tmpct = 0;
+    int pct = 0, bct = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = '"'; tmp[3][1] = 0;
-    tmpSeenStr = malloc(sizeof(bool));
-    tmpSeenStr[0] = false;
-    for (register int32_t i = 0; inbuf[i]; i++) {
-        if (inbuf[i] == '"') {
-            inStr = !inStr;
-            if (inStr && tmpSeenStr[tmpct]) {
-                dt = 0;
-                cerr = 1;
-                goto gvreturn;
-            }
-            tmpSeenStr[tmpct] = true;
-        }
-        if ((inbuf[i] == ',' || isSpChar(inbuf[i])) && !inStr) tmpSeenStr[tmpct] = false;
-        if (inbuf[i] == '(' && !inStr) {
-            if (tmpct == 0) {ip = i;}
-            tmpct++;
-            tmpSeenStr = (bool*)realloc(tmpSeenStr, (tmpct + 1) * sizeof(bool));
-            tmpSeenStr[tmpct] = false;
-        }
-        if (inbuf[i] == ')' && !inStr) {
-            tmpct--;
-            tmpSeenStr = (bool*)realloc(tmpSeenStr, (tmpct + 1) * sizeof(bool));
-            if (tmpct == 0 && (ip == 0 || isSpChar(inbuf[ip - 1]))) {
-                int32_t tmplen[2];
-                tmplen[0] = strlen(inbuf);
-                jp = i;
-                copyStrSnip(inbuf, ip + 1, jp, tmp[0]);
-                t = getVal(tmp[0], tmp[0]);
-                if (t == 0) {dt = 0; goto gvreturn;}
-                if (dt == 0) dt = t;
-                if (t == 255) {t = 1; dt = 1;}
-                if (t != dt) {cerr = 2; dt = 0; goto gvreturn;}
-                copyStrSnip(inbuf, 0, ip, tmp[1]);
-                copyStrApnd(tmp[1], tmp[2]);
-                if (t == 1) copyStrApnd(tmp[3], tmp[2]);
-                copyStrApnd(tmp[0], tmp[2]);
-                if (t == 1) copyStrApnd(tmp[3], tmp[2]);
-                copyStrSnip(inbuf, jp + 1, strlen(inbuf), tmp[1]);
-                copyStrApnd(tmp[1], tmp[2]);
-                copyStr(tmp[2], inbuf);
-                tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
-                tmplen[1] = strlen(inbuf);
-                i -= tmplen[0] - tmplen[1];
-            }
+    seenStr = malloc(sizeof(bool));
+    seenStr[0] = false;
+    for (register int32_t i = 0; inbuf[i]; ++i) {
+        switch (inbuf[i]) {
+            default:
+                if (inStr) break;
+                if (inbuf[i] == ',' || isSpChar(inbuf[i])) seenStr[pct] = false;
+                break;
+            case '"':
+                inStr = !inStr;
+                if (inStr && seenStr[pct]) {
+                    dt = 0;
+                    cerr = 1;
+                    goto gvreturn;
+                }
+                seenStr[pct] = true;
+                break;
+            case '(':
+                if (inStr) break;
+                if (pct == 0) {ip = i;}
+                pct++;
+                seenStr = (bool*)realloc(seenStr, (pct + 1) * sizeof(bool));
+                seenStr[pct] = false;
+                break;
+            case ')':
+                if (inStr) break;
+                pct--;
+                seenStr = (bool*)realloc(seenStr, (pct + 1) * sizeof(bool));
+                if (pct == 0 && (ip == 0 || isSpChar(inbuf[ip - 1]))) {
+                    int32_t tmplen[2];
+                    tmplen[0] = strlen(inbuf);
+                    jp = i;
+                    copyStrSnip(inbuf, ip + 1, jp, tmp[0]);
+                    t = getVal(tmp[0], tmp[0]);
+                    if (t == 0) {dt = 0; goto gvreturn;}
+                    if (dt == 0) dt = t;
+                    if (t == 255) {t = 1; dt = 1;}
+                    if (t != dt) {cerr = 2; dt = 0; goto gvreturn;}
+                    copyStrSnip(inbuf, jp + 1, strlen(inbuf), tmp[1]);
+                    inbuf[ip] = 0;
+                    if (t == 1) copyStrApnd(tmp[3], inbuf);
+                    copyStrApnd(tmp[0], inbuf);
+                    if (t == 1) copyStrApnd(tmp[3], inbuf);
+                    copyStrApnd(tmp[1], inbuf);
+                    tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
+                    tmplen[1] = strlen(inbuf);
+                    i -= tmplen[0] - tmplen[1];
+                }
+                break;
+            case '[':
+                if (inStr) break;
+                bct++;
+                break;
+            case ']':
+                if (inStr) break;
+                bct--;
+                break;
         }
     }
-    if (tmpct) {cerr = 1; dt = 0; goto gvreturn;}
+    if (pct || bct) {cerr = 1; dt = 0; goto gvreturn;}
     ip = 0; jp = 0;
     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
     while (1) {
-        int pct = 0;
-        int bct = 0;
-        while (1) {
+        pct = 0;
+        bct = 0;
+        while (inbuf[jp]) {
             if (inbuf[jp] == '"') inStr = !inStr;
-            if (inbuf[jp] == '(' && !inStr) pct++;
-            if (inbuf[jp] == ')' && !inStr) pct--;
-            if (inbuf[jp] == '[' && !inStr) bct++;
-            if (inbuf[jp] == ']' && !inStr) bct--;
-            if ((isSpChar(inbuf[jp]) && !inStr && !pct && !bct) || !inbuf[jp]) break;
+            if (!inStr) {
+                switch (inbuf[jp]) {
+                    case '(': pct++; break;
+                    case ')': pct--; break;
+                    case '[': bct++; break;
+                    case ']': bct--; break;
+                    default:
+                        if (isSpChar(inbuf[jp]) && !pct && !bct) goto gvwhileexit1;
+                        break;
+                }
+            }
             jp++;
         }
+        gvwhileexit1:;
         if (inStr) {dt = 0; cerr = 1; goto gvreturn;}
         copyStrSnip(inbuf, ip, jp, tmp[0]);
         t = getType(tmp[0]);
@@ -1651,8 +1850,8 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             if (t == 0) {dt = 0; dt = 0; goto gvreturn;}
             if (t == 1) {
                 tmp[2][0] = '"'; tmp[2][1] = 0;
-                copyStr(tmp[0], tmp[3]);
-                copyStr(tmp[2], tmp[0]);
+                copyStr(tmp[2], tmp[3]);
+                swap(tmp[0], tmp[3]);
                 copyStrApnd(tmp[3], tmp[0]);
                 copyStrApnd(tmp[2], tmp[0]);
             }
@@ -1672,32 +1871,80 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             while (true) {
                 numAct = 0;
                 p1 = 0, p2 = 0, p3 = 0;
-                for (register int32_t i = 0; tmp[0][i] && p2 == 0; i++) {
+                for (register int32_t i = 0; tmp[0][i]; ++i) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '(' && !inStr) {pct++;}
-                    if (tmp[0][i] == ')' && !inStr) {pct--;}
-                    if (tmp[0][i] == '[' && !inStr) {bct++;}
-                    if (tmp[0][i] == ']' && !inStr) {bct--;}
-                    if (tmp[0][i] == '^' && !inStr && !pct && !bct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 4;}
+                    if (!inStr) {
+                        switch (tmp[0][i]) {
+                            case '(': pct++; break;
+                            case ')': pct--; break;
+                            case '[': bct++; break;
+                            case ']': bct--; break;
+                            case '^':
+                                if (!pct && !bct) {
+                                    if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
+                                    p2 = i;
+                                    numAct = 4;
+                                    goto gvsetact;
+                                }
+                                break;
+                        }
+                    }
                 }
-                for (register int32_t i = 0; tmp[0][i] && p2 == 0; i++) {
+                for (register int32_t i = 0; tmp[0][i]; ++i) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '(' && !inStr) {pct++;}
-                    if (tmp[0][i] == ')' && !inStr) {pct--;}
-                    if (tmp[0][i] == '[' && !inStr) {bct++;}
-                    if (tmp[0][i] == ']' && !inStr) {bct--;}
-                    if (tmp[0][i] == '*' && !inStr && !pct && !bct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 2;}
-                    if (tmp[0][i] == '/' && !inStr && !pct && !bct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 3;}
+                    if (!inStr) {
+                        switch (tmp[0][i]) {
+                            case '(': pct++; break;
+                            case ')': pct--; break;
+                            case '[': bct++; break;
+                            case ']': bct--; break;
+                            case '*':
+                                if (!pct && !bct) {
+                                    if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
+                                    p2 = i;
+                                    numAct = 2;
+                                    goto gvsetact;
+                                }
+                                break;
+                            case '/':
+                                if (!pct && !bct) {
+                                    if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
+                                    p2 = i;
+                                    numAct = 3;
+                                    goto gvsetact;
+                                }
+                                break;
+                        }
+                    }
                 }
-                for (register int32_t i = 0; tmp[0][i] && p2 == 0; i++) {
+                for (register int32_t i = 0; tmp[0][i]; ++i) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '(' && !inStr) {pct++;}
-                    if (tmp[0][i] == ')' && !inStr) {pct--;}
-                    if (tmp[0][i] == '[' && !inStr) {bct++;}
-                    if (tmp[0][i] == ']' && !inStr) {bct--;}
-                    if (tmp[0][i] == '+' && !inStr && !pct && !bct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 0;}
-                    if (tmp[0][i] == '-' && !inStr && !pct && !bct) {if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;} p2 = i; numAct = 1;}
+                    if (!inStr) {
+                        switch (tmp[0][i]) {
+                            case '(': pct++; break;
+                            case ')': pct--; break;
+                            case '[': bct++; break;
+                            case ']': bct--; break;
+                            case '+':
+                                if (!pct && !bct) {
+                                    if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
+                                    p2 = i;
+                                    numAct = 0;
+                                    goto gvsetact;
+                                }
+                                break;
+                            case '-':
+                                if (!pct && !bct) {
+                                    if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
+                                    p2 = i;
+                                    numAct = 1;
+                                    goto gvsetact;
+                                }
+                                break;
+                        }
+                    }
                 }
+                gvsetact:;
                 inStr = false;
                 pct = 0;
                 bct = 0;
@@ -1705,30 +1952,48 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                     if (p3 == 0) {
                         t = getType(tmp[0]);
                         if (t == 0) {cerr = 1; dt = 0; goto gvreturn;} else
-                        if (t == 255) {t = getVar(tmp[0], tmp[0]);
-                        if (t == 0) {dt = 0; goto gvreturn;}
-                        if (t == 255) {t = 2; tmp[0][0] = '0'; tmp[0][1] = 0;}
-                        if (t != 2) {cerr = 2; dt = 0; goto gvreturn;}}
+                        if (t == 255) {
+                            t = getVar(tmp[0], tmp[0]);
+                            if (t == 0) {dt = 0; goto gvreturn;}
+                            if (t == 255) {t = 2; tmp[0][0] = '0'; tmp[0][1] = 0;}
+                            if (t != 2) {cerr = 2; dt = 0; goto gvreturn;}
+                        }
                     }
-                    copyStr(tmp[0], tmp[1]); goto gvfexit;
+                    swap(tmp[0], tmp[1]);
+                    goto gvfexit;
                 }
                 tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
-                for (register int32_t i = p2 - 1; i > 0; i--) {
+                for (register int32_t i = p2 - 1; i > 0; --i) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '(' && !inStr) {pct++;}
-                    if (tmp[0][i] == ')' && !inStr) {pct--;}
-                    if (tmp[0][i] == '[' && !inStr) {bct++;}
-                    if (tmp[0][i] == ']' && !inStr) {bct--;}
-                    if (isSpChar(tmp[0][i]) && !inStr && !pct && !bct) {p1 = i; break;}
+                    if (!inStr) {
+                        switch (tmp[0][i]) {
+                            case '(': pct++; break;
+                            case ')': pct--; break;
+                            case '[': bct++; break;
+                            case ']': bct--; break;
+                            default:
+                                if (isSpChar(tmp[0][i]) && !inStr && !pct && !bct) {p1 = i; goto gvforexit1;}
+                                break;
+                        }
+                    }
                 }
-                for (register int32_t i = p2 + 1; true; i++) {
+                gvforexit1:;
+                for (register int32_t i = p2 + 1; true; ++i) {
                     if (tmp[0][i] == '"') inStr = !inStr;
-                    if (tmp[0][i] == '(' && !inStr) {pct++;}
-                    if (tmp[0][i] == ')' && !inStr) {pct--;}
-                    if (tmp[0][i] == '[' && !inStr) {bct++;}
-                    if (tmp[0][i] == ']' && !inStr) {bct--;}
-                    if ((isSpChar(tmp[0][i]) && i != p2 + 1 && !inStr && !pct && !bct) || tmp[0][i] == 0) {p3 = i; break;}
+                    if (!inStr) {
+                        switch (tmp[0][i]) {
+                            case '(': pct++; break;
+                            case ')': pct--; break;
+                            case '[': bct++; break;
+                            case ']': bct--; break;
+                            case 0: p3 = i; goto gvforexit2;
+                            default:
+                                if (isSpChar(tmp[0][i]) && i != p2 + 1 && !pct && !bct) {p3 = i; goto gvforexit2;}
+                                break;
+                        }
+                    }
                 }
+                gvforexit2:;
                 if (tmp[0][p1] == '+') p1++;
                 copyStrSnip(tmp[0], p1, p2, tmp[2]);
                 t = getType(tmp[2]);
@@ -1755,9 +2020,17 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                         break;
                 }
                 tmp[1][0] = 0;
-                if (num3 == -0 || (num3 < 0 && num3 > -0.0000005)) num3 = 0;
-                if (num3 < -0.0000004 && num3 > -0.0000009) num3 = -0.000001;
+                if (num3 == -0 || (num3 < 0 && num3 > -0.0000005)) {
+                    tmp[2][0] = '0';
+                    tmp[2][1] = 0;
+                    goto skipstrchk;
+                }
+                if (num3 < -0.0000004 && num3 > -0.0000009) {
+                    copyStr("-0.000001", tmp[0]);
+                    goto skipstrchk;
+                }
                 sprintf(tmp[2], "%lf", num3);
+                skipstrchk:;
                 int32_t i = 0;
                 while (tmp[2][i] == '0') i++;
                 copyStrSnip(tmp[2], i, strlen(tmp[2]), tmp[2]);
@@ -1765,14 +2038,14 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 if (p1) copyStrSnip(tmp[0], 0, p1, tmp[1]);
                 copyStrApnd(tmp[2], tmp[1]);
                 copyStrApnd(tmp[3], tmp[1]);
-                copyStr(tmp[1], tmp[0]);
+                swap(tmp[1], tmp[0]);
             }
         }
         if (inbuf[jp] == 0) {break;}
         jp++;
         ip = jp;
     }
-    gvfexit:
+    gvfexit:;
     if (dt == 2) {
         if (tmp[1][0] == '.' && !tmp[1][1]) {cerr = 1; dt = 0; goto gvreturn;}
         int32_t i = 0, j = strlen(tmp[1]);
@@ -1794,9 +2067,9 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         copyStr(tmp[1], outbuf);
     }
     if (outbuf[0] == 0 && dt != 1) {outbuf[0] = '0'; outbuf[1] = 0; dt = 2;}
-    gvreturn:
+    gvreturn:;
     getValIndex--;
-    free(tmpSeenStr);
+    free(seenStr);
     if (getValIndex) {free(tmp[0]); free(tmp[1]); free(tmp[2]); free(tmp[3]);}
     return dt;
 }
@@ -1824,30 +2097,34 @@ bool solvearg(int i) {
 static inline int getArgCt(char* inbuf) {
     int ct = 0;
     bool inStr = false;
-    int pct = 0;
+    int pct = 0, bct = 0;
     int32_t j = 0;
-    while (inbuf[j] == ' ') {j++;}
-    for (int32_t i = j; inbuf[i]; i++) {
+    while (inbuf[j] == ' ') {--j;}
+    for (int32_t i = j; inbuf[i]; ++i) {
         if (ct == 0) ct = 1;
         if (inbuf[i] == '(' && !inStr) {pct++;}
         if (inbuf[i] == ')' && !inStr) {pct--;}
+        if (inbuf[i] == '[' && !inStr) {bct++;}
+        if (inbuf[i] == ']' && !inStr) {bct--;}
         if (inbuf[i] == '"') inStr = !inStr;
-        if (inbuf[i] == ',' && !inStr && pct == 0) ct++;
+        if (inbuf[i] == ',' && !inStr && pct == 0 && bct == 0) ct++;
     }
     return ct;
 }
 
 static inline int getArg(int num, char* inbuf, char* outbuf) {
     bool inStr = false;
-    int pct = 0;
+    int pct = 0, bct = 0;
     int ct = 0;
     int32_t len = 0;
-    for (int32_t i = 0; inbuf[i] && ct <= num; i++) {
+    for (int32_t i = 0; inbuf[i] && ct <= num; ++i) {
         if (inbuf[i] == '(' && !inStr) {pct++;}
         if (inbuf[i] == ')' && !inStr) {pct--;}
+        if (inbuf[i] == '[' && !inStr) {bct++;}
+        if (inbuf[i] == ']' && !inStr) {bct--;}
         if (inbuf[i] == '"') {inStr = !inStr;}
         if (inbuf[i] == ' ' && !inStr) {} else
-        if (inbuf[i] == ',' && !inStr && pct == 0) {ct++;} else
+        if (inbuf[i] == ',' && !inStr && pct == 0 && bct == 0) {ct++;} else
         if (ct == num) {outbuf[len] = inbuf[i]; len++;}
     }
     outbuf[len] = 0;
@@ -1878,7 +2155,7 @@ void mkargs() {
     argct = getArgCt(tmpbuf[0]);
     tmpargs = (char**)realloc(tmpargs, (argct + 1) * sizeof(char*));
     argl = (int32_t*)realloc(argl, (argct + 1) * sizeof(int32_t));
-    for (int i = 0; i <= argct; i++) {
+    for (int i = 0; i <= argct; ++i) {
         argl[i] = 0;
         if (i == 0) {
             copyStrSnip(cmd, j, h, tmpbuf[0]);
@@ -1894,7 +2171,7 @@ void mkargs() {
         tmpargs[i][argl[i]] = 0;
     }
     if (argct == 1 && tmpargs[1][0] == 0) {argct = 0;}
-    for (int i = 0; i <= argct; i++) {tmpargs[i][argl[i]] = 0;}
+    for (int i = 0; i <= argct; ++i) {tmpargs[i][argl[i]] = 0;}
 }
 
 int ltIndex = 0;
@@ -1906,29 +2183,31 @@ uint8_t logictest(char* inbuf) {
     uint8_t t2 = 0;
     int32_t p = 0;
     bool inStr = false;
-    int pct = 0;
+    int pct = 0, bct = 0;
     ltIndex++;
     while (inbuf[p] == ' ') {p++;}
     if (p >= (int32_t)strlen(inbuf)) {cerr = 10; goto ltreturn;}
-    for (int32_t i = p; true; i++) {
+    for (int32_t i = p; true; ++i) {
         if (inbuf[i] == '(' && !inStr) {pct++;}
         if (inbuf[i] == ')' && !inStr) {pct--;}
+        if (inbuf[i] == '[' && !inStr) {bct++;}
+        if (inbuf[i] == ']' && !inStr) {bct--;}
         if (inbuf[i] == '"') {inStr = !inStr;}
         if (inbuf[i] == 0) {cerr = 1; goto ltreturn;}
-        if ((inbuf[i] == '<' || inbuf[i] == '=' || inbuf[i] == '>') && !inStr && pct == 0) {p = i; break;}
+        if ((inbuf[i] == '<' || inbuf[i] == '=' || inbuf[i] == '>') && !inStr && pct == 0 && bct == 0) {p = i; break;}
         if (inbuf[i] == ' ' && !inStr) {} else
         {lttmp[0][tmpp] = inbuf[i]; tmpp++;}
     }
     lttmp[0][tmpp] = 0;
     tmpp = 0;
-    for (int32_t i = p; true; i++) {
+    for (int32_t i = p; true; ++i) {
         if (tmpp > 2) {cerr = 1; goto ltreturn;}
         if (inbuf[i] != '<' && inbuf[i] != '=' && inbuf[i] != '>') {p = i; break;} else
         {lttmp[1][tmpp] = inbuf[i]; tmpp++;}
     }
     lttmp[1][tmpp] = 0;
     tmpp = 0;
-    for (int32_t i = p; true; i++) {
+    for (int32_t i = p; true; ++i) {
         if (inbuf[i] == 0) {break;}
         if (inbuf[i] == ' ' && !inStr) {} else
         {lttmp[2][tmpp] = inbuf[i]; tmpp++;}
@@ -1989,14 +2268,14 @@ uint8_t logictest(char* inbuf) {
         return num1 <= num2;
     }
     cerr = 1;
-    ltreturn:
+    ltreturn:;
     return -1;
 }
 
 char ltmp[2][CB_BUF_SIZE];
 
 bool runlogic() {
-    ltmp[0][0] = ltmp[1][0] = 0;
+    ltmp[0][0] = 0; ltmp[1][0] = 0;
     int32_t i = 0;
     while (cmd[i] == ' ') {i++;}
     int32_t j = i;
@@ -2009,8 +2288,6 @@ bool runlogic() {
     return false;
 }
 
-char* bfnbuf = NULL;
-
 void initBaseMem() {
     getVal_tmp[0] = malloc(CB_BUF_SIZE);
     getVal_tmp[1] = malloc(CB_BUF_SIZE);
@@ -2021,34 +2298,16 @@ void initBaseMem() {
     bfnbuf = malloc(CB_BUF_SIZE);
 }
 
-void freeBaseMem() {
-    free(getVal_tmp[0]);
-    getVal_tmp[0] = NULL;
-    free(getVal_tmp[1]);
-    getVal_tmp[1] = NULL;
-    free(getVal_tmp[2]);
-    getVal_tmp[2] = NULL;
-    free(getVal_tmp[3]);
-    getVal_tmp[3] = NULL;
-    free(getFunc_gftmp[0]);
-    getFunc_gftmp[0] = NULL;
-    free(getFunc_gftmp[1]);
-    getFunc_gftmp[1] = NULL;
-    free(bfnbuf);
-    bfnbuf = NULL;
-}
+#define nfree(ptr) free(ptr); ptr = NULL
 
-char* basefilename(char* fn) {
-    int32_t fnlen = strlen(fn);
-    int32_t i;
-    for (i = fnlen; i > -1; i--) {
-        if (fn[i] == '/') break;
-        #ifdef _WIN32
-        if (fn[i] == '\\') break;
-        #endif
-    }
-    copyStrSnip(fn, i + 1, fnlen, bfnbuf);
-    return bfnbuf;
+void freeBaseMem() {
+    nfree(getVal_tmp[0]);
+    nfree(getVal_tmp[1]);
+    nfree(getVal_tmp[2]);
+    nfree(getVal_tmp[3]);
+    nfree(getFunc_gftmp[0]);
+    nfree(getFunc_gftmp[1]);
+    nfree(bfnbuf);
 }
 
 void printError(int error) {
@@ -2109,7 +2368,7 @@ void printError(int error) {
             fputs("Invalid data or data range exceeded", stdout);
             break;
         case 17:
-            printf("Cannot change to directory '%s'", errstr);
+            printf("Cannot change to directory '%s' (errno: [%d] %s)", errstr, errno, strerror(errno));
             break;
         case 18:
             fputs("Expected file instead of directory", stdout);
@@ -2177,13 +2436,13 @@ void runcmd() {
     mkargs();
     argt = (uint8_t*)realloc(argt, argct + 1);
     arg = (char**)realloc(arg, (argct + 1) * sizeof(char*));
-    for (int i = 1; i <= argct; i++) {arg[i] = NULL;}
+    for (int i = 1; i <= argct; ++i) {arg[i] = NULL;}
     solvearg(0);
     upCase(arg[0]);
     cerr = 255;
     chkCmdPtr = arg[0];
     #include "commands.c"
-    cmderr:
+    cmderr:;
     if (cerr) {
         if (runc || runfile) err = 1;
         printError(cerr);
@@ -2191,12 +2450,12 @@ void runcmd() {
         concp = -1;
         chkinProg = inProg = false;
     }
-    noerr:
+    noerr:;
     if (lgc) return;
-    for (int i = 0; i <= argct; i++) {
+    for (int i = 0; i <= argct; ++i) {
         free(tmpargs[i]);
     }
-    for (int i = 1; i <= argct; i++) {
+    for (int i = 1; i <= argct; ++i) {
         free(arg[i]);
     }
     return;

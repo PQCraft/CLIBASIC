@@ -13,7 +13,7 @@ if (chkCmd(2, "?", "PRINT")) {
     if (cmd[j] == 0) {putchar('\n'); return true;}
     else {j--;}
     bool inStr = false;
-    int pct = 0;
+    int pct = 0, bct = 0;
     int32_t ptr = 0;
     int32_t i = j;
     while (cmd[i]) {
@@ -21,8 +21,10 @@ if (chkCmd(2, "?", "PRINT")) {
         if (cmd[i] == '"') {inStr = !inStr;}
         if (cmd[i] == '(' && !inStr) {pct++;}
         if (cmd[i] == ')' && !inStr) {pct--;}
+        if (cmd[i] == '[' && !inStr) {bct++;}
+        if (cmd[i] == ']' && !inStr) {bct--;}
         if (cmd[i] == ' ' && !inStr) {} else
-        if ((cmd[i] == ',' || cmd[i] == ';' || cmd[i] == 0) && !inStr && pct == 0) {
+        if ((cmd[i] == ',' || cmd[i] == ';' || cmd[i] == 0) && !inStr && pct == 0 && bct == 0) {
             ltmp[1][ptr] = 0; ptr = 0;
             int32_t len = strlen(ltmp[1]);
             int tmpt;
@@ -37,7 +39,7 @@ if (chkCmd(2, "?", "PRINT")) {
         } else
         {ltmp[1][ptr] = cmd[i]; ptr++;}
     }
-    if (pct || inStr) {cerr = 1; return true;}
+    if (pct || bct || inStr) {cerr = 1; return true;}
     fflush(stdout);
     return true;
 }

@@ -1,11 +1,13 @@
+BASE_CFLAGS = -Wall -Wextra -O2 -lm -lreadline --std=c99
+
 ifndef OS
 
 C = gcc
-CFLAGS = -Wall -Wextra -O2 -lm -lreadline --std=c99
+CFLAGS = $(BASE_CFLAGS)
 ifeq ($(shell uname -s), Darwin)
 CFLAGS += -I/usr/local/opt/readline/include -L/usr/local/opt/readline/lib
 else
-CFLAGS += -g -no-pie
+CFLAGS += -s -no-pie
 endif
 
 CBITS = $(shell getconf LONG_BIT)
@@ -15,7 +17,7 @@ BUILD32 = $(C) clibasic.c -m32 $(CFLAGS) -DB32 -o clibasic && chmod +x ./clibasi
 
 INSTALL_TO = "/usr/bin/clibasic"
 
-INSTALL = sudo rm -f $(INSTALL_TO); sudo cp ./clibasic $(INSTALL_TO)
+INSTALL = if [ "$$(id -u)" -eq 0 ]; then cp ./clibasic $(INSTALL_TO); else echo "Root privileges are needed to install."; fi
 
 all: clean build run
 
@@ -49,7 +51,7 @@ else
 
 C = gcc
 
-CFLAGS = -Wall -Wextra -O2 -Ilib -s -lm -lreadline --std=c99 -D_CRT_NONSTDC_NO_WARNINGS
+CFLAGS = $(BASE_CFLAGS) -Ilib -s -D_CRT_NONSTDC_NO_WARNINGS
 
 BUILD64 = xcopy lib\win64\*.dll . /Y && $(C) clibasic.c -m64 $(CFLAGS) -Llib\win64 -DB64 -o clibasic.exe
 BUILD32 = xcopy lib\win32\*.dll . /Y && $(C) clibasic.c -m32 $(CFLAGS) -Llib\win32 -DB32 -o clibasic.exe
@@ -74,3 +76,4 @@ clean:
 	del /q /f clibasic.exe *.dll
 
 endif
+
