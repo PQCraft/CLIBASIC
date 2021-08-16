@@ -38,9 +38,10 @@ To build then run, use `make` (same as `make all`). <br>
 
 ---
 ### Notes <br>
-- On Arch Linux, you can install CLIBASIC by installing the [`clibasic`](https://aur.archlinux.org/packages/clibasic/) or [`clibasic-bin`](https://aur.archlinux.org/packages/clibasic-bin/) AUR package.
-- If CLIBASIC is not run in a terminal, it will, on unix-like OSs, attempt to open in XTerm and skip reading arguments unless GUI_CHECK is not defined.
-- Due to Windows not having proper fork() and exec\*() functions, EXEC, EXEC(), and EXEC$() are passed through system() under Windows and one issues out of the many with this is a space parsing issue where running `EXEC "test prog"` will attempt to execute `EXEC "test", "prog"` if `test prog` cannot be found in the current directory or %PATH%.
+- On Arch Linux, you can install CLIBASIC by installing either the [`clibasic`](https://aur.archlinux.org/packages/clibasic/) or [`clibasic-bin`](https://aur.archlinux.org/packages/clibasic-bin/) AUR package.
+- If CLIBASIC is not run in a terminal on unix-like OSs it will, unless GUI_CHECK is not defined, attempt to open in XTerm and skip reading arguments.
+- Due to Windows not having proper fork() and exec\*() functions, EXEC, EXEC(), and EXEC$() are passed through system() under Windows and one issue out of the many with this is a space parsing issue where running `EXEC "test prog"` will attempt to execute `EXEC "test", "prog"` if `test prog` cannot be found in the current directory or %PATH%.
+- On Windows, pressing CTRL+C will not display a new prompt line due to the Windows version of readline catching and ignoring the CTRL+C.
 - If the file `.clibasic_history` is present in the user's home directory CLIBASIC will automatically save history there. Run `_AUTOCMDHIST`, `_SAVECMDHIST` (without any arguments), or create the file `.clibasic_history` in your home/user folder to enable this feature. Remove the file to disable this feature.
 - CLIBASIC will look for `AUTORUN.BAS` (and `autorun.bas` on Linux) in the user's home directory and run the file if present.
 - The development scripts are `build.sh` which is for testing if CLIBASIC compiles correctly for Linux and Windows, and `package.sh` which creates the zip files for making a CLIBASIC release.
