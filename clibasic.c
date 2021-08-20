@@ -112,7 +112,7 @@
 
 // Base defines
 
-char VER[] = "0.19";
+char VER[] = "0.20";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -210,6 +210,9 @@ char pstr[CB_BUF_SIZE];
 uint8_t fgc = 15;
 uint8_t bgc = 0;
 
+uint32_t truefgc = 0xFFFFFF;
+uint32_t truebgc = 0x000000;
+
 int curx = 0;
 int cury = 0;
 
@@ -237,9 +240,10 @@ bool txt_dim = false;
 bool txt_blink = false;
 bool txt_hidden = false;
 bool txt_reverse = false;
+int  txt_underlncolor = 0;
 bool txt_fgc = true;
 bool txt_bgc = false;
-int  txt_underlncolor = 0;
+bool txt_truecolor = false;
 
 bool textlock = false;
 bool sneaktextlock = false;
@@ -307,7 +311,6 @@ char* rl_get_tab(const char* text, int state) {
         tab = malloc(strlen(text) + 5);
         strcpy(tab, text);
         tab_end = tab_width - (tab_end % tab_width) - 1;
-        if (!tab_end) tab_end = tab_width;
         fflush(stdout);
         for (int i = 0; i < tab_end; ++i) {
             strApndChar(tab, ' ');
@@ -475,13 +478,13 @@ void runcmd();
     #define copyStr(b, a) strcpy(a, b)
     #define copyStrApnd(b, a) strcat(a, b)
 #else
-    static inline void copyStr(char* str1, char* str2);
-    static inline void copyStrApnd(char* str1, char* str2);
+    static inline void copyStr(char*, char*);
+    static inline void copyStrApnd(char*, char*);
 #endif
-static inline void copyStrSnip(char* str1, int32_t i, int32_t j, char* str2);
-uint8_t getVal(char* inbuf, char* outbuf);
+static inline void copyStrSnip(char*, int32_t, int32_t, char*);
+uint8_t getVal(char*, char*);
 static inline void resetTimer();
-bool loadProg(char* filename);
+bool loadProg(char*);
 void unloadProg();
 void updateTxtAttrib();
 static inline bool isFile();
@@ -1333,8 +1336,14 @@ static inline void seterrstr(char* newstr) {
 void updateTxtAttrib() {
     #ifndef _WIN_NO_VT
     fputs("\e[0m", stdout);
-    if (txt_fgc) printf("\e[38;5;%um", fgc);
-    if (txt_bgc) printf("\e[48;5;%um", bgc);
+    if (txt_fgc) {
+        if (txt_truecolor) printf("\e[38;2;%u;%u;%um", (uint8_t)(truefgc >> 16), (uint8_t)(truefgc >> 8), (uint8_t)truefgc);
+        else printf("\e[38;5;%um", fgc);
+    }
+    if (txt_bgc) {
+        if (txt_truecolor) printf("\e[48;2;%u;%u;%um", (uint8_t)(truebgc >> 16), (uint8_t)(truebgc >> 8), (uint8_t)truebgc);
+        else printf("\e[48;5;%um", bgc);
+    }
     if (txt_bold) fputs("\e[1m", stdout);
     if (txt_italic) fputs("\e[3m", stdout);
     if (txt_underln) fputs("\e[4m", stdout);
@@ -1849,11 +1858,13 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             t = getVar(tmp[0], tmp[0]);
             if (t == 0) {dt = 0; dt = 0; goto gvreturn;}
             if (t == 1) {
-                tmp[2][0] = '"'; tmp[2][1] = 0;
-                copyStr(tmp[2], tmp[3]);
-                swap(tmp[0], tmp[3]);
-                copyStrApnd(tmp[3], tmp[0]);
-                copyStrApnd(tmp[2], tmp[0]);
+                copyStr(tmp[0], tmp[3]);
+                tmp[0][0] = '"';
+                int32_t i = 1;
+                for (char* ptr = tmp[3]; *ptr; ++ptr) {
+                    tmp[0][i++] = *ptr;
+                }
+                tmp[0][i++] = '"'; tmp[0][i] = 0;
             }
         }
         if (t && dt == 0) {dt = t;} else
@@ -1864,87 +1875,78 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         if (t == 2) {
             copyStrSnip(inbuf, jp, strlen(inbuf), tmp[1]);
             copyStrApnd(tmp[1], tmp[0]);
+            double tmpchknz = atof(tmp[0]);
+            if (tmpchknz == -0) {tmp[0][0] = '0';}
             register int32_t p1, p2, p3;
             bool inStr = false;
             pct = 0;
             bct = 0;
-            while (true) {
+            while (1) {
                 numAct = 0;
                 p1 = 0, p2 = 0, p3 = 0;
                 for (register int32_t i = 0; tmp[0][i]; ++i) {
-                    if (tmp[0][i] == '"') inStr = !inStr;
-                    if (!inStr) {
-                        switch (tmp[0][i]) {
-                            case '(': pct++; break;
-                            case ')': pct--; break;
-                            case '[': bct++; break;
-                            case ']': bct--; break;
-                            case '^':
-                                if (!pct && !bct) {
-                                    if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
-                                    p2 = i;
-                                    numAct = 4;
-                                    goto gvsetact;
-                                }
-                                break;
-                        }
+                    switch (tmp[0][i]) {
+                        case '"': inStr = !inStr; break;
+                        case '(': pct++; break;
+                        case ')': pct--; break;
+                        case '[': bct++; break;
+                        case ']': bct--; break;
+                        case '^':
+                            if (!inStr && !pct && !bct) {
+                                if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
+                                p2 = i; numAct = 4;
+                                if (p2) goto foundact;
+                            }
+                            break;
                     }
                 }
                 for (register int32_t i = 0; tmp[0][i]; ++i) {
-                    if (tmp[0][i] == '"') inStr = !inStr;
-                    if (!inStr) {
-                        switch (tmp[0][i]) {
-                            case '(': pct++; break;
-                            case ')': pct--; break;
-                            case '[': bct++; break;
-                            case ']': bct--; break;
-                            case '*':
-                                if (!pct && !bct) {
-                                    if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
-                                    p2 = i;
-                                    numAct = 2;
-                                    goto gvsetact;
-                                }
-                                break;
-                            case '/':
-                                if (!pct && !bct) {
-                                    if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
-                                    p2 = i;
-                                    numAct = 3;
-                                    goto gvsetact;
-                                }
-                                break;
-                        }
+                    switch (tmp[0][i]) {
+                        case '"': inStr = !inStr; break;
+                        case '(': pct++; break;
+                        case ')': pct--; break;
+                        case '[': bct++; break;
+                        case ']': bct--; break;
+                        case '*':
+                            if (!inStr && !pct && !bct) {
+                                if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
+                                p2 = i; numAct = 2;
+                                if (p2) goto foundact;
+                            }
+                            break;
+                        case '/':
+                            if (!inStr && !pct && !bct) {
+                                if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
+                                p2 = i; numAct = 3;
+                                if (p2) goto foundact;
+                            }
+                            break;
                     }
                 }
                 for (register int32_t i = 0; tmp[0][i]; ++i) {
-                    if (tmp[0][i] == '"') inStr = !inStr;
-                    if (!inStr) {
-                        switch (tmp[0][i]) {
-                            case '(': pct++; break;
-                            case ')': pct--; break;
-                            case '[': bct++; break;
-                            case ']': bct--; break;
-                            case '+':
-                                if (!pct && !bct) {
-                                    if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
-                                    p2 = i;
-                                    numAct = 0;
-                                    goto gvsetact;
-                                }
-                                break;
-                            case '-':
-                                if (!pct && !bct) {
-                                    if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
-                                    p2 = i;
-                                    numAct = 1;
-                                    goto gvsetact;
-                                }
-                                break;
-                        }
+                    switch (tmp[0][i]) {
+                        case '"': inStr = !inStr; break;
+                        case '(': pct++; break;
+                        case ')': pct--; break;
+                        case '[': bct++; break;
+                        case ']': bct--; break;
+                        case '+':
+                            if (!inStr && !pct && !bct) {
+                                if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
+                                p2 = i; numAct = 0;
+                                if (p2) goto foundact;
+                            }
+                            break;
+                        case '-':
+                            if (!inStr && !pct && !bct) {
+                                if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
+                                p2 = i; numAct = 1;
+                                if (p2) goto foundact;
+                            }
+                            break;
                     }
                 }
-                gvsetact:;
+                foundact:;
                 inStr = false;
                 pct = 0;
                 bct = 0;
@@ -2052,17 +2054,17 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         bool dp = false;
         while (tmp[1][i]) {if (tmp[1][i] == '.') {tmp[1][i + 7] = 0; dp = true; break;} i++;}
         i = 0;
-        while (tmp[1][i] == '0') i++;
+        while (tmp[1][i++] == '0' && tmp[1][i] != '.') {}
+        --i;
         if (dp) {
             j--;
-            while (tmp[1][j] == '0') {j--;}
+            while (tmp[1][j] == '0' || !tmp[1][j]) {j--;}
             if (tmp[1][j] == '.') {j--;}
             j++;
         }
-        outbuf[0] = 0;
         copyStrSnip(tmp[1], i, j, tmp[2]);
         if (tmp[1][i] == '.') strcpy(outbuf, "0");
-        copyStrApnd(tmp[2], outbuf);
+        copyStr(tmp[2], outbuf);
     } else {
         copyStr(tmp[1], outbuf);
     }

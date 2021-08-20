@@ -36,3 +36,4 @@ make -f Makefile-Cross clean 1> /dev/null
 # clean up
 mv clibasic.tmp clibasic 2> /dev/null
 mv clibasic.exe.tmp clibasic.exe 2> /dev/null
+

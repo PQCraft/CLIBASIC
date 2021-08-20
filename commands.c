@@ -40,15 +40,23 @@ if (chkCmd(1, "COLOR")) {
     if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (!solvearg(1)) goto cmderr;
-    int tmp = 0;
+    int32_t tmp = 0;
     if (argt[1] == 0) {} else
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     else {
         tmp = atoi(arg[1]);
-        if (tmp < 0 || tmp > 255) {cerr = 16; goto cmderr;}
-        fgc = (uint8_t)tmp;
+        if (txt_truecolor) {
+            if (tmp < 0 || tmp > 0xFFFFFF) {cerr = 16; goto cmderr;}
+            truefgc = tmp;
+        } else {
+            if (tmp < 0 || tmp > 255) {cerr = 16; goto cmderr;}
+            fgc = (uint8_t)tmp;
+        }
         #ifndef _WIN_NO_VT
-        if (txt_fgc) printf("\e[38;5;%um", fgc);
+        if (txt_fgc) {
+            if (txt_truecolor) printf("\e[38;2;%u;%u;%um", (uint8_t)(truefgc >> 16), (uint8_t)(truefgc >> 8), (uint8_t)truefgc);
+            else printf("\e[38;5;%um", fgc);
+        }
         #else
         updateTxtAttrib();
         #endif
@@ -59,10 +67,18 @@ if (chkCmd(1, "COLOR")) {
         if (argt[2] != 2) {cerr = 2; goto cmderr;}
         else {
             tmp = atoi(arg[2]);
-            if (tmp < 0 || tmp > 255) {cerr = 16; goto cmderr;}
-            bgc = (uint8_t)tmp;
+            if (txt_truecolor) {
+                if (tmp < 0 || tmp > 0xFFFFFF) {cerr = 16; goto cmderr;}
+                truebgc = tmp;
+            } else {
+                if (tmp < 0 || tmp > 255) {cerr = 16; goto cmderr;}
+                bgc = (uint8_t)tmp;
+            }
             #ifndef _WIN_NO_VT
-            if (txt_bgc) printf("\e[48;5;%um", bgc);
+            if (txt_bgc) {
+                if (txt_truecolor) printf("\e[48;2;%u;%u;%um", (uint8_t)(truebgc >> 16), (uint8_t)(truebgc >> 8), (uint8_t)truebgc);
+                else printf("\e[48;5;%um", bgc);
+            }
             #else
             updateTxtAttrib();
             #endif
@@ -546,6 +562,7 @@ if (chkCmd(1, "_TXTATTRIB")) {
         if (!strcmp(arg[1], "UNDERLINE_COLOR")) attrib = 12; else
         if (!strcmp(arg[1], "FGC")) attrib = 13; else
         if (!strcmp(arg[1], "BGC")) attrib = 14; else
+        if (!strcmp(arg[1], "TRUECOLOR") || !strcmp(arg[1], "TRUE_COLOR") || !strcmp(arg[1], "24BIT_COLOR")) attrib = 15; else
         {cerr = 16; goto cmderr;}
     } else {
         attrib = atoi(arg[1]);
@@ -565,9 +582,10 @@ if (chkCmd(1, "_TXTATTRIB")) {
         txt_blink = false;
         txt_hidden = false;
         txt_reverse = false;
+        txt_underlncolor = 0;
         txt_fgc = true;
         txt_bgc = false;
-        txt_underlncolor = 0;
+        txt_truecolor = false;
         goto cmderr;
     } else if (argct != 2) {
         if (attrib == 12) {cerr = 16; goto cmderr;}
@@ -605,6 +623,7 @@ if (chkCmd(1, "_TXTATTRIB")) {
         case 12: txt_underlncolor = val; break;
         case 13: txt_fgc = (bool)val; break;
         case 14: txt_bgc = (bool)val; break;
+        case 15: txt_truecolor = (bool)val; break;
     }
     updateTxtAttrib();
     goto noerr;

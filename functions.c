@@ -574,6 +574,68 @@ if (chkCmd(1, "CURY")) {
     sprintf(outbuf, "%d", cury);
     goto fexit;
 }
+if (chkCmd(1, "HEX$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    double dbl;
+    sscanf(farg[1], "%lf", &dbl);
+    sprintf(outbuf, "%llx", (long long unsigned int)dbl);
+    upCase(outbuf);
+    goto fexit;
+}
+if (chkCmd(1, "OCT$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    double dbl;
+    sscanf(farg[1], "%lf", &dbl);
+    sprintf(outbuf, "%llo", (long long unsigned int)dbl);
+    upCase(outbuf);
+    goto fexit;
+}
+if (chkCmd(1, "RGB")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 3) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2 || fargt[2] != 2 || fargt[3] != 2) {cerr = 2; goto fexit;}
+    uint8_t r, g, b;
+    int tmpv;
+    if ((tmpv = atoi(farg[1])) < 0 || tmpv > 255) {cerr = 16; goto fexit;}
+    r = tmpv;
+    if ((tmpv = atoi(farg[2])) < 0 || tmpv > 255) {cerr = 16; goto fexit;}
+    g = tmpv;
+    if ((tmpv = atoi(farg[3])) < 0 || tmpv > 255) {cerr = 16; goto fexit;}
+    b = tmpv;
+    sprintf(outbuf, "%u", (r << 16) | (g << 8) | b);
+    goto fexit;
+}
+if (chkCmd(1, "PAD$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct < 2 || fargct > 3) {cerr = 3; goto fexit;}
+    if (fargt[1] == 0) {cerr = 3; goto fexit;}
+    if (fargt[2] != 2) {cerr = 2; goto fexit;}
+    char tmpc;
+    if (fargct == 3) {
+        if (fargt[3] != 1) {cerr = 2; goto fexit;}
+        if (flen[3] != 1) {cerr = 16; goto fexit;}
+        tmpc = farg[3][0];
+    } else {
+        if (fargt[1] == 1) tmpc = ' ';
+        else tmpc = '0';
+    }
+    int32_t pad = atoi(farg[2]) - flen[1];
+    int32_t i;
+    for (i = 0; i < pad; ++i) {
+        outbuf[i] = tmpc;
+    }
+    outbuf[i] = 0;
+    copyStrApnd(farg[1], outbuf);
+    goto fexit;
+}
 if (chkCmd(1, "BASENAME$")) {
     cerr = 0;
     ftype = 1;
@@ -624,40 +686,27 @@ if (chkCmd(1, "HEIGHT")) {
     #endif
     goto fexit;
 }
-if (chkCmd(1, "HEX$")) {
-    cerr = 0;
-    ftype = 1;
-    if (fargct != 1) {cerr = 3; goto fexit;}
-    if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%llx", (long long unsigned int)dbl);
-    upCase(outbuf);
-    goto fexit;
-}
-if (chkCmd(1, "OCT$")) {
-    cerr = 0;
-    ftype = 1;
-    if (fargct != 1) {cerr = 3; goto fexit;}
-    if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%llo", (long long unsigned int)dbl);
-    upCase(outbuf);
-    goto fexit;
-}
 if (chkCmd(1, "FGC")) {
     cerr = 0;
     ftype = 2;
     if (fargct) {cerr = 3; goto fexit;}
-    sprintf(outbuf, "%d", (int)fgc);
+    if (txt_truecolor) sprintf(outbuf, "%u", truefgc);
+    else sprintf(outbuf, "%u", fgc);
     goto fexit;
 }
 if (chkCmd(1, "BGC")) {
     cerr = 0;
     ftype = 2;
     if (fargct) {cerr = 3; goto fexit;}
-    sprintf(outbuf, "%d", (int)bgc);
+    if (txt_truecolor) sprintf(outbuf, "%u", truebgc);
+    else sprintf(outbuf, "%u", bgc);
+    goto fexit;
+}
+if (chkCmd(1, "TRUECOLOR")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct) {cerr = 3; goto fexit;}
+    sprintf(outbuf, "%d", (int)txt_truecolor);
     goto fexit;
 }
 if (chkCmd(1, "INPUT$")) {
