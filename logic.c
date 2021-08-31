@@ -1,12 +1,12 @@
 if (chkCmd(1, "REM")) return true;
 if (chkCmd(2, "?", "PRINT")) {
-    if (dlstackp > -1) {
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) return true;
     }
-    if (itstackp > -1) {
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
         if (itdcmd[itstackp]) return true;
     }
-    if (fnstackp > -1) {
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
     while (cmd[j] == ' ') j++;
@@ -46,60 +46,68 @@ if (chkCmd(2, "?", "PRINT")) {
 if (chkCmd(1, "DO")) {
     if (dlstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 12; return true;}
     dlstackp++;
-    if (itstackp > -1) {
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
         if (itdcmd[itstackp]) {dldcmd[dlstackp] = true; return true;}
     }
-    if (dlstackp > 0) {
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] + 1 : 0)) {
         if (dldcmd[dlstackp - 1]) {dldcmd[dlstackp] = true; return true;}
     }
-    if (fnstackp > -1) {
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
     int32_t p = j;
     while (cmd[p]) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
     dldcmd[dlstackp] = false;
-    dlstack[dlstackp] = cmdpos;
-    dlpline[dlstackp] = progLine;
+    dlstack[dlstackp].cp = cmdpos;
+    dlstack[dlstackp].pl = progLine;
+    dlstack[dlstackp].fnsp = fnstackp;
+    dlstack[dlstackp].itsp = itstackp;
     return true;
 }
 if (chkCmd(1, "DOWHILE")) {
     if (dlstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 12; return true;}
     dlstackp++;
-    if (itstackp > -1) {
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
         if (itdcmd[itstackp]) {dldcmd[dlstackp] = true; return true;}
     }
-    if (dlstackp > 0) {
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] + 1 : 0)) {
         if (dldcmd[dlstackp - 1]) {dldcmd[dlstackp] = true; return true;}
     }
-    if (fnstackp > -1) {
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     uint8_t testval = logictest(ltmp[1]);
     if (testval != 1 && testval) return true;
-    if (testval == 1) dlpline[dlstackp] = progLine;
-    if (testval == 1) dlstack[dlstackp] = cmdpos;
+    if (testval == 1) {
+        dlstack[dlstackp].pl = progLine;
+        dlstack[dlstackp].cp = cmdpos;
+        dlstack[dlstackp].fnsp = fnstackp;
+        dlstack[dlstackp].itsp = itstackp;
+    }
     dldcmd[dlstackp] = (bool)testval;
     dldcmd[dlstackp] = !dldcmd[dlstackp];
     return true;
 }
 if (chkCmd(1, "LOOP")) {
     if (dlstackp <= -1) {cerr = 6; return true;}
-    if (dlstackp > -1) {
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) {dlstackp--; return true;}
     }
-    if (itstackp > -1) {
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
         if (itdcmd[itstackp]) return true;
     }
-    if (fnstackp > -1) {
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
     if (inProg) {
-        cp = dlstack[dlstackp];
+        cp = dlstack[dlstackp].cp;
     } else {
-        concp = dlstack[dlstackp];
+        concp = dlstack[dlstackp].cp;
     }
-    progLine = dlpline[dlstackp];
+    progLine = dlstack[dlstackp].pl;
+    fnstackp = dlstack[dlstackp].fnsp;
+    itstackp = dlstack[dlstackp].itsp;
     lockpl = true;
     dldcmd[dlstackp] = false;
     dlstackp--;
@@ -110,13 +118,13 @@ if (chkCmd(1, "LOOP")) {
 }
 if (chkCmd(1, "LOOPWHILE")) {
     if (dlstackp <= -1) {cerr = 6; return true;}
-    if (itstackp > -1) {
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
         if (itdcmd[itstackp]) return true;
     }
-    if (dlstackp > -1) {
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) {dlstackp--; return true;}
     }
-    if (fnstackp > -1) {
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
@@ -124,11 +132,13 @@ if (chkCmd(1, "LOOPWHILE")) {
     if (testval != 1 && testval) return true;
     if (testval == 1) {
         if (inProg) {
-            cp = dlstack[dlstackp];
+            cp = dlstack[dlstackp].cp;
         } else {
-            concp = dlstack[dlstackp];
+            concp = dlstack[dlstackp].cp;
         }
-        progLine = dlpline[dlstackp];
+        progLine = dlstack[dlstackp].pl;
+        fnstackp = dlstack[dlstackp].fnsp;
+        itstackp = dlstack[dlstackp].itsp;
         lockpl = true;
     }
     dldcmd[dlstackp] = false;
@@ -139,13 +149,13 @@ if (chkCmd(1, "LOOPWHILE")) {
 if (chkCmd(1, "IF")) {
     if (itstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 13; return true;}
     itstackp++;
-    if (itstackp > 0) {
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] + 1 : 0)) {
         if (itdcmd[itstackp - 1]) {itdcmd[itstackp] = true; return true;}
     }
-    if (dlstackp > -1) {
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) {itdcmd[itstackp] = true; return true;}
     }
-    if (fnstackp > -1) {
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
@@ -156,13 +166,13 @@ if (chkCmd(1, "IF")) {
 }
 if (chkCmd(1, "ELSE")) {
     if (itstackp <= -1) {cerr = 8; return true;}
-    if (itstackp > 0) {
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] + 1 : 0)) {
         if (itdcmd[itstackp - 1]) return true;
     }
-    if (dlstackp > -1) {
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) return true;
     }
-    if (fnstackp > -1) {
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
     if (didelse) {cerr = 11; return true;}
@@ -172,24 +182,27 @@ if (chkCmd(1, "ELSE")) {
 }
 if (chkCmd(1, "ENDIF")) {
     if (itstackp <= -1) {cerr = 7; return true;}
-    if (fnstackp > -1) {
+    itstackp--;
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
+        if (dldcmd[dlstackp]) return true;
+    }
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
-    itdcmd[itstackp] = false;
+    itdcmd[itstackp + 1] = false;
     didelse = false;
-    itstackp--;
     return true;
 }
 if (chkCmd(1, "FOR")) {
     if (itstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 13; return true;}
     fnstackp++;
-    if (itstackp > -1) {
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
         if (itdcmd[itstackp]) {return true;}
     }
-    if (dlstackp > -1) {
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) {return true;}
     }
-    if (fnstackp > 0) {
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] + 1 : 0)) {
         if (fndcmd[fnstackp - 1]) {return true;}
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
@@ -202,7 +215,7 @@ if (chkCmd(1, "FOR")) {
     getArg(3, ltmp[1], forbuf[3]);
     if (getVal(forbuf[3], forbuf[3]) != 2) return true;
     setVar(fnvar, forbuf[1], 2, -1);
-    if (fnstack[fnstackp] == -1) {
+    if (fnstack[fnstackp].cp == -1) {
         copyStr(forbuf[1], forbuf[0]);
     }
     getArg(2, ltmp[1], forbuf[2]);
@@ -214,30 +227,41 @@ if (chkCmd(1, "FOR")) {
     if (testval == -1) return true;
     fndcmd[fnstackp] = !(bool)testval;
     if (!(fninfor[fnstackp] = (bool)testval)) {cerr = 0; return true;}
-    if (!fninfor[fnstackp] && fnstack[fnstackp] == -1) {
+    if (!fninfor[fnstackp] && fnstack[fnstackp].cp == -1) {
         sprintf(forbuf[0], "%lf", atof(forbuf[0]) - atof(forbuf[3]));
         setVar(fnvar, forbuf[0], 2, -1);
     }
-    fnstack[fnstackp] = cmdpos;
-    fnpline[fnstackp] = progLine;
+    fnstack[fnstackp].cp = cmdpos;
+    fnstack[fnstackp].pl = progLine;
+    fnstack[fnstackp].dlsp = dlstackp;
+    fnstack[fnstackp].itsp = itstackp;
     cerr = 0;
     return true;
 }
 if (chkCmd(1, "NEXT")) {
     if (fnstackp <= -1) {cerr = 9; return true;}
+    fnstackp--;
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
+        if (itdcmd[itstackp]) {return true;}
+    }
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
+        if (dldcmd[dlstackp]) {return true;}
+    }
+    fnstackp++;
     if (fninfor[fnstackp]) {
         if (inProg) {
-            cp = fnstack[fnstackp];
+            cp = fnstack[fnstackp].cp;
         } else {
-            concp = fnstack[fnstackp];
+            concp = fnstack[fnstackp].cp;
         }
-        progLine = fnpline[fnstackp];
+        progLine = fnstack[fnstackp].pl;
+        dlstackp = fnstack[fnstackp].dlsp;
+        itstackp = fnstack[fnstackp].itsp;
         lockpl = true;
         didloop = true;
-        fnstackp--;
     } else {
-        fnstack[fnstackp] = -1;
-        fnstackp--;
+        fnstack[fnstackp].cp = -1;
     }
+    fnstackp--;
     return true;
 }

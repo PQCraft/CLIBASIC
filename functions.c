@@ -612,6 +612,32 @@ if (chkCmd(1, "RGB")) {
     sprintf(outbuf, "%u", (r << 16) | (g << 8) | b);
     goto fexit;
 }
+if (chkCmd(1, "LIMIT")) {
+    cerr = 0;
+    ftype = 2;
+    double num = 0;
+    if (fargct < 2 || fargct > 3) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2 || fargt[2] != 2) {cerr = 2; goto fexit;}
+    if (fargct == 3 && fargt[3] == 1) {cerr = 2; goto fexit;}
+    num = atof(farg[1]);
+    if (fargct == 2) {
+        double max = atof(farg[2]);
+        if (num > max) {num = max;}
+    } else if (fargct == 3 && fargt[3] == 0) {
+        double min = atof(farg[2]);
+        if (num < min) {num = min;}
+    } else if (fargct == 3) {
+        double min = atof(farg[2]);
+        double max = atof(farg[3]);
+        if (num > max) {num = max;}
+        else if (num < min) {num = min;}
+    } else {
+        cerr = 3;
+        goto fexit;
+    }
+    sprintf(outbuf, "%lf", num);
+    goto fexit;
+}
 if (chkCmd(1, "PAD$")) {
     cerr = 0;
     ftype = 1;
@@ -665,7 +691,7 @@ if (chkCmd(1, "WIDTH")) {
     int tmpret;
     tmpret = GetConsoleScreenBufferInfo(hConsole, &csbi);
     (void)tmpret;
-    sprintf(outbuf, "%d", csbi.dwSize.X);
+    sprintf(outbuf, "%d", csbi.srWindow.Right - csbi.srWindow.Left + 1);
     #endif
     goto fexit;
 }
@@ -682,7 +708,7 @@ if (chkCmd(1, "HEIGHT")) {
     int tmpret;
     tmpret = GetConsoleScreenBufferInfo(hConsole, &csbi);
     (void)tmpret;
-    sprintf(outbuf, "%d", csbi.dwSize.Y);
+    sprintf(outbuf, "%d", csbi.srWindow.Bottom - csbi.srWindow.Top + 1);
     #endif
     goto fexit;
 }
@@ -924,8 +950,9 @@ if (chkCmd(1, "_ARG$")) {
         if (fargt[1] != 2) {cerr = 2; goto fexit;}
         int i = atoi(farg[1]);
         if (i < 0) {cerr = 16; goto fexit;}
-        if (i > progargc - 1) {outbuf[0] = 0; goto fexit;}
-        copyStr(progargs[i], outbuf);
+        if (i > progargc - 1 && i > 0) {outbuf[0] = 0; goto fexit;}
+        if (i == 0) copyStr(progfn[progindex], outbuf);
+        else copyStr(progargs[i], outbuf);
     } else {
         cerr = 3; goto fexit;
     }

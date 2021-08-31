@@ -1,3 +1,5 @@
+# makes clibasic release files
+
 # erase old versions
 rm -f clibasic-linux-x64.zip
 rm -f clibasic-linux-x86.zip
@@ -24,14 +26,14 @@ zip clibasic-linux-x86.zip clibasic
 make clean 1> /dev/null
 
 rm -f clibasic.exe
-make -f Makefile-Cross build 1> /dev/null
+make cross build 1> /dev/null
 zip clibasic-windows-x64.zip clibasic.exe *.dll
-make -f Makefile-Cross clean 1> /dev/null
+make cross clean 1> /dev/null
 
 rm -f clibasic.exe
-make -f Makefile-Cross build32 1> /dev/null
+make cross build32 1> /dev/null
 zip clibasic-windows-x86.zip clibasic.exe *.dll
-make -f Makefile-Cross clean 1> /dev/null
+make cross clean 1> /dev/null
 
 # clean up
 mv clibasic.tmp clibasic 2> /dev/null

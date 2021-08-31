@@ -105,14 +105,17 @@
     #include <mach-o/dyld.h>
 #endif
 
-// More patch/checking defines/compares
+// Useful macros
 
 /* Swap function to swap values */
 #define swap(a, b) __typeof__(a) c = a; a = b; b = c
 
+/* Free & set to NULL combo */
+#define nfree(ptr) free(ptr); ptr = NULL
+
 // Base defines
 
-char VER[] = "0.20";
+char VER[] = "0.21";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -184,24 +187,34 @@ int cmdpos;
 bool didloop = false;
 bool lockpl = false;
 
-int dlstack[CB_PROG_LOGIC_MAX];
-int dlpline[CB_PROG_LOGIC_MAX];
+typedef struct {
+    int pl;
+    int32_t cp;
+    int dlsp;
+    int fnsp;
+    int itsp;
+} cb_jump;
+
+cb_jump dlstack[CB_PROG_LOGIC_MAX];
 bool dldcmd[CB_PROG_LOGIC_MAX];
 int dlstackp = -1;
+int* mindlstackp = NULL;
 
 bool itdcmd[CB_PROG_LOGIC_MAX];
 int itstackp = -1;
+int* minitstackp = NULL;
 bool didelse = false;
+bool* olddidelse = NULL;
 
-int fnstack[CB_PROG_LOGIC_MAX];
+cb_jump fnstack[CB_PROG_LOGIC_MAX];
 bool fndcmd[CB_PROG_LOGIC_MAX];
 bool fninfor[CB_PROG_LOGIC_MAX];
-int fnpline[CB_PROG_LOGIC_MAX];
 int fnstackp = -1;
+int* minfnstackp = NULL;
 char fnvar[CB_BUF_SIZE];
 char forbuf[4][CB_BUF_SIZE];
 
-char* errstr;
+char* errstr = NULL;
 
 char conbuf[CB_BUF_SIZE];
 char prompt[CB_BUF_SIZE];
@@ -209,7 +222,6 @@ char pstr[CB_BUF_SIZE];
 
 uint8_t fgc = 15;
 uint8_t bgc = 0;
-
 uint32_t truefgc = 0xFFFFFF;
 uint32_t truebgc = 0x000000;
 
@@ -263,6 +275,21 @@ char* startcmd = NULL;
 
 bool changedtitle = false;
 bool changedtitlecmd = false;
+
+typedef struct {
+    int pl;
+    int32_t cp;
+    bool used;
+    char* name;
+    int dlsp;
+    int fnsp;
+    int itsp;
+} cb_goto;
+
+cb_goto* gotodata = NULL;
+cb_goto** proggotodata = NULL;
+int gotomaxct = 0;
+int* proggotomaxct = NULL;
 
 #ifdef __unix__
 struct termios term, restore;
@@ -345,7 +372,6 @@ void rl_sigh(int sig) {
     rl_redisplay();
 }
 void txtqunlock() {}
-//HANDLE hConsole;
 #ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
 #define ENABLE_VIRTUAL_TERMINAL_PROCESSING 4
 #endif
@@ -594,7 +620,6 @@ int main(int argc, char** argv) {
                 for (progargc = 1; progargc < argc - i; ++progargc) {
                     progargs[progargc] = argv[i + progargc];
                 }
-                progargs[0] = progfn[progindex];
                 i = argc;
             } else if (!strcmp(argv[i], "--exec") || !strcmp(argv[i], "-x")) {
                 if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
@@ -610,7 +635,6 @@ int main(int argc, char** argv) {
                 for (progargc = 1; progargc < argc - i; ++progargc) {
                     progargs[progargc] = argv[i + progargc];
                 }
-                progargs[0] = progfn[progindex];
                 i = argc;
             } else if (!strcmp(argv[i], "--keep") || (shortopt && argv[i][shortopti] == 'k')) {
                 if (keep) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
@@ -800,6 +824,23 @@ int main(int argc, char** argv) {
         if (chkinProg) {inProg = true; chkinProg = false;}
         if (!inProg && !runc) {
             if (runfile) cleanExit();
+            dlstackp = -1;
+            itstackp = -1;
+            fnstackp = -1;
+            for (int i = 0; i < CB_PROG_LOGIC_MAX; ++i) {
+                memset(&dlstack[i], 0, sizeof(cb_jump));
+                dldcmd[i] = false;
+                memset(&fnstack[i], 0, sizeof(cb_jump));
+                fnstack[i].cp = -1;
+                fndcmd[i] = false;
+                fninfor[i] = false;
+                itdcmd[i] = false;
+            }
+            for (int i = 0; i < gotomaxct; ++i) {
+                nfree(gotodata[i].name);
+            }
+            nfree(gotodata);
+            gotomaxct = 0;
             char* tmpstr = NULL;
             int tmpt = getVal(prompt, pstr);
             if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
@@ -851,19 +892,6 @@ int main(int argc, char** argv) {
         }
         if (runc) runc = false;
         cmdl = 0;
-        if (chkinProg) {
-            dlstackp = -1;
-            itstackp = -1;
-            fnstackp = -1;
-            for (int i = 0; i < CB_PROG_LOGIC_MAX; ++i) {
-                dlstack[i] = 0;
-                dldcmd[i] = false;
-                fnstack[i] = -1;
-                fndcmd[i] = false;
-                fninfor[i] = false;
-                itdcmd[i] = false;
-            }
-        }
         didloop = false;
         didelse = false;
         bool inStr = false;
@@ -986,7 +1014,6 @@ __sighandler_t gcpoldsigh;
 bool gcpint = false;
 
 void gcpsigh() {
-    puts("\nOOOOOF\n\n");
     setsig(SIGINT, gcpsigh);
     gcpoldsigh(0);
     gcpint = true;
@@ -1040,32 +1067,37 @@ void unloadProg() {
     progbuf[progindex] = NULL;
     progfn = (char**)realloc(progfn, progindex * sizeof(char*));
     progbuf = (char**)realloc(progbuf, progindex * sizeof(char*));
+    free(gotodata);
+    gotodata = proggotodata[progindex];
+    gotomaxct = proggotomaxct[progindex];
     cp = progcp[progindex];
     cmdl = progcmdl[progindex];
     progLine = proglinebuf[progindex];
+    didelse = olddidelse[progindex];
+    dlstackp = mindlstackp[progindex];
+    itstackp = minitstackp[progindex];
+    fnstackp = minfnstackp[progindex];
     progcp = (int64_t*)realloc(progcp, progindex * sizeof(int64_t));
     progcmdl = (int*)realloc(progcmdl, progindex * sizeof(int));
     proglinebuf = (int*)realloc(proglinebuf, progindex * sizeof(int));
+    mindlstackp = (int*)realloc(mindlstackp, progindex * sizeof(int));
+    minitstackp = (int*)realloc(minitstackp, progindex * sizeof(int));
+    minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
+    olddidelse = (bool*)realloc(olddidelse, progindex * sizeof(bool));
+    proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
+    proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
     progindex--;
     if (progindex < 0) inProg = false;
 }
 
 void unloadAllProg() {
-    for (int i = 0; i < progindex; ++i) {
-        free(progbuf[i]);
-        free(progfn[i]);
+    for (int i = 0; i <= progindex; ++i) {
+        unloadProg();
     }
-    progindex = -1;
-    progcp = (int64_t*)realloc(progcp, (progindex + 1) * sizeof(int64_t));
-    progcmdl = (int*)realloc(progcmdl, (progindex + 1) * sizeof(int));
-    proglinebuf = (int*)realloc(proglinebuf, (progindex + 1) * sizeof(int));
-    progbuf = (char**)realloc(progbuf, (progindex + 1) * sizeof(char*));
-    progfn = (char**)realloc(progfn, (progindex + 1) * sizeof(char*));
-    inProg = false;
 }
 
 bool loadProg(char* filename) {
-    printf("Loading...");
+    fputs("Loading...", stdout);
     fflush(stdout);
     seterrstr(filename);
     cerr = 27;
@@ -1103,9 +1135,9 @@ bool loadProg(char* filename) {
         putchar('\r');
         return false;
     }
-    progindex++;
+    ++progindex;
     fseek(prog, 0, SEEK_END);
-    printf("\b\b\b   \b\b");
+    fputs("\b\b\b   \b\b", stdout);
     fflush(stdout);
     progfn = (char**)realloc(progfn, (progindex + 1) * sizeof(char*));
     #ifdef _WIN32
@@ -1114,16 +1146,33 @@ bool loadProg(char* filename) {
     progfn[progindex] = realpath(filename, NULL);
     #endif
     progfnstr = progfn[progindex];
-    progbuf = (char**)realloc(progbuf, (progindex + 1) * sizeof(char*));
-    progcp = (int64_t*)realloc(progcp, (progindex + 1) * sizeof(int64_t));
-    progcmdl = (int*)realloc(progcmdl, (progindex + 1) * sizeof(int));
-    proglinebuf = (int*)realloc(proglinebuf, (progindex + 1) * sizeof(int));
+    ++progindex;
+    progbuf = (char**)realloc(progbuf, progindex * sizeof(char*));
+    progcp = (int64_t*)realloc(progcp, progindex * sizeof(int64_t));
+    progcmdl = (int*)realloc(progcmdl, progindex * sizeof(int));
+    proglinebuf = (int*)realloc(proglinebuf, progindex * sizeof(int));
+    mindlstackp = (int*)realloc(mindlstackp, progindex * sizeof(int));
+    minitstackp = (int*)realloc(minitstackp, progindex * sizeof(int));
+    olddidelse = (bool*)realloc(olddidelse, progindex * sizeof(bool));
+    minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
+    proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
+    proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
+    --progindex;
     progcp[progindex] = cp;
     progcmdl[progindex] = cmdl;
     proglinebuf[progindex] = progLine;
+    mindlstackp[progindex] = dlstackp;
+    minitstackp[progindex] = itstackp;
+    olddidelse[progindex] = didelse;
+    minfnstackp[progindex] = fnstackp;
+    proggotodata[progindex] = gotodata;
+    proggotomaxct[progindex] = gotomaxct;
+    gotodata = NULL;
+    gotomaxct = 0;
     cp = 0;
     cmdl = 0;
     progLine = 1;
+    didelse = false;
     getCurPos();
     int tmpx = curx, tmpy = cury;
     uint32_t fsize = (uint32_t)ftell(prog);
@@ -1137,7 +1186,6 @@ bool loadProg(char* filename) {
     printf("(%llu bytes)...", (long long unsigned)fsize);
     fflush(stdout);
     progbuf[progindex] = (char*)malloc(fsize + 1);
-    
     int64_t j = 0;
     bool comment = false;
     bool inStr = false;
@@ -1501,6 +1549,8 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     return ftype;
 }
 
+bool chkvar = true;
+
 uint8_t getVar(char* vn, char* varout) {
     int32_t vnlen = strlen(vn);
     if (vn[vnlen - 1] == ')') {
@@ -1520,7 +1570,7 @@ uint8_t getVar(char* vn, char* varout) {
     bool isArray = false;
     int32_t aindex = 0;
     for (register int32_t i = 0; vn[i]; ++i) {
-        if (!isValidVarChar(vn[i])) {
+        if (chkvar && !isValidVarChar(vn[i])) {
             cerr = 4;
             seterrstr(vn);
             return 0;
@@ -1600,7 +1650,7 @@ bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
     bool isArray = false;
     int32_t aindex = 0;
     for (register int32_t i = 0; vn[i]; ++i) {
-        if (!isValidVarChar(vn[i])) {
+        if (chkvar && !isValidVarChar(vn[i])) {
             cerr = 4;
             seterrstr(vn);
             return false;
@@ -1690,7 +1740,7 @@ bool delVar(char* vn) {
         return false;
     }
     for (register int32_t i = 0; vn[i]; ++i) {
-        if (!isValidVarChar(vn[i])) {
+        if (chkvar && !isValidVarChar(vn[i])) {
             cerr = 4;
             seterrstr(vn);
             return false;
@@ -1875,13 +1925,12 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         if (t == 2) {
             copyStrSnip(inbuf, jp, strlen(inbuf), tmp[1]);
             copyStrApnd(tmp[1], tmp[0]);
-            double tmpchknz = atof(tmp[0]);
-            if (tmpchknz == -0) {tmp[0][0] = '0';}
             register int32_t p1, p2, p3;
             bool inStr = false;
             pct = 0;
             bct = 0;
             while (1) {
+                //printf("-: [%d]: [%d] [%d %d %d] {%s} {%s} {%s} {%s}\n", getValIndex, numAct, p1, p2, p3, tmp[0], tmp[1], tmp[2], tmp[3]);
                 numAct = 0;
                 p1 = 0, p2 = 0, p3 = 0;
                 for (register int32_t i = 0; tmp[0][i]; ++i) {
@@ -1996,7 +2045,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                     }
                 }
                 gvforexit2:;
-                if (tmp[0][p1] == '+') p1++;
+                if (p1 != 0 && isSpChar(tmp[0][p1])) p1++;
                 copyStrSnip(tmp[0], p1, p2, tmp[2]);
                 t = getType(tmp[2]);
                 if (t == 0) {cerr = 1; dt = 0; goto gvreturn;} else
@@ -2018,26 +2067,21 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                         if (num1 == 0) {if (num2 == 0) {cerr = 5; dt = 0; goto gvreturn;} num3 = 0; break;}
                         if (num2 == 0) {num3 = 1; break;}
                         num3 = pow(num1, num2);
-                        if (num1 < 0 && num3 > 0) {num3 *= -1;}
                         break;
                 }
-                tmp[1][0] = 0;
-                if (num3 == -0 || (num3 < 0 && num3 > -0.0000005)) {
-                    tmp[2][0] = '0';
-                    tmp[2][1] = 0;
-                    goto skipstrchk;
-                }
-                if (num3 < -0.0000004 && num3 > -0.0000009) {
-                    copyStr("-0.000001", tmp[0]);
-                    goto skipstrchk;
-                }
-                sprintf(tmp[2], "%lf", num3);
-                skipstrchk:;
-                int32_t i = 0;
-                while (tmp[2][i] == '0') i++;
-                copyStrSnip(tmp[2], i, strlen(tmp[2]), tmp[2]);
+                sprintf(tmp[1], "%lf", num3);
+                int32_t i = 0, j = strlen(tmp[1]) - 1;
+                bool dp = false;
+                while (tmp[1][i]) {if (tmp[1][i++] == '.') {dp = true; tmp[1][i + 6] = 0; break;}}
+                if (dp) {while (tmp[1][j] == '0') {--j;} if (tmp[1][j] == '.') {--j;}}
+                i = (tmp[1][0] == '-'); dp = (bool)i;
+                while (tmp[1][i] == '0') {++i;}
+                if (!tmp[1][i] || tmp[1][i] == '.') {--i;}
+                if (dp) tmp[1][--i] = '-';
+                copyStrSnip(tmp[1], i, j + 1, tmp[2]);
                 copyStrSnip(tmp[0], p3, strlen(tmp[0]), tmp[3]);
                 if (p1) copyStrSnip(tmp[0], 0, p1, tmp[1]);
+                else {tmp[1][0] = 0;}
                 copyStrApnd(tmp[2], tmp[1]);
                 copyStrApnd(tmp[3], tmp[1]);
                 swap(tmp[1], tmp[0]);
@@ -2049,22 +2093,16 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     }
     gvfexit:;
     if (dt == 2) {
-        if (tmp[1][0] == '.' && !tmp[1][1]) {cerr = 1; dt = 0; goto gvreturn;}
-        int32_t i = 0, j = strlen(tmp[1]);
+        if (!strcmp(tmp[1], ".")) {cerr = 1; dt = 0; goto gvreturn;}
+        int32_t i = 0, j = strlen(tmp[1]) - 1;
         bool dp = false;
-        while (tmp[1][i]) {if (tmp[1][i] == '.') {tmp[1][i + 7] = 0; dp = true; break;} i++;}
-        i = 0;
-        while (tmp[1][i++] == '0' && tmp[1][i] != '.') {}
-        --i;
-        if (dp) {
-            j--;
-            while (tmp[1][j] == '0' || !tmp[1][j]) {j--;}
-            if (tmp[1][j] == '.') {j--;}
-            j++;
-        }
-        copyStrSnip(tmp[1], i, j, tmp[2]);
-        if (tmp[1][i] == '.') strcpy(outbuf, "0");
-        copyStr(tmp[2], outbuf);
+        while (tmp[1][i]) {if (tmp[1][i++] == '.') {dp = true; tmp[1][i + 6] = 0; break;}}
+        if (dp) {while (tmp[1][j] == '0') {--j;} if (tmp[1][j] == '.') {--j;}}
+        i = (tmp[1][0] == '-'); dp = (bool)i;
+        while (tmp[1][i] == '0') {++i;}
+        if (!tmp[1][i] || tmp[1][i] == '.') {--i;}
+        if (dp) tmp[1][--i] = '-';
+        copyStrSnip(tmp[1], i, j + 1, outbuf);
     } else {
         copyStr(tmp[1], outbuf);
     }
@@ -2120,16 +2158,21 @@ static inline int getArg(int num, char* inbuf, char* outbuf) {
     int ct = 0;
     int32_t len = 0;
     for (int32_t i = 0; inbuf[i] && ct <= num; ++i) {
-        if (inbuf[i] == '(' && !inStr) {pct++;}
-        if (inbuf[i] == ')' && !inStr) {pct--;}
-        if (inbuf[i] == '[' && !inStr) {bct++;}
-        if (inbuf[i] == ']' && !inStr) {bct--;}
-        if (inbuf[i] == '"') {inStr = !inStr;}
-        if (inbuf[i] == ' ' && !inStr) {} else
-        if (inbuf[i] == ',' && !inStr && pct == 0 && bct == 0) {ct++;} else
-        if (ct == num) {outbuf[len] = inbuf[i]; len++;}
+        if (!inStr) {
+            switch (inbuf[i]) {
+                case '(': ++pct; break;
+                case ')': --pct; break;
+                case '[': ++bct; break;
+                case ']': --bct; break;
+            }
+        }
+        if (inbuf[i] == '"') inStr = !inStr;
+        if (!inStr && pct == 0 && bct == 0 && inbuf[i] == ',') {++ct;} else
+        if (ct == num && (inStr || inbuf[i] != ' ')) {outbuf[len] = inbuf[i]; len++;}
     }
+    if (pct || bct || inStr) {outbuf[0] = 0; cerr = 1; return -1;}
     outbuf[len] = 0;
+    //printf("arg outbuf: {%s}\n", outbuf);
     return len;
 }
 
@@ -2176,18 +2219,16 @@ void mkargs() {
     for (int i = 0; i <= argct; ++i) {tmpargs[i][argl[i]] = 0;}
 }
 
-int ltIndex = 0;
 char lttmp[3][CB_BUF_SIZE];
 
-uint8_t logictest(char* inbuf) {
+uint8_t logictestexpr(char* inbuf) {
     int32_t tmpp = 0;
     uint8_t t1 = 0;
     uint8_t t2 = 0;
     int32_t p = 0;
     bool inStr = false;
     int pct = 0, bct = 0;
-    ltIndex++;
-    while (inbuf[p] == ' ') {p++;}
+    while (inbuf[p] == ' ') {++p;}
     if (p >= (int32_t)strlen(inbuf)) {cerr = 10; goto ltreturn;}
     for (int32_t i = p; true; ++i) {
         if (inbuf[i] == '(' && !inStr) {pct++;}
@@ -2221,57 +2262,85 @@ uint8_t logictest(char* inbuf) {
     if (t2 == 0) goto ltreturn;
     if (t1 != t2) {cerr = 2; goto ltreturn;}
     if (!strcmp(lttmp[1], "=")) {
-        ltIndex--;
         return (uint8_t)(bool)!strcmp(lttmp[0], lttmp[2]);
     } else if (!strcmp(lttmp[1], "<>")) {
-        ltIndex--;
         return (uint8_t)(bool)strcmp(lttmp[0], lttmp[2]);
     } else if (!strcmp(lttmp[1], ">")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
-        ltIndex--;
         return num1 > num2;
     } else if (!strcmp(lttmp[1], "<")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
-        ltIndex--;
         return num1 < num2;
     } else if (!strcmp(lttmp[1], ">=")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
-        ltIndex--;
         return num1 >= num2;
     } else if (!strcmp(lttmp[1], "<=")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
-        ltIndex--;
         return num1 <= num2;
     } else if (!strcmp(lttmp[1], "=>")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
-        ltIndex--;
         return num1 >= num2;
     } else if (!strcmp(lttmp[1], "=<")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
         double num1, num2;
         sscanf(lttmp[0], "%lf", &num1);
         sscanf(lttmp[2], "%lf", &num2);
-        ltIndex--;
         return num1 <= num2;
     }
     cerr = 1;
     ltreturn:;
-    return -1;
+    return 255;
+}
+
+char ltbuf[CB_BUF_SIZE];
+
+uint8_t logictest(char* inbuf) {
+    bool inStr = false;
+    int32_t i = 0, j = 0;
+    uint8_t ret = 0, out = 0;
+    uint8_t logicActOld = 0;
+    while (inbuf[i]) {
+        uint8_t logicAct = 0;
+        for (;inbuf[j] && !logicAct; ++j) {
+            switch (inbuf[j]) {
+                case '"': inStr = !inStr; break;
+                case '|': if (!inStr) {logicAct = 1; --j;} break;
+                case '&': if (!inStr) {logicAct = 2; --j;} break;
+            }
+        }
+        copyStrSnip(inbuf, i, j, ltbuf);
+        switch (logicActOld) {
+            case 1:
+                if ((ret = logictestexpr(ltbuf)) == 255) {return 255;}
+                out |= ret;
+                break;
+            case 2:
+                if ((ret = logictestexpr(ltbuf)) == 255) {return 255;}
+                out &= ret;
+                break;
+            default:
+                out = logictestexpr(ltbuf);
+                break;
+        }
+        i = ++j;
+        logicActOld = logicAct;
+    }
+    return out;
 }
 
 char ltmp[2][CB_BUF_SIZE];
@@ -2282,6 +2351,9 @@ bool runlogic() {
     while (cmd[i] == ' ') {i++;}
     int32_t j = i;
     while (cmd[j] != ' ' && cmd[j]) {j++;}
+    int32_t h = j;
+    while (cmd[h] == ' ') {h++;}
+    if (cmd[h] == '=') return false;
     copyStrSnip(cmd, i, j, ltmp[0]);
     upCase(ltmp[0]);
     cerr = 0;
@@ -2300,8 +2372,6 @@ void initBaseMem() {
     bfnbuf = malloc(CB_BUF_SIZE);
 }
 
-#define nfree(ptr) free(ptr); ptr = NULL
-
 void freeBaseMem() {
     nfree(getVal_tmp[0]);
     nfree(getVal_tmp[1]);
@@ -2314,7 +2384,7 @@ void freeBaseMem() {
 
 void printError(int error) {
     getCurPos();
-    if (curx != 1) printf("\n");
+    if (curx != 1) putchar('\n');
     if (inProg) {printf("Error %d on line %d of '%s': '%s': ", error, progLine, basefilename(progfnstr), cmd);}
     else {printf("Error %d: ", error);}
     switch (error) {
@@ -2402,6 +2472,12 @@ void printError(int error) {
         case 27:
             printf("Failed to open file '%s' (errno: [%d] %s)", errstr, errno, strerror(errno));
             break;
+        case 28:
+            fputs("Label is already defined", stdout);
+            break;
+        case 29:
+            fputs("Label is not defined", stdout);
+            break;
         case 125:
             printf("Function only valid in program: '%s'", errstr);
             break;
@@ -2421,7 +2497,7 @@ void printError(int error) {
             printf("Not a command: '%s'", arg[0]);
             break;
         case -1:
-            fputs("Internal error.", stdout);
+            fputs("Internal error", stdout);
             break;
     }
     putchar('\n');
@@ -2432,9 +2508,9 @@ void runcmd() {
     cerr = 0;
     bool lgc = runlogic();
     if (lgc) goto cmderr;
-    if (dlstackp > -1) {if (dldcmd[dlstackp]) return;}
-    if (itstackp > -1) {if (itdcmd[itstackp]) return;}
-    if (fnstackp > -1) {if (fndcmd[fnstackp]) return;}
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {if (dldcmd[dlstackp]) return;}
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {if (itdcmd[itstackp]) return;}
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {if (fndcmd[fnstackp]) return;}
     mkargs();
     argt = (uint8_t*)realloc(argt, argct + 1);
     arg = (char**)realloc(arg, (argct + 1) * sizeof(char*));
