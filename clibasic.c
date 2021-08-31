@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.21";
+char VER[] = "0.21.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -2324,20 +2324,25 @@ uint8_t logictest(char* inbuf) {
             }
         }
         copyStrSnip(inbuf, i, j, ltbuf);
+        //printf("{%s} {%s} [%d, %d] [%d, %d]\n", inbuf, ltbuf, i, j, logicAct, logicActOld);
         switch (logicActOld) {
             case 1:
+                //printf("OR:   {%s}\n", ltbuf);
                 if ((ret = logictestexpr(ltbuf)) == 255) {return 255;}
                 out |= ret;
                 break;
             case 2:
+                //printf("AND:  {%s}\n", ltbuf);
                 if ((ret = logictestexpr(ltbuf)) == 255) {return 255;}
                 out &= ret;
                 break;
             default:
+                //printf("NONE: {%s}\n", ltbuf);
                 out = logictestexpr(ltbuf);
                 break;
         }
         i = ++j;
+        if (!inbuf[i + 1]) break;
         logicActOld = logicAct;
     }
     return out;
