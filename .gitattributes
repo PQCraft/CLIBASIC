@@ -1,4 +1,5 @@
 *.bas linguist-language=BASIC
+examples/* linguist-language=BASIC
 *.c linguist-language=C
 *.cpp linguist-language=C++
 *.h linguist-language=C
