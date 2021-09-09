@@ -16,7 +16,7 @@ assignees: ''
 ### Actual behavior:
 (What is happening instead)
 
-### Screenshots:
+### Screenshots or Terminal Output:
 Add screenshots or paste terminal output
 ```
 (Paste terminal output here or remove the backticks and attach screenshots)
