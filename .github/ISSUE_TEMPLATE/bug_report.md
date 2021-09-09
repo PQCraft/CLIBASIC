@@ -8,7 +8,7 @@ assignees: ''
 ---
 
 ### Steps to reproduce:
-(A numbered list of instructions to reproduce the bug)
+(How to reproduce the bug)
 
 ### Expected behavior:
 (What was supposed to happen)
