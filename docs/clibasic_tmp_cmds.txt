@@ -60,3 +60,5 @@ $txtlock:do:k$=inkey$():if asc(k$)<>0:print k$,"\n":endif:loop
 for i, 0, i < 4, 1: print "bruh": next
 for i, 0, i < 4, 1: print "bruh": for j, 0, j < 4, 1: print "__bruh__": next: next
 for i, 0, i < 4, 1: print "i", i: for j, 0, j < 4, 1: print "j", j: next: next
+do: i = fread(0): if i <> -1: print chr$(i);: loop: endif: print
+if i=0: print "zero": elseif i=1: print "one": else: print "other": endif

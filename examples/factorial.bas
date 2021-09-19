@@ -1,4 +1,9 @@
-str=INPUT$("Enter a factorial number: ")
+IF _arg$() = ""
+    str=INPUT$("Enter a factorial number: ")
+ELSE
+    str=_arg$()
+ENDIF
+
 num=CINT(VAL(str))
 fact=1
 

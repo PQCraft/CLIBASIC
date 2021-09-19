@@ -13,31 +13,49 @@ if (chkCmd(2, "?", "PRINT")) {
     if (cmd[j] == 0) {putchar('\n'); return true;}
     else {j--;}
     bool inStr = false;
+    bool lookingForSpChar = false;
+    bool sawSpChar = false;
     int pct = 0, bct = 0;
     int32_t ptr = 0;
     int32_t i = j;
     while (cmd[i]) {
         i++;
         if (cmd[i] == '"') {inStr = !inStr;}
-        if (cmd[i] == '(' && !inStr) {pct++;}
-        if (cmd[i] == ')' && !inStr) {pct--;}
-        if (cmd[i] == '[' && !inStr) {bct++;}
-        if (cmd[i] == ']' && !inStr) {bct--;}
-        if (cmd[i] == ' ' && !inStr) {} else
+        if (!inStr) {
+            switch (cmd[i]) {
+                case '(': ++pct; break;
+                case ')': --pct; break;
+                case '[': ++bct; break;
+                case ']': --bct; break;
+            }
+        }
         if ((cmd[i] == ',' || cmd[i] == ';' || cmd[i] == 0) && !inStr && pct == 0 && bct == 0) {
-            ltmp[1][ptr] = 0; ptr = 0;
+            ltmp[1][ptr] = 0;
+            ptr = 0;
             int32_t len = strlen(ltmp[1]);
             int tmpt;
             if (!(tmpt = getVal(ltmp[1], ltmp[1]))) return true;
             if (cmd[j] == ',') {
-                if (tmpt != 255) {putchar('\t');}
-                else {putchar('\n');}
+                if (tmpt == 255) {putchar('\n');}
+                else {putchar('\t');}
             }
             fputs(ltmp[1], stdout);
             if (cmd[i] == 0 && len > 0) putchar('\n');
             j = i;
-        } else
-        {ltmp[1][ptr] = cmd[i]; ptr++;}
+            lookingForSpChar = false;
+            sawSpChar = false;
+        } else {
+            if (!inStr) {
+                if (cmd[i] == ' ' && !sawSpChar && ptr > 0) {lookingForSpChar = true;}
+                if (isExSpChar(cmd[i])) {lookingForSpChar = false; sawSpChar = true;}
+            }
+            if (inStr || cmd[i] != ' ') {
+                if (!isExSpChar(cmd[i])) sawSpChar = false;
+                if (lookingForSpChar) {cerr = 1; return true;}
+                ltmp[1][ptr] = cmd[i];
+                ptr++;
+            }
+        }
     }
     if (pct || bct || inStr) {cerr = 1; return true;}
     fflush(stdout);
@@ -64,7 +82,7 @@ if (chkCmd(1, "DO")) {
     dlstack[dlstackp].itsp = itstackp;
     return true;
 }
-if (chkCmd(1, "DOWHILE")) {
+if (chkCmd(2, "WHILE", "DOWHILE")) {
     if (dlstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 12; return true;}
     dlstackp++;
     if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
@@ -78,7 +96,7 @@ if (chkCmd(1, "DOWHILE")) {
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     uint8_t testval = logictest(ltmp[1]);
-    if (testval != 1 && testval) return true;
+    if (testval == 255) return true;
     if (testval == 1) {
         dlstack[dlstackp].pl = progLine;
         dlstack[dlstackp].cp = cmdpos;
@@ -129,7 +147,7 @@ if (chkCmd(1, "LOOPWHILE")) {
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     uint8_t testval = logictest(ltmp[1]);
-    if (testval != 1 && testval) return true;
+    if (testval == 255) return true;
     if (testval == 1) {
         if (inProg) {
             cp = dlstack[dlstackp].cp;
@@ -160,8 +178,9 @@ if (chkCmd(1, "IF")) {
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     uint8_t testval = logictest(ltmp[1]);
-    if (testval != 1 && testval) return true;
+    if (testval == 255) return true;
     itdcmd[itstackp] = (bool)!testval;
+    didelseif = !itdcmd[itstackp];
     return true;
 }
 if (chkCmd(1, "ELSE")) {
@@ -176,8 +195,27 @@ if (chkCmd(1, "ELSE")) {
         if (fndcmd[fnstackp]) return true;
     }
     if (didelse) {cerr = 11; return true;}
+    if (didelseif) {itdcmd[itstackp] = true; return true;}
     didelse = true;
     itdcmd[itstackp] = !itdcmd[itstackp];
+    return true;
+}
+if (chkCmd(1, "ELSEIF")) {
+    if (itstackp <= -1) {cerr = 8; return true;}
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] + 1 : 0)) {
+        if (itdcmd[itstackp - 1]) return true;
+    }
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
+        if (dldcmd[dlstackp]) return true;
+    }
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
+        if (fndcmd[fnstackp]) return true;
+    }
+    copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
+    uint8_t testval = logictest(ltmp[1]);
+    if (testval == 255) return true;
+    itdcmd[itstackp] = (bool)(!testval);
+    if (!didelseif) didelseif = !itdcmd[itstackp];
     return true;
 }
 if (chkCmd(1, "ENDIF")) {
@@ -191,6 +229,7 @@ if (chkCmd(1, "ENDIF")) {
     }
     itdcmd[itstackp + 1] = false;
     didelse = false;
+    didelseif = false;
     return true;
 }
 if (chkCmd(1, "FOR")) {
@@ -224,7 +263,7 @@ if (chkCmd(1, "FOR")) {
         setVar(fnvar, forbuf[0], 2, -1);
     }
     int testval = logictest(forbuf[2]);
-    if (testval == -1) return true;
+    if (testval == 255) return true;
     fndcmd[fnstackp] = !(bool)testval;
     if (!(fninfor[fnstackp] = (bool)testval)) {cerr = 0; return true;}
     if (!fninfor[fnstackp] && fnstack[fnstackp].cp == -1) {

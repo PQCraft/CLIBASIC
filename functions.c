@@ -115,7 +115,7 @@ if (chkCmd(1, "SH")) {
     int duperr;
     duperr = dup(2);
     close(2);
-    sprintf(outbuf, "%d", system(farg[1]));
+    sprintf(outbuf, "%d", (retval = system(farg[1])));
     dup2(duperr, 2);
     close(duperr);
     if (sh_restoreAttrib) updateTxtAttrib();
@@ -156,7 +156,7 @@ if (chkCmd(1, "EXEC")) {
     }
     else if (pid > 0) {
         while (wait(&status) != pid) {}
-        sprintf(outbuf, "%d", (status >> 8) & 0xFF);
+        sprintf(outbuf, "%d", (retval = WEXITSTATUS(status)));
     }
     else if (sh_silent) {
         dup2(stdout_dup, 1);
@@ -186,8 +186,7 @@ if (chkCmd(1, "EXEC")) {
         dup2(fd, 1);
         dup2(fd, 2);
     }
-    int ret = system(tmpcmd);
-    (void)ret;
+    retval = WEXITSTATUS(system(tmpcmd));
     if (sh_silent) {
         dup2(stdout_dup, 1);
         dup2(stderr_dup, 2);
@@ -210,7 +209,7 @@ if (chkCmd(1, "SH$")) {
     FILE* p = popen(farg[1], "r");
     if (p) {
         outbuf[fread(outbuf, 1, CB_BUF_SIZE - 1, p)] = 0;
-        pclose(p);
+        retval = WEXITSTATUS(pclose(p));
     }
     dup2(duperr, 2);
     close(duperr);
@@ -243,7 +242,8 @@ if (chkCmd(1, "EXEC$")) {
         exit(127);
     }
     else if (pid > 0) {
-        while (wait(NULL) != pid) {}
+        while (wait(&retval) != pid) {}
+        retval = WEXITSTATUS(retval);
         outbuf[read(fd[0], outbuf, CB_BUF_SIZE - 1)] = 0;
     }
     dup2(stdout_dup, 1);
@@ -272,7 +272,7 @@ if (chkCmd(1, "EXEC$")) {
     FILE* p = popen(tmpcmd, "r");
     if (p) {
         outbuf[fread(outbuf, 1, CB_BUF_SIZE, p)] = 0;
-        pclose(p);
+        retval = WEXITSTATUS(pclose(p));
     }
     dup2(duperr, 2);
     close(duperr);
@@ -795,6 +795,64 @@ if (chkCmd(1, "LINE$")) {
     if (outbuf[strlen(outbuf) - 1] == '\r') outbuf[strlen(outbuf) - 1] = 0;
     goto fexit;
 }
+if (chkCmd(1, "DATE")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 1 || fargt[1] == 0) {cerr = 3; goto fexit;}
+    int element = -1;
+    if (fargt[1] == 2) {
+        element = atoi(farg[1]);
+    } else {
+        upCase(farg[1]);
+        chkCmdPtr = farg[1];
+        if (chkCmd(2, "SEC", "SECOND")) {element = 0;}
+        else if (chkCmd(2, "MIN", "MINUTE")) {element = 1;}
+        else if (chkCmd(2, "HR", "HOUR")) {element = 2;}
+        else if (chkCmd(1, "DAY")) {element = 3;}
+        else if (chkCmd(2, "MON", "MONTH")) {element = 4;}
+        else if (chkCmd(1, "YEAR")) {element = 5;}
+        else if (chkCmd(2, "WDAY", "WEEKDAY")) {element = 6;}
+        else if (chkCmd(2, "YDAY", "YEARDAY")) {element = 7;}
+        else if (chkCmd(3, "DST", "DAYLIGHT", "DAYLIGHTSAVING")) {element = 8;}
+    }
+    if (element > 8 || element < 0) {cerr = 16; goto fexit;}
+    time_t rawtime;
+    time(&rawtime);
+    struct tm* timeinfo;
+    timeinfo = localtime(&rawtime);
+    int edata = -1;
+    switch (element) {
+        case 0:
+            edata = timeinfo->tm_sec;
+            break;
+        case 1:
+            edata = timeinfo->tm_min;
+            break;
+        case 2:
+            edata = timeinfo->tm_hour;
+            break;
+        case 3:
+            edata = timeinfo->tm_mday;
+            break;
+        case 4:
+            edata = timeinfo->tm_mon;
+            break;
+        case 5:
+            edata = 1900 + timeinfo->tm_year;
+            break;
+        case 6:
+            edata = timeinfo->tm_wday;
+            break;
+        case 7:
+            edata = timeinfo->tm_yday;
+            break;
+        case 8:
+            edata = timeinfo->tm_isdst;
+            break;
+    }
+    sprintf(outbuf, "%d", edata);
+    goto fexit;
+}
 if (chkCmd(1, "CWD$")) {
     cerr = 0;
     ftype = 1;
@@ -804,6 +862,7 @@ if (chkCmd(1, "CWD$")) {
 }
 if (chkCmd(1, "FILES$")) {
     cerr = 0;
+    fileerror = 0;
     ftype = 1;
     if (fargct > 1) {cerr = 3; goto fexit;}
     char* olddn = NULL;
@@ -812,15 +871,14 @@ if (chkCmd(1, "FILES$")) {
         olddn = malloc(CB_BUF_SIZE);
         getcwd(olddn, CB_BUF_SIZE);
         if (chdir(farg[1])) {
+            fileerror = errno;
             free(olddn);
-            seterrstr(farg[1]);
-            cerr = 17;
+            outbuf[0] = 0;
             goto fexit;
         }
     }
     DIR* cwd = opendir(".");
-    if (!cwd) {if (fargct) {free(olddn);} cerr = 20; goto fexit;}
-    DIR* tmpdir;
+    if (!cwd) {if (fargct) {chdir(olddn); free(olddn);} outbuf[0] = 0; goto fexit;}
     struct dirent* dir;
     #ifdef _WIN32
         #define FSC '\\'
@@ -829,22 +887,23 @@ if (chkCmd(1, "FILES$")) {
         #define FSC '/'
         strcpy(outbuf, "./\n../");
     #endif
+    struct stat pathstat;
     while ((dir = readdir(cwd))) {
-        if ((tmpdir = opendir(dir->d_name)) && strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) {
+        stat(dir->d_name, &pathstat);
+        if (S_ISDIR(pathstat.st_mode) && strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) {
             strApndChar(outbuf, '\n');
             copyStrApnd(dir->d_name, outbuf);
             strApndChar(outbuf, FSC);
         }
-        if (tmpdir) closedir(tmpdir);
     }
     closedir(cwd);
     cwd = opendir(".");
     while ((dir = readdir(cwd))) {
-        if (!(tmpdir = opendir(dir->d_name))) {
+        stat(dir->d_name, &pathstat);
+        if (!(S_ISDIR(pathstat.st_mode))) {
             strApndChar(outbuf, '\n');
             copyStrApnd(dir->d_name, outbuf);
         }
-        if (tmpdir) closedir(tmpdir);
     }
     if (fargct) {
         chdir(olddn);
@@ -853,15 +912,259 @@ if (chkCmd(1, "FILES$")) {
     closedir(cwd);
     goto fexit;
 }
-if (chkCmd(2, "CHDIR", "CD")) {
+if (chkCmd(2, "CD", "CHDIR")) {
     cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    outbuf[0] = '0' + !chdir(farg[1]);
+    outbuf[1] = 0;
+    goto fexit;
+}
+if (chkCmd(1, "FOPEN")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 2) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1 || fargt[2] != 1) {cerr = 2; goto fexit;}
+    if (!isFile(farg[1])) {
+        outbuf[0] = '-';
+        outbuf[1] = '1';
+        outbuf[2] = 0;
+        fileerror = EINVAL;
+        goto fexit;
+    }
+    sprintf(outbuf, "%d", openFile(farg[1], farg[2]));
+    goto fexit;
+}
+if (chkCmd(1, "FCLOSE")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    outbuf[0] = '0' + closeFile(atoi(farg[1]));
+    outbuf[1] = 0;
+    goto fexit;
+}
+if (chkCmd(1, "FSIZE")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    int fnum = atoi(farg[1]);
+    if (fnum < 0 || fnum >= filemaxct) {
+        outbuf[0] = '-';
+        outbuf[1] = '1';
+        outbuf[2] = 0;
+        fileerror = EINVAL;
+        goto fexit;
+    }
+    sprintf(outbuf, "%d", filedata[fnum].size);
+    goto fexit;
+}
+if (chkCmd(1, "EOF")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    int fnum = atoi(farg[1]);
+    if (fnum < 0 || fnum >= filemaxct) {
+        outbuf[0] = '-';
+        outbuf[1] = '1';
+        outbuf[2] = 0;
+        fileerror = EINVAL;
+        goto fexit;
+    }
+    int32_t prev = ftell(filedata[fnum].fptr);
+    fgetc(filedata[fnum].fptr);
+    errno = 0;
+    outbuf[0] = '0' + (feof(filedata[fnum].fptr) != 0);
+    fileerror = errno;
+    fseek(filedata[fnum].fptr, prev, SEEK_SET);
+    outbuf[1] = 0;
+    goto fexit;
+}
+if (chkCmd(1, "EOFD")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    int fnum = atoi(farg[1]);
+    if (fnum < 0 || fnum >= filemaxct) {
+        outbuf[0] = '-';
+        outbuf[1] = '1';
+        outbuf[2] = 0;
+        fileerror = EINVAL;
+        goto fexit;
+    }
+    errno = 0;
+    outbuf[0] = '0' + (ftell(filedata[fnum].fptr) >= filedata[fnum].size);
+    outbuf[1] = 0;
+    fileerror = errno;
+    goto fexit;
+}
+if (chkCmd(1, "FREAD$")) {
+    cerr = 0;
+    fileerror = 0;
     ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    int fnum = atoi(farg[1]);
+    outbuf[1] = 0;
+    if (fnum < 0 || fnum >= filemaxct) {
+        outbuf[0] = 0;
+        fileerror = EINVAL;
+        goto fexit;
+    }
+    if (feof(filedata[fnum].fptr)) {
+        outbuf[0] = 0;
+    } else {
+        errno = 0;
+        int c = fgetc(filedata[fnum].fptr);
+        outbuf[0] = (c < 0) ? 0 : c;
+        fileerror = errno;
+    }
+    goto fexit;
+}
+if (chkCmd(1, "FREAD")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    int fnum = atoi(farg[1]);
+    int fc = -1;
+    if (fnum < 0 || fnum >= filemaxct) {
+        fileerror = EINVAL;
+    } else if (!feof(filedata[fnum].fptr)) {
+        errno = 0;
+        fc = fgetc(filedata[fnum].fptr);
+        if (fc < 0) fc = -1;
+        fileerror = errno;
+    }
+    sprintf(outbuf, "%d", fc);
+    goto fexit;
+}
+if (chkCmd(1, "FWRITE")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 2) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2 || fargt[2] != 1) {cerr = 2; goto fexit;}
+    int fnum = atoi(farg[1]);
+    int32_t ret = -1;
+    if (fnum < 0 || fnum >= filemaxct) {
+        fileerror = EINVAL;
+    } else {
+        errno = 0;
+        ret = (fputs(farg[2], filedata[fnum].fptr) != EOF);
+        fileerror = errno;
+    }
+    sprintf(outbuf, "%d", ret);
+    goto fexit;
+}
+if (chkCmd(1, "FSEEK")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 2) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2 || fargt[2] != 2) {cerr = 2; goto fexit;}
+    int fnum = atoi(farg[1]);
+    int32_t ret = 2;
+    if (fnum < 0 || fnum >= filemaxct) {
+        fileerror = EINVAL;
+    } else {
+        errno = 0;
+        int32_t pos = atoi(farg[2]);
+        if (pos < 0) {
+            fileerror = EINVAL;
+        } else {
+            ret = !fseek(filedata[fnum].fptr, (pos > filedata[fnum].size) ? filedata[fnum].size : pos, SEEK_SET);
+            fileerror = errno;
+        }
+    }
+    sprintf(outbuf, "%d", ret);
+    goto fexit;
+}
+if (chkCmd(1, "FLUSH")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    int fnum = atoi(farg[1]);
+    if (fnum < 0 || fnum >= filemaxct) {
+        outbuf[0] = '-';
+        outbuf[1] = '1';
+        outbuf[2] = 0;
+        fileerror = EINVAL;
+        goto fexit;
+    }
+    errno = 0;
+    outbuf[0] = (fflush(filedata[fnum].fptr) != EOF);
+    outbuf[1] = 0;
+    fileerror = errno;
+    goto fexit;
+}
+if (chkCmd(2, "MD", "MKDIR")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     errno = 0;
-    int ret = chdir(farg[1]);
-    (void)ret;
-    sprintf(outbuf, "%d", errno);
+    #ifndef _WIN32
+    outbuf[0] = '0' + !mkdir(farg[1], S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    #else
+    outbuf[0] = '0' + !mkdir(farg[1]);
+    #endif
+    outbuf[1] = 0;
+    fileerror = errno;
+    goto fexit;
+}
+if (chkCmd(2, "RM", "REMOVE")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    outbuf[0] = '0' + cbrm(farg[1]);
+    outbuf[1] = 0;
+    goto fexit;
+}
+if (chkCmd(4, "MV", "MOVE", "REN", "RENAME")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 2) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1 || fargt[2] != 1) {cerr = 2; goto fexit;}
+    errno = 0;
+    outbuf[0] = '0' + !rename(farg[1], farg[2]);
+    outbuf[1] = 0;
+    fileerror = errno;
+    goto fexit;
+}
+if (chkCmd(1, "ISFILE")) {
+    cerr = 0;
+    fileerror = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    struct stat pathstat;
+    if (stat(farg[1], &pathstat)) {
+        outbuf[0] = '-';
+        outbuf[1] = '1';
+        outbuf[2] = 0;
+        fileerror = errno;
+        goto fexit;
+    }
+    outbuf[0] = '0' + !(S_ISDIR(pathstat.st_mode));
+    outbuf[1] = 0;
     goto fexit;
 }
 goto fexit;
@@ -892,6 +1195,28 @@ if (chkCmd(1, "_ENVSET")) {
     char* tmpenv = getenv(farg[1]);
     outbuf[0] = '0' + (tmpenv != NULL);
     outbuf[1] = 0;
+    goto fexit;
+}
+if (chkCmd(1, "_RET")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct) {cerr = 3; goto fexit;}
+    sprintf(outbuf, "%d", retval);
+    goto fexit;
+}
+if (chkCmd(1, "_ERRNOSTR$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    copyStr(strerror(atoi(farg[1])), outbuf);
+    goto fexit;
+}
+if (chkCmd(1, "_FILEERROR")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct) {cerr = 3; goto fexit;}
+    sprintf(outbuf, "%d", fileerror);
     goto fexit;
 }
 if (chkCmd(1, "_PROMPT$")) {
@@ -930,6 +1255,18 @@ if (chkCmd(1, "_OS$")) {
     copyStr(OSVER, outbuf);
     goto fexit;
 }
+if (chkCmd(1, "_VT")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct) {cerr = 3; goto fexit;}
+    #ifdef _WIN_NO_VT
+    outbuf[0] = '0';
+    #else
+    outbuf[0] = '1';
+    #endif
+    outbuf[1] = 0;
+    goto fexit;
+}
 if (chkCmd(1, "_STARTCMD$")) {
     cerr = 0;
     ftype = 1;
@@ -962,6 +1299,6 @@ if (chkCmd(1, "_ARGC")) {
     cerr = 0;
     ftype = 2;
     if (fargct) {cerr = 3; goto fexit;}
-    sprintf(outbuf, "%d", progargc);
+    sprintf(outbuf, "%d", (progargc > 0) ? progargc - 1 : progargc);
     goto fexit;
 }

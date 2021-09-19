@@ -1,21 +1,28 @@
 BASE_CFLAGS = --std=c99 -Wall -Wextra -Ofast -lm -lreadline
 
-ifdef OS
-ifeq ($(findstring :/, $(PATH)), :/)
-IS_LINUX = true
-else
-IS_LINUX = false
-endif
-else
-IS_LINUX = true
-endif
-
-ifeq ($(IS_LINUX), true)
+ifndef OS
 
 C = gcc
 CFLAGS = $(BASE_CFLAGS)
 ifeq ($(shell uname -s), Darwin)
-CFLAGS += -I/usr/local/opt/readline/include -L/usr/local/opt/readline/lib
+ifeq ($(shell [ -d ~/.brew/opt/readline/include ] && echo true), true)
+CFLAGS += -I~/.brew/opt/readline/include
+endif
+ifeq ($(shell [ -d /opt/homebrew/opt/readline/include ] && echo true), true)
+CFLAGS += -I/opt/homebrew/opt/readline/include
+endif
+ifeq ($(shell [ -d /usr/local/opt/readline/include ] && echo true), true)
+CFLAGS += -I/usr/local/opt/readline/include
+endif
+ifeq ($(shell [ -d ~/.brew/opt/readline/lib ] && echo true), true)
+CFLAGS += -L~/.brew/opt/readline/lib
+endif
+ifeq ($(shell [ -d /opt/homebrew/opt/readline/lib ] && echo true), true)
+CFLAGS += -L/opt/homebrew/opt/readline/lib
+endif
+ifeq ($(shell [ -d /usr/local/opt/readline/lib ] && echo true), true)
+CFLAGS += -L/usr/local/opt/readline/lib
+endif
 else
 ifeq ($(shell uname -o), Android)
 CFLAGS += -s
@@ -26,16 +33,32 @@ endif
 
 CBITS = $(shell getconf LONG_BIT)
 
-BUILD_TO = "clibasic"
-BUILD__ = $(C) clibasic.c $(CFLAGS) -DB$(CBITS) -o $(BUILD_TO) && chmod +x $(BUILD_TO)
+BUILD_TO = clibasic
 BUILD32 = $(C) clibasic.c -m32 $(CFLAGS) -DB32 -o $(BUILD_TO) && chmod +x $(BUILD_TO)
+ifeq (,$(CBITS))
+BUILD__ = $(BUILD32)
+else
+BUILD__ = $(C) clibasic.c $(CFLAGS) -DB$(CBITS) -o $(BUILD_TO) && chmod +x $(BUILD_TO)
+endif
 
-INSTALL_TO = "/usr/bin/clibasic"
-INSTALL = if [ "$$(id -u)" -eq 0 ]; then cp $(BUILD_TO) $(INSTALL_TO); else echo "Root privileges are needed to install."; fi
+MAN_PATH = docs/clibasic.man
 
-RUN = ./clibasic
+ifeq ($(shell id -u), 0)
+MAN_INSTALL_PATH = /usr/share/man/man1/clibasic.1
+INSTALL_TO = /usr/bin/clibasic
+else
+MAN_INSTALL_PATH = ~/.local/share/man/man1/clibasic.1
+INSTALL_TO = ~/.local/bin/clibasic
+endif
+INSTALL = mkdir -p $(shell dirname -- $(INSTALL_TO)) $(shell dirname -- $(MAN_INSTALL_PATH)); cp $(BUILD_TO) $(INSTALL_TO); cp $(MAN_PATH) $(MAN_INSTALL_PATH); gzip -f $(MAN_INSTALL_PATH)
+
+UNINSTALL = rm -f $(INSTALL_TO) $(MAN_INSTALL_PATH).gz
+
+RUN = ./$(BUILD_TO)
 
 CLEAN = rm -f clibasic
+
+.ONESHELL:
 
 .PHONY: all all32 build build32 update install install32 run clean cross
 
@@ -54,20 +77,26 @@ update:
 ([[ ! "$$I" =~ ^[^Yy]$$ ]] && sh -c 'git restore . && git pull' &> /dev/null && chmod +x *.sh) || exit 0
 
 install:
-	if [ ! -f $(INSTALL_TO) ]; then $(BUILD__); fi
+	if [ ! -f $(BUILD_TO) ]; then $(BUILD__); fi
 	$(INSTALL)
 
 install32:
-	if [ ! -f $(INSTALL_TO) ]; then $(BUILD32); fi
+	if [ ! -f $(BUILD_TO) ]; then $(BUILD32); fi
 	$(INSTALL)
 
+uninstall:
+	$(UNINSTALL)
+
 run:
+ifeq (32,$(CBITS))
+	[ ! -f "$(BUILD_TO)" ] && ($(BUILD32))
+else
+	[ ! -f "$(BUILD_TO)" ] && ($(BUILD__))
+endif
 	$(RUN)
 
 clean:
 	$(CLEAN)
-
-.ONESHELL:
 
 cross:
 ifeq ($(MAKECMDGOALS), cross)
@@ -75,14 +104,28 @@ ifeq ($(MAKECMDGOALS), cross)
 else
 	@$(eval C = x86_64-w64-mingw32-gcc)
 	@$(eval C32 = i686-w64-mingw32-gcc)
-	@$(eval CFLAGS = $(BASE_CFLAGS) -Ilib)
-	@$(eval BUILD_TO = "clibasic.exe")
-	@$(eval BUILD__ = cp -f lib/win64/*.dll . && $(C) clibasic.c $(CFLAGS) -Llib/win64 -DB$(CBITS) -o $(BUILD_TO) && chmod -x ./clibasic.exe)
-	@$(eval BUILD32 = cp -f lib/win32/*.dll . && $(C32) clibasic.c -m32 $(CFLAGS) -Llib/win32 -DB32 -o $(BUILD_TO) && chmod -x ./clibasic.exe)
-	@$(eval INSTALL_TO = "$$HOME/.wine/drive_c/windows/system32")
+	@$(eval CFLAGS = $(BASE_CFLAGS) -s -Ilib)
+	@$(eval BUILD_TO = clibasic.exe)
+	@$(eval INSTALL_TO = "$$HOME/.wine/drive_c/windows/system32/")
 	@$(eval INSTALL = cp $(BUILD_TO) *.dll $(INSTALL_TO))
-	@$(eval RUN = wineconsole clibasic.exe)
+	@$(eval BUILD32 = cp -f lib/win32/*.dll . && $(C32) clibasic.c -m32 $(CFLAGS) -Llib/win32 -DB32 -o $(BUILD_TO) && chmod -x $(BUILD_TO))
+ifeq (,$(CBITS))
+	@$(eval BUILD__ = $(BUILD32))
+else
+	@$(eval BUILD__ = cp -f lib/win64/*.dll . && $(C) clibasic.c $(CFLAGS) -Llib/win64 -DB$(CBITS) -o $(BUILD_TO) && chmod -x $(BUILD_TO))
+endif
+	@$(eval RUN = wineconsole .\\$(BUILD_TO))
 	@$(eval CLEAN = rm -f clibasic.exe *.dll)
+endif
+	@true
+
+vt:
+	@$(eval CFLAGS = $(CFLAGS) -DFORCE_VT)
+	@$(eval BUILD32 = cp -f lib/win32/*.dll . && $(C32) clibasic.c -m32 $(CFLAGS) -Llib/win32 -DB32 -o $(BUILD_TO) && chmod -x $(BUILD_TO))
+ifeq (,$(CBITS))
+	@$(eval BUILD__ = $(BUILD32))
+else
+	@$(eval BUILD__ = cp -f lib/win64/*.dll . && $(C) clibasic.c $(CFLAGS) -Llib/win64 -DB$(CBITS) -o $(BUILD_TO) && chmod -x $(BUILD_TO))
 endif
 	@true
 
@@ -96,8 +139,10 @@ BUILD_TO = clibasic.exe
 BUILD64 = xcopy lib\win64\*.dll . /Y && $(C) clibasic.c -m64 $(CFLAGS) -Llib\win64 -DB64 -o $(BUILD_TO)
 BUILD32 = xcopy lib\win32\*.dll . /Y && $(C) clibasic.c -m32 $(CFLAGS) -Llib\win32 -DB32 -o $(BUILD_TO)
 
-INSTALL_TO = "C:\\windows\\system32"
+INSTALL_TO = C:\windows\system32
 INSTALL = xcopy *.dll $(INSTALL_TO) /Y && xcopy $(BUILD_TO) $(INSTALL_TO) /Y
+
+UNINSTALL = del $(INSTALL_TO)\\$(BUILD_TO)
 
 .PHONY: all all32 build build32 update run clean
 
@@ -127,6 +172,14 @@ run:
 
 clean:
 	del /q /f $(BUILD_TO) *.dll
+
+vt:
+ifeq ($(MAKECMDGOALS), vt)
+	@$(MAKE) vt all
+else
+	@$(eval CFLAGS = $(CFLAGS) -DFORCE_VT)
+endif
+	@echo > nul
 
 endif
 
