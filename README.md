@@ -36,11 +36,12 @@ To build, use `make build`. <br>
 To run, use `make run` or `./clibasic`. <br>
 To build then run, use `make` (same as `make all`). <br>
 #### Windows <br>
-Make sure the bin of MinGW is in the %PATH%.
-- Type `gcc` into CMD and if you received a "Can't recognize" message, MinGW is not in your %PATH%.
-To add MinGW to the %PATH% if you used the downloaded installer:
-1. Navigate to where you installed MinGW
-2. Open the `mingw64` folder
+Make sure the bin folders of MinGW and Make are in the %PATH%. <br>
+Type `gcc --version` into CMD and if you received a "Can't recognize" message, MinGW is not in your %PATH%. <br>
+Type `make --version` into CMD and if you received a "Can't recognize" message, Make is not in your %PATH%. <br>
+How to add MinGW and/or Make to the %PATH%: <br>
+1. Navigate to where MinGW or Make is installed
+2. <ins>For MinGW</ins>, open the `mingw64` folder
 3. Open the `bin` folder
 4. Copy the location
 5. Add the location you copied to the %PATH% environment variable
@@ -51,11 +52,17 @@ To add MinGW to the %PATH% if you used the downloaded installer:
         4. Click the Advanced tab
         5. Click Environment Variables
         6. Under System variables, find Path and click Edit
+        7. Add the copied location
     - For Windows 8 and newer
         1. Open the Start Menu
         2. Search for and run 'Edit the system environment variables'
         3. Click Environment Variables
         4. Under System variables, find Path and click Edit
+        5. Add the copied location
+
+To build, use `make build`. <br>
+To run, use `make run` or `./clibasic`. <br>
+To build then run, use `make` (same as `make all`). <br>
 
 ---
 ### Notes <br>
