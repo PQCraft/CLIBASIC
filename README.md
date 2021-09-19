@@ -63,6 +63,7 @@ How to add MinGW and/or Make to the %PATH%: <br>
 To build, use `make build`. <br>
 To run, use `make run` or `./clibasic`. <br>
 To build then run, use `make` (same as `make all`). <br>
+To build CLIBASIC with support for VT escape codes, add `vt` before the rest of the rules. <br>
 
 ---
 ### Notes <br>
