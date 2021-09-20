@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.22";
+char VER[] = "0.22.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -2716,6 +2716,8 @@ bool runlogic() {
         if (cmd[h] == '=') return false;
         copyStrSnip(cmd, i, j, ltmp[0]);
         copyStrFrom(cmd, i, cmd);
+        j -= i;
+        i = 0;
     }
     cerr = 0;
     chkCmdPtr = ltmp[0];

@@ -19,7 +19,7 @@ if (chkCmd(2, "?", "PRINT")) {
     int32_t ptr = 0;
     int32_t i = j;
     while (cmd[i]) {
-        i++;
+        ++i;
         if (cmd[i] == '"') {inStr = !inStr;}
         if (!inStr) {
             switch (cmd[i]) {
