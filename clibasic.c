@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.22.1";
+char VER[] = "0.22.2";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -331,7 +331,7 @@ static inline void* setsig(int sig, void* func) {
     sigemptyset(&act.sa_mask);
     sigaddset(&act.sa_mask, sig);
     act.sa_handler = func;
-    //act.sa_flags = SA_RESTART;
+    act.sa_flags = SA_RESTART;
     sigaction(sig, &act, &old);
     return old.sa_handler;
     #else
@@ -382,6 +382,23 @@ void rl_sigh(int sig) {
     rl_redisplay();
 }
 void txtqunlock() {}
+#ifndef _WIN_NO_VT
+bool vtenabled = false;
+void enablevt() {
+    if (vtenabled) return;
+    vtenabled = true;
+    DWORD dwMode = 0;
+    if (!GetConsoleMode(hConsole, &dwMode)){
+        fputs("Failed to get the console mode.\n", stderr);
+        exit(GetLastError());
+    }
+    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    if (!SetConsoleMode(hConsole, dwMode)) {
+        fputs("Failed to set the console mode.\n", stderr);
+        exit(GetLastError());
+    }
+}
+#endif
 #ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
 #define ENABLE_VIRTUAL_TERMINAL_PROCESSING 4
 #endif
@@ -428,6 +445,7 @@ uint64_t tval;
 
 void* oldsigh = NULL;
 
+#if 0
 static inline void nokill() {
     if (!oldsigh) oldsigh = setsig(SIGINT, nokill);
 }
@@ -436,6 +454,7 @@ static inline void yeskill() {
     setsig(SIGINT, oldsigh);
     oldsigh = NULL;
 }
+#endif
 
 void forceExit() {
     #ifndef _WIN32
@@ -573,7 +592,10 @@ static inline char* pathfilename(char* fn) {
     return bfnbuf;
 }
 
+bool redirection = false;
+
 static inline void ttycheck() {
+    if (redirection) return;
     if (!isatty(STDERR_FILENO)) {exit(1);}
     if (!isatty(STDIN_FILENO)) {fputs("CLIBASIC does not support STDIN redirection.\n", stderr); exit(1);}
     if (!isatty(STDOUT_FILENO)) {fputs("CLIBASIC does not support STDOUT redirection.\n", stderr); exit(1);}
@@ -633,6 +655,7 @@ int main(int argc, char** argv) {
                 puts("    -k, --keep                  Stops CLIBASIC from resetting text attributes before exiting.");
                 puts("    -s, --skip                  Skips searching for autorun programs.");
                 puts("    -i, --info                  Displays an info string when starting in shell mode.");
+                puts("    -r, --redirection           Allows for redirection (this may cause issues).");
                 pexit = true;
             } else if (!strcmp(argv[i], "--args")) {
                 if (runc || !runfile) {fputs("Args can only be passed when running a program.\n", stderr); exit(1);}
@@ -667,6 +690,10 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--info") || (shortopt && argv[i][shortopti] == 'i')) {
                 if (info) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
                 info = true;
+                if (shortopt) goto chkshortopt;
+            } else if (!strcmp(argv[i], "--redirection") || (shortopt && argv[i][shortopti] == 'r')) {
+                if (info) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                redirection = true;
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--command") || !strcmp(argv[i], "-c")) {
                 if (runfile) {fputs("Cannot run file and command.\n", stderr); exit(1);}
@@ -737,16 +764,7 @@ int main(int argc, char** argv) {
         exit(GetLastError());
     }
     #ifndef _WIN_NO_VT
-    DWORD dwMode = 0;
-    if (!GetConsoleMode(hConsole, &dwMode)){
-        fputs("Failed to get the console mode.\n", stderr);
-        exit(GetLastError());
-    }
-    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    if (!SetConsoleMode(hConsole, dwMode)) {
-        fputs("Failed to set the console mode.\n", stderr);
-        exit(GetLastError());
-    }
+    enablevt();
     #else
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     GetConsoleScreenBufferInfo(hConsole, &csbi);
@@ -1105,7 +1123,6 @@ static inline void getCurPos() {
     #ifndef _WIN32
     char buf[16];
     register int i;
-    //nokill();
     if (gcp_sig) pthread_sigmask(SIG_SETMASK, &intmask, &oldmask);
     i = kbhit();
     while (i > 0) {getchar(); i--;}
@@ -1129,8 +1146,6 @@ static inline void getCurPos() {
     }
     i = kbhit();
     while (i > 0) {getchar(); i--;}
-    //yeskill();
-    //if (cmdint) {cmdint = false; return;}
     if (gcpret != gcpi) {gcp_sig = false; getCurPos(); gcp_sig = true;}
     else {sscanf(buf, "\e[%d;%dR", &cury, &curx);}
     if (gcp_sig) pthread_sigmask(SIG_SETMASK, &oldmask, NULL);
@@ -1181,6 +1196,9 @@ void unloadAllProg() {
 }
 
 bool loadProg(char* filename) {
+    #if defined(_WIN32) && !defined(_WIN_NO_VT)
+    enablevt();
+    #endif
     retval = 0;
     fputs("Loading...", stdout);
     fflush(stdout);
@@ -2756,7 +2774,7 @@ static inline void freeBaseMem() {
 static inline void printError(int error) {
     getCurPos();
     if (curx != 1) putchar('\n');
-    if (inProg) {printf("Error %d on line %d of '%s': '%s': ", error, progLine, basefilename(progfnstr), cmd);}
+    if (inProg) {printf("Error %d on line %d of '%s':\n%s\n", error, progLine, basefilename(progfnstr), cmd);}
     else {printf("Error %d: ", error);}
     switch (error) {
         default:
