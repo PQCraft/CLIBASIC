@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.22.2";
+char VER[] = "0.22.3";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -692,7 +692,7 @@ int main(int argc, char** argv) {
                 info = true;
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--redirection") || (shortopt && argv[i][shortopti] == 'r')) {
-                if (info) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                if (redirection) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
                 redirection = true;
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--command") || !strcmp(argv[i], "-c")) {
