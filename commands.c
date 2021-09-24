@@ -87,14 +87,18 @@ if (chkCmd(3, "%", "GOTO", "GO")) {
     goto noerr;
 }
 if (chkCmd(1, "DIM")) {
-    if (argct != 3) {cerr = 3; goto cmderr;}
+    if (argct < 2 || argct > 3) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (!solvearg(2)) goto cmderr;
-    if (!solvearg(3)) goto cmderr;
+    if (argct == 3 && !solvearg(3)) goto cmderr;
     if (argt[2] != 2) {cerr = 2; goto cmderr;}
     int32_t asize = atoi(arg[2]);
     if (asize < 0) {cerr = 16; goto cmderr;}
-    if (!setVar(tmpargs[1], arg[3], argt[3], asize)) goto cmderr;
+    if (!tmpargs[1][0]) {cerr = 4; seterrstr(""); goto cmderr;}
+    if (!setVar(tmpargs[1],\
+    ((argct == 3) ? arg[3] : ((tmpargs[1][argl[1] - 1] == '$') ? "" : "0")),\
+    ((argct == 3) ? argt[3] : 2 - (tmpargs[1][argl[1] - 1] == '$')),\
+    asize)) goto cmderr;
     goto noerr;
 }
 if (chkCmd(1, "DEL")) {
@@ -668,7 +672,7 @@ if (chkCmd(1, "_UNSETENV")) {
     goto noerr;
 }
 if (chkCmd(1, "_PROMPT")) {
-    if (inProg) {cerr = 254; goto cmderr;}
+    if (inProg && !autorun) {cerr = 254; goto cmderr;}
     if (argct != 1) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (!solvearg(1)) goto cmderr;
@@ -677,12 +681,13 @@ if (chkCmd(1, "_PROMPT")) {
     goto noerr;
 }
 if (chkCmd(1, "_PROMPTTAB")) {
-    if (inProg) {cerr = 254; goto cmderr;}
+    if (inProg && !autorun) {cerr = 254; goto cmderr;}
     if (argct != 1) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     tab_width = atoi(arg[1]);
+    goto noerr;
 }
 if (chkCmd(1, "_AUTOCMDHIST")) {
     if (inProg) {cerr = 254; goto cmderr;}

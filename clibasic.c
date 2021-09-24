@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.22.3";
+char VER[] = "0.22.4";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -242,6 +242,7 @@ bool inprompt = false;
 
 bool runfile = false;
 bool runc = false;
+bool autorun = false;
 
 bool sh_silent = false;
 bool sh_clearAttrib = true;
@@ -605,7 +606,7 @@ int main(int argc, char** argv) {
     #if defined(GUI_CHECK) && defined(__unix__)
     if (system("tty -s 1> /dev/null 2> /dev/null")) {
         char* command = malloc(CB_BUF_SIZE);
-        copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e $'clear &&", command);
+        copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e $'clear;", command);
         for (int i = 0; i < argc; ++i) {
             copyStrApnd(" $\\'", command);
             gpbuf[0] = 0;
@@ -871,7 +872,11 @@ int main(int argc, char** argv) {
             FILE* tmpfile = fopen(HIST_FILE, "r");
             if ((autohist = (tmpfile != NULL))) {fclose(tmpfile); read_history(HIST_FILE);}
             inProg = true;
-            if (!loadProg("AUTORUN.BAS")) if (!loadProg("autorun.bas")) inProg = false;
+            autorun = true;
+            if (!loadProg(".clibasicrc"))
+                if (!loadProg("autorun.bas"))
+                    if (!loadProg(".autorun.bas"))
+                        {autorun = false; inProg = false;}
             ret = chdir(tmpcwd);
             (void)ret;
         }
@@ -977,20 +982,18 @@ int main(int argc, char** argv) {
         bool comment = false;
         while (1) {
             #ifdef _WIN32
-            if (!textlock) {
-                char kbc;
-                int kbh = kbhit();
-                for (int i = 0; i < kbh; ++i) {
-                    kbc = _getch();
-                    kbinbuf[i] = kbc;
-                    putchar(kbc);
-                    if (kbc == 3) {
-                        if (inProg) {goto brkproccmd;}
-                        else {cmdIntHndl();}
-                    }
+            char kbc;
+            int kbh = kbhit();
+            for (int i = 0; i < kbh; ++i) {
+                kbc = _getch();
+                kbinbuf[i] = kbc;
+                if (!textlock) putchar(kbc);
+                if (kbc == 3) {
+                    if (inProg) {goto brkproccmd;}
+                    else {cmdIntHndl();}
                 }
-                fflush(stdout);
             }
+            fflush(stdout);
             #endif
             rechk:;
             if (progindex < 0) {inProg = false;}
@@ -1076,20 +1079,18 @@ static inline void cb_wait(uint64_t d) {
     #else
     uint64_t t = d + usTime();
     while (t > usTime() && !cmdint) {
-        if (!textlock) {
-            char kbc;
-            int kbh = kbhit();
-            for (int i = 0; i < kbh; ++i) {
-                kbc = _getch();
-                kbinbuf[i] = kbc;
-                putchar(kbc);
-                if (kbc == 3) {
-                    cmdint = true;
-                    return;
-                }
+        char kbc;
+        int kbh = kbhit();
+        for (int i = 0; i < kbh; ++i) {
+            kbc = _getch();
+            kbinbuf[i] = kbc;
+            if (!textlock) putchar(kbc);
+            if (kbc == 3) {
+                cmdint = true;
+                return;
             }
-            fflush(stdout);
         }
+        fflush(stdout);
     }
     #endif
 }
@@ -1187,6 +1188,7 @@ void unloadProg() {
     proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
     progindex--;
     if (progindex < 0) inProg = false;
+    if (autorun) autorun = false;
 }
 
 void unloadAllProg() {
@@ -1587,6 +1589,8 @@ static inline void getStr(char* str1, char* str2) {
                 case 'v': c = '\v'; break;
                 case 'b': c = '\b'; break;
                 case 'e': c = '\e'; break;
+                case '[': c = 1; break;
+                case ']': c = 2; break;
                 case 'x':
                     h[0] = '0';
                     h[1] = 'x';
@@ -1689,7 +1693,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     ++getFuncIndex;
     {
         int32_t i;
-        for (i = 0; inbuf[i] != '('; ++i) {if (inbuf[i] >= 'a' && inbuf[i] <= 'z') inbuf[i] = inbuf[i] - 32;}
+        for (i = 0; inbuf[i] != '('; ++i) {}
         int32_t j = strlen(inbuf) - 1;
         copyStrSnip(inbuf, i + 1, j, gftmp[0]);
         fargct = getArgCt(gftmp[0]);
@@ -2731,7 +2735,6 @@ bool runlogic() {
         while (cmd[j] != ' ' && cmd[j]) {++j;}
         h = j;
         while (cmd[h] == ' ') {++h;}
-        if (cmd[h] == '=') return false;
         copyStrSnip(cmd, i, j, ltmp[0]);
         copyStrFrom(cmd, i, cmd);
         j -= i;

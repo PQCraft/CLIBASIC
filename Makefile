@@ -76,7 +76,7 @@ update:
 	printf "\\e[0m\\e[31;1mAre you sure? [y/N]:\\e[0m "; read -n 1 I; [ ! "$$I" == "" ] && printf "\\n" &&\
 ([[ ! "$$I" =~ ^[^Yy]$$ ]] && sh -c 'git restore . && git pull' &> /dev/null && chmod +x *.sh) || exit 0
 
-install:
+install: uninstall
 	if [ ! -f $(BUILD_TO) ]; then $(BUILD__); fi
 	$(INSTALL)
 

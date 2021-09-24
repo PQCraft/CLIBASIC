@@ -12,6 +12,7 @@ if (chkCmd(2, "?", "PRINT")) {
     while (cmd[j] == ' ') j++;
     if (cmd[j] == 0) {putchar('\n'); return true;}
     else {j--;}
+    bool newline = false;
     bool inStr = false;
     bool lookingForSpChar = false;
     bool sawSpChar = false;
@@ -35,9 +36,10 @@ if (chkCmd(2, "?", "PRINT")) {
             int32_t len = strlen(ltmp[1]);
             int tmpt;
             if (!(tmpt = getVal(ltmp[1], ltmp[1]))) return true;
+            newline = false;
             if (cmd[j] == ',') {
-                if (tmpt == 255) {putchar('\n');}
-                else {putchar('\t');}
+                if (tmpt == 255 && !cmd[j + 1]) {newline = false;}
+                putchar('\t');
             }
             fputs(ltmp[1], stdout);
             if (cmd[i] == 0 && len > 0) putchar('\n');
@@ -57,6 +59,7 @@ if (chkCmd(2, "?", "PRINT")) {
             }
         }
     }
+    if (newline) putchar('\n');
     if (pct || bct || inStr) {cerr = 1; return true;}
     fflush(stdout);
     return true;
