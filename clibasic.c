@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.22.4";
+char VER[] = "0.22.4.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -930,6 +930,7 @@ int main(int argc, char** argv) {
             #endif
             txtqunlock();
             tmpstr = readline(pstr);
+            updateTxtAttrib();
             concp = 0;
             inprompt = false;
             if (!tmpstr) {err = 0; cleanExit();}
