@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.22.5";
+char VER[] = "0.22.5.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -1121,7 +1121,7 @@ static inline void getCurPos() {
     #ifndef _WIN32
     char buf[16];
     register int i;
-    if (gcp_sig) pthread_sigmask(SIG_SETMASK, &intmask, &oldmask);
+    if (gcp_sig) sigprocmask(SIG_SETMASK, &intmask, &oldmask);
     i = kbhit();
     while (i > 0) {getchar(); i--;}
     if (!textlock) {
@@ -1146,7 +1146,7 @@ static inline void getCurPos() {
     while (i > 0) {getchar(); i--;}
     if (gcpret != gcpi) {gcp_sig = false; getCurPos(); gcp_sig = true;}
     else {sscanf(buf, "\e[%d;%dR", &cury, &curx);}
-    if (gcp_sig) pthread_sigmask(SIG_SETMASK, &oldmask, NULL);
+    if (gcp_sig) sigprocmask(SIG_SETMASK, &oldmask, NULL);
     #else
     CONSOLE_SCREEN_BUFFER_INFO con;
     GetConsoleScreenBufferInfo(hConsole, &con);
