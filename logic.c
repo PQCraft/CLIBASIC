@@ -38,7 +38,7 @@ if (chkCmd(2, "?", "PRINT")) {
             if (!(tmpt = getVal(ltmp[1], ltmp[1]))) return true;
             newline = false;
             if (cmd[j] == ',') {
-                if (tmpt == 255 && !cmd[j + 1]) {newline = false;}
+                if (tmpt == 255 && !cmd[j + 1]) {newline = true;}
                 putchar('\t');
             }
             fputs(ltmp[1], stdout);
@@ -83,6 +83,9 @@ if (chkCmd(1, "DO")) {
     dlstack[dlstackp].pl = progLine;
     dlstack[dlstackp].fnsp = fnstackp;
     dlstack[dlstackp].itsp = itstackp;
+    #ifdef _WIN32
+    updatechars();
+    #endif
     return true;
 }
 if (chkCmd(2, "WHILE", "DOWHILE")) {
@@ -105,6 +108,9 @@ if (chkCmd(2, "WHILE", "DOWHILE")) {
         dlstack[dlstackp].cp = cmdpos;
         dlstack[dlstackp].fnsp = fnstackp;
         dlstack[dlstackp].itsp = itstackp;
+        #ifdef _WIN32
+        updatechars();
+        #endif
     }
     dldcmd[dlstackp] = (bool)testval;
     dldcmd[dlstackp] = !dldcmd[dlstackp];
@@ -278,6 +284,9 @@ if (chkCmd(1, "FOR")) {
     fnstack[fnstackp].dlsp = dlstackp;
     fnstack[fnstackp].itsp = itstackp;
     cerr = 0;
+    #ifdef _WIN32
+    updatechars();
+    #endif
     return true;
 }
 if (chkCmd(1, "NEXT")) {

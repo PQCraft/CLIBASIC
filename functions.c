@@ -493,16 +493,9 @@ if (chkCmd(1, "INKEY$")) {
     }
     outbuf[obp] = 0;
     #else
-    int tmp = 1;
-    int obp = 0;
-    while (obp < tmp) {
-        outbuf[obp] = 0;
-        outbuf[obp] = kbinbuf[obp];
-        kbinbuf[obp] = 0;
-        if (outbuf[obp] == 0) {break;}
-        obp++;
-    }
-    outbuf[obp] = 0;
+    updatechars();
+    copyStr(kbinbuf, outbuf);
+    kbinbuf[0] = 0;
     #endif
     goto fexit;
 }

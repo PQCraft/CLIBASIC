@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.22.4.1";
+char VER[] = "0.22.5";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -367,8 +367,10 @@ char** rl_tab(const char* text, int start, int end) {
 #ifdef _WIN32
 #define hConsole GetStdHandle(STD_OUTPUT_HANDLE)
 char* rlptr;
+char kbinbuf[256];
 bool inrl = false;
 void cleanExit();
+void cmdIntHndl();
 void setcsr() {
     COORD coord;
     coord.X = 0;
@@ -400,13 +402,32 @@ void enablevt() {
     }
 }
 #endif
+void updatechars() {
+    char kbc;
+    int i = strlen(kbinbuf) - 1;
+    while (_kbhit()) {
+        kbc = _getch();
+        if (!((GetKeyState(VK_LCONTROL) | GetKeyState(VK_RCONTROL)) & 0x80)) {
+            if (kbc == 13) kbc = 10;
+            else if (kbc == 10) kbc = 13;
+        }
+        kbinbuf[++i] = kbc;
+        if (!textlock) putchar(kbc);
+        if (kbc == 3) {
+            //cmdint = true;
+            cmdIntHndl();
+        }
+    }
+    kbinbuf[++i] = 0;
+    fflush(stdout);
+}
 #ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
 #define ENABLE_VIRTUAL_TERMINAL_PROCESSING 4
 #endif
 #ifndef WEXITSTATUS
 #define WEXITSTATUS(x) ((uint8_t)(x))
 #endif
-char kbinbuf[256];
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 bool winArgNeedsQuotes(char* str) {
@@ -982,20 +1003,6 @@ int main(int argc, char** argv) {
         progLine = 1;
         bool comment = false;
         while (1) {
-            #ifdef _WIN32
-            char kbc;
-            int kbh = kbhit();
-            for (int i = 0; i < kbh; ++i) {
-                kbc = _getch();
-                kbinbuf[i] = kbc;
-                if (!textlock) putchar(kbc);
-                if (kbc == 3) {
-                    if (inProg) {goto brkproccmd;}
-                    else {cmdIntHndl();}
-                }
-            }
-            fflush(stdout);
-            #endif
             rechk:;
             if (progindex < 0) {inProg = false;}
             else if (inProg == false) {progindex = - 1;}
@@ -1080,18 +1087,7 @@ static inline void cb_wait(uint64_t d) {
     #else
     uint64_t t = d + usTime();
     while (t > usTime() && !cmdint) {
-        char kbc;
-        int kbh = kbhit();
-        for (int i = 0; i < kbh; ++i) {
-            kbc = _getch();
-            kbinbuf[i] = kbc;
-            if (!textlock) putchar(kbc);
-            if (kbc == 3) {
-                cmdint = true;
-                return;
-            }
-        }
-        fflush(stdout);
+        updatechars();
     }
     #endif
 }
@@ -1544,30 +1540,29 @@ void updateTxtAttrib() {
     if (txt_reverse) fputs("\e[7m", stdout);
     if (txt_underlncolor) printf("\e[58:5:%um", txt_underlncolor);
     #else
-    uint8_t tfgc, tbgc;
-    switch (fgc % 16) {
-        case 1: tfgc = 4; break;
-        case 3: tfgc = 6; break;
-        case 4: tfgc = 1; break;
-        case 6: tfgc = 3; break;
-        case 9: tfgc = 12; break;
-        case 11: tfgc = 14; break;
-        case 12: tfgc = 9; break;
-        case 14: tfgc = 11; break;
-        default: tfgc = fgc; break;
+    uint8_t tmpfgc, tmpbgc;
+    if (txt_truecolor) {
+        uint8_t a;
+        tmpfgc = (((truefgc >> 23) & 1) << 2) | (((truefgc >> 15) & 1) << 1) | ((truefgc >> 7) & 1);
+        tmpfgc |= ((((truefgc >> 22) & 1) & ((truefgc >> 21) & 1)) << 2)\
+            | ((((truefgc >> 14) & 1) & ((truefgc >> 13) & 1)) << 1)\
+            | (((truefgc >> 6) & 1) & ((truefgc >> 5) & 1));
+        a = ((((truefgc >> 16) & 0xFF) + ((truefgc >> 8) & 0xFF) + (truefgc & 0xFF)) / 3);
+        tmpfgc |= (8 * (a > 84));
+        tmpbgc = (((truebgc >> 23) & 1) << 2) | (((truebgc >> 15) & 1) << 1) | ((truebgc >> 7) & 1);
+        tmpbgc |= ((((truebgc >> 22) & 1) & ((truebgc >> 21) & 1)) << 2)\
+            | ((((truebgc >> 14) & 1) & ((truebgc >> 13) & 1)) << 1)\
+            | (((truebgc >> 6) & 1) & ((truebgc >> 5) & 1));
+        a = ((((truebgc >> 16) & 0xFF) + ((truebgc >> 8) & 0xFF) + (truebgc & 0xFF)) / 3);
+        tmpbgc |= (8 * (a > 84));
+    } else {
+        uint8_t b1 = 0, b2 = 0;
+        b1 = fgc & 1; b2 = (fgc >> 2) & 1; tmpfgc = (b1 ^ b2);
+        tmpfgc = (tmpfgc) | (tmpfgc << 2); tmpfgc = fgc ^ tmpfgc;
+        b1 = bgc & 1; b2 = (bgc >> 2) & 1; tmpbgc = (b1 ^ b2);
+        tmpbgc = (tmpbgc) | (tmpbgc << 2); tmpbgc = bgc ^ tmpbgc;
     }
-    switch (bgc % 16) {
-        case 1: tbgc = 4; break;
-        case 3: tbgc = 6; break;
-        case 4: tbgc = 1; break;
-        case 6: tbgc = 3; break;
-        case 9: tbgc = 12; break;
-        case 11: tbgc = 14; break;
-        case 12: tbgc = 9; break;
-        case 14: tbgc = 11; break;
-        default: tbgc = bgc; break;
-    }
-	SetConsoleTextAttribute(hConsole, (tfgc % 16) + (tbgc % 16) * 16);
+	SetConsoleTextAttribute(hConsole, (tmpfgc % 16) + ((tmpbgc % 16) << 4));
     #endif
     fflush(stdout);
 }

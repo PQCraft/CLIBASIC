@@ -7,6 +7,7 @@ IF CINT(RAND(1)) = 1: X = X * -1: ENDIF
 IF CINT(RAND(1)) = 1: Y = Y * -1: ENDIF
 IF CINT(RAND(1)) = 1: Z = Z * -1: ENDIF
 @ LOOP
+RESETTIMER
 COLOR RGB(LIMIT(R, 0, 255), LIMIT(G, 0, 255), LIMIT(B, 0, 255))
 PRINT "Hello, World!",, PAD$(CINT(R), 3), PAD$(CINT(G), 3), PAD$(CINT(B), 3),, PAD$(X, 9, " "), PAD$(Y, 9, " "), PAD$(Z, 9, " ");
 COLOR OC
@@ -20,7 +21,8 @@ IF G > 255: Y = Y * -1: ENDIF
 IF G < 0: Y = Y * -1: ENDIF
 IF B > 255: Z = Z * -1: ENDIF
 IF B < 0: Z = Z * -1: ENDIF
-WAIT 0.005
+WAITMS LIMIT(10 - TIMERMS(), 0, 10)
+RESETTIMER
 PUT "\r"
 LOCATE , CURY() - 1
 GOTO LOOP

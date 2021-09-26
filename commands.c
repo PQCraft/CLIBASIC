@@ -57,6 +57,9 @@ if (chkCmd(3, "@", "LABEL", "LBL")) {
     gotodata[i].dlsp = dlstackp;
     gotodata[i].fnsp = fnstackp;
     gotodata[i].itsp = itstackp;
+    #ifdef _WIN32
+    updatechars();
+    #endif
     goto noerr;
 }
 if (chkCmd(3, "%", "GOTO", "GO")) {
