@@ -76,8 +76,7 @@ if (chkCmd(1, "DO")) {
     if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
-    int32_t p = j;
-    while (cmd[p]) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
+    while (cmd[j]) {if (cmd[j] != ' ') {cerr = 3; return true;} ++j;}
     dldcmd[dlstackp] = false;
     dlstack[dlstackp].cp = cmdpos;
     dlstack[dlstackp].pl = progLine;
@@ -101,6 +100,7 @@ if (chkCmd(2, "WHILE", "DOWHILE")) {
         if (fndcmd[fnstackp]) return true;
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
+    if (getArgCt(ltmp[1]) != 1) {cerr = 3; return true;}
     uint8_t testval = logictest(ltmp[1]);
     if (testval == 255) return true;
     if (testval == 1) {
@@ -127,6 +127,7 @@ if (chkCmd(1, "LOOP")) {
     if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
+    while (cmd[j]) {if (cmd[j] != ' ') {cerr = 3; return true;} ++j;}
     if (inProg) {
         cp = dlstack[dlstackp].cp;
     } else {
@@ -138,8 +139,6 @@ if (chkCmd(1, "LOOP")) {
     lockpl = true;
     dldcmd[dlstackp] = false;
     dlstackp--;
-    int32_t p = j;
-    while (cmd[p]) {if (cmd[p] != ' ') {cerr = 1; return true;} p++;}
     didloop = true;
     return true;
 }
@@ -155,6 +154,7 @@ if (chkCmd(1, "LOOPWHILE")) {
         if (fndcmd[fnstackp]) return true;
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
+    if (getArgCt(ltmp[1]) != 1) {cerr = 3; return true;}
     uint8_t testval = logictest(ltmp[1]);
     if (testval == 255) return true;
     if (testval == 1) {
@@ -186,6 +186,7 @@ if (chkCmd(1, "IF")) {
         if (fndcmd[fnstackp]) return true;
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
+    if (getArgCt(ltmp[1]) != 1) {cerr = 3; return true;}
     uint8_t testval = logictest(ltmp[1]);
     if (testval == 255) return true;
     itdcmd[itstackp] = (bool)!testval;
@@ -203,6 +204,7 @@ if (chkCmd(1, "ELSE")) {
     if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
+    while (cmd[j]) {if (cmd[j] != ' ') {cerr = 3; return true;} ++j;}
     if (didelse) {cerr = 11; return true;}
     if (didelseif) {itdcmd[itstackp] = true; return true;}
     didelse = true;
@@ -221,6 +223,7 @@ if (chkCmd(1, "ELSEIF")) {
         if (fndcmd[fnstackp]) return true;
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
+    if (getArgCt(ltmp[1]) != 1) {cerr = 3; return true;}
     uint8_t testval = logictest(ltmp[1]);
     if (testval == 255) return true;
     itdcmd[itstackp] = (bool)(!testval);
@@ -236,6 +239,7 @@ if (chkCmd(1, "ENDIF")) {
     if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
+    while (cmd[j]) {if (cmd[j] != ' ') {cerr = 3; return true;} ++j;}
     itdcmd[itstackp + 1] = false;
     didelse = false;
     didelseif = false;
@@ -256,17 +260,17 @@ if (chkCmd(1, "FOR")) {
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     if (getArgCt(ltmp[1]) != 4) {cerr = 3; return true;}
     cerr = 2;
-    getArg(0, ltmp[1], fnvar);
+    if (getArg(0, ltmp[1], fnvar) == -1) return true;
     if (getVar(fnvar, forbuf[0]) != 2) return true;
-    getArg(1, ltmp[1], forbuf[1]);
+    if (getArg(1, ltmp[1], forbuf[1]) == -1) return true;
     if (getVal(forbuf[1], forbuf[1]) != 2) return true;
-    getArg(3, ltmp[1], forbuf[3]);
+    if (getArg(3, ltmp[1], forbuf[3]) == -1) return true;
     if (getVal(forbuf[3], forbuf[3]) != 2) return true;
     setVar(fnvar, forbuf[1], 2, -1);
     if (fnstack[fnstackp].cp == -1) {
         copyStr(forbuf[1], forbuf[0]);
     }
-    getArg(2, ltmp[1], forbuf[2]);
+    if (getArg(2, ltmp[1], forbuf[2]) == -1) return true;
     if (fninfor[fnstackp]) {
         sprintf(forbuf[0], "%lf", atof(forbuf[0]) + atof(forbuf[3]));
         setVar(fnvar, forbuf[0], 2, -1);
@@ -299,6 +303,7 @@ if (chkCmd(1, "NEXT")) {
         if (dldcmd[dlstackp]) {return true;}
     }
     fnstackp++;
+    while (cmd[j]) {if (cmd[j] != ' ') {cerr = 3; return true;} ++j;}
     if (fninfor[fnstackp]) {
         if (inProg) {
             cp = fnstack[fnstackp].cp;

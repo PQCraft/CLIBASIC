@@ -37,6 +37,9 @@ Enables the info text.
 .TP
 \fB\-r\fR, \fB\-\-redirection\fR
 Enables support for redirecting STDIN, STDOUT, and STDERR.
+.TP
+\fB\-n\fR, \fB\-\-newline\fR
+Prints a newline if the cursor is not at the beginning of the line before exiting.
 .SH EXAMPLES
 .TP
 \fBclibasic\fR

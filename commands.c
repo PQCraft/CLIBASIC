@@ -166,13 +166,27 @@ if (chkCmd(1, "LOCATE")) {
     cerr = 0;
     int tmp = 0;
     if (!solvearg(1)) goto cmderr;
+    #ifdef _WIN_NO_VT
     getCurPos();
+    #endif
     if (argt[1] == 0) {}
     else if (argt[1] != 2) {cerr = 2; goto cmderr;}
     else {
         tmp = atoi(arg[1]);
-        if (tmp < 1) {cerr = 16; goto cmderr;}
-        curx = tmp;
+        if (tmp == 0) {cerr = 16; goto cmderr;}
+        else if (tmp < 0) {
+            curx += tmp;
+            if (curx < 0) curx = 0;
+            printf("\e[%dD", -tmp);
+        } else {
+            curx = tmp;
+            #ifndef _WIN_NO_VT
+            --curx;
+            printf("\e[9999D");
+            if (curx) printf("\e[%dC", curx);
+            ++curx;
+            #endif
+        }
     }
     if (argct > 1) {
         if (!solvearg(2)) goto cmderr;
@@ -180,13 +194,23 @@ if (chkCmd(1, "LOCATE")) {
         else if (argt[2] != 2) {cerr = 2; goto cmderr;}
         else {
             tmp = atoi(arg[2]);
-            if (tmp < 1) {cerr = 16; goto cmderr;}
-            cury = tmp;
+            if (tmp == 0) {cerr = 16; goto cmderr;}
+            else if (tmp < 0) {
+                curx += tmp;
+                if (cury < 0) cury = 0;
+                printf("\e[%dA", -tmp);
+            } else {
+                cury = tmp;
+                #ifndef _WIN_NO_VT
+                --cury;
+                printf("\e[9999A");
+                if (cury) printf("\e[%dB", cury);
+                ++cury;
+                #endif
+            }
         }
     }
-    #ifndef _WIN_NO_VT
-    printf("\e[%d;%dH", cury, curx);
-    #else
+    #ifdef _WIN_NO_VT
     SetConsoleCursorPosition(hConsole, (COORD){curx - 1, cury - 1});
     #endif
     fflush(stdout);

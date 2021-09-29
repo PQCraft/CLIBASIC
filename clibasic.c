@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.22.5.1";
+char VER[] = "0.22.6";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -332,7 +332,7 @@ static inline void* setsig(int sig, void* func) {
     sigemptyset(&act.sa_mask);
     sigaddset(&act.sa_mask, sig);
     act.sa_handler = func;
-    act.sa_flags = SA_RESTART;
+    //act.sa_flags = SA_RESTART;
     sigaction(sig, &act, &old);
     return old.sa_handler;
     #else
@@ -483,6 +483,7 @@ void forceExit() {
     txtqunlock();
     tcsetattr(0, TCSANOW, &kbhterm);
     #endif
+    putchar('\n');
     exit(0);
 }
 
@@ -499,6 +500,8 @@ int openFile(char*, char*);
 bool closeFile(int);
 static inline void upCase(char*);
 uint8_t logictest(char*);
+
+bool checknl = false;
 
 void cleanExit() {
     txtqunlock();
@@ -540,6 +543,10 @@ void cleanExit() {
     while (i > 0) {getchar(); i--;}
     tcsetattr(0, TCSANOW, &kbhterm);
     #endif
+    if (checknl) {
+        getCurPos();
+        if (curx != 1) putchar('\n');
+    }
     freeBaseMem();
     exit(err);
 }
@@ -548,7 +555,8 @@ void cmdIntHndl() {
     setsig(SIGINT, cmdIntHndl);
     if (cmdint) setsig(SIGINT, cleanExit);
     int i = kbhit();
-    while (i > 0) {getchar(); i--;}
+    if (i) {read(0, &gpbuf, i);}
+    if (kbhit()) read(0, &gpbuf, kbhit());
     cmdint = true;
 }
 
@@ -623,6 +631,18 @@ static inline void ttycheck() {
     if (!isatty(STDOUT_FILENO)) {fputs("CLIBASIC does not support STDOUT redirection.\n", stderr); exit(1);}
 }
 
+static inline void readyTerm() {
+    ttycheck();
+    #ifndef _WIN32
+    tcgetattr(0, &kbhterm);
+    kbhterm2 = kbhterm;
+    kbhterm2.c_lflag &= ~ICANON;
+    tcsetattr(0, TCSANOW, &kbhterm2);
+    sigemptyset(&intmask);
+    sigaddset(&intmask, SIGINT);
+    #endif
+}
+
 int main(int argc, char** argv) {
     #if defined(GUI_CHECK) && defined(__unix__)
     if (system("tty -s 1> /dev/null 2> /dev/null")) {
@@ -678,6 +698,7 @@ int main(int argc, char** argv) {
                 puts("    -s, --skip                  Skips searching for autorun programs.");
                 puts("    -i, --info                  Displays an info string when starting in shell mode.");
                 puts("    -r, --redirection           Allows for redirection (this may cause issues).");
+                puts("    -n, --newline               Prints a newline if the cursor is not at the beginning of the line.");
                 pexit = true;
             } else if (!strcmp(argv[i], "--args")) {
                 if (runc || !runfile) {fputs("Args can only be passed when running a program.\n", stderr); exit(1);}
@@ -689,7 +710,6 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--exec") || !strcmp(argv[i], "-x")) {
                 if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
                 if (runfile) {fputs("Program already loaded, use --args.\n", stderr); exit(1); unloadAllProg();}
-                ttycheck();
                 if (runfile) {unloadProg(); fputs("Incorrect number of options passed.\n", stderr); exit(1);}
                 i++;
                 if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
@@ -717,9 +737,13 @@ int main(int argc, char** argv) {
                 if (redirection) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
                 redirection = true;
                 if (shortopt) goto chkshortopt;
+            } else if (!strcmp(argv[i], "--newline") || (shortopt && argv[i][shortopti] == 'n')) {
+                if (checknl) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                checknl = true;
+                if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--command") || !strcmp(argv[i], "-c")) {
                 if (runfile) {fputs("Cannot run file and command.\n", stderr); exit(1);}
-                ttycheck();
+                readyTerm();
                 if (runc) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
                 i++;
                 if (!argv[i]) {fputs( "No command provided.\n", stderr); exit(1);}
@@ -752,7 +776,7 @@ int main(int argc, char** argv) {
             }
         } else {
             if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
-            ttycheck();
+            readyTerm();
             if (runfile) {unloadProg(); fputs("Incorrect number of options passed.\n", stderr); exit(1);}
             if (!strcmp(argv[i], "--file") || !strcmp(argv[i], "-f")) {
                 i++;
@@ -764,15 +788,7 @@ int main(int argc, char** argv) {
         }
     }
     if (pexit) exit(0);
-    ttycheck();
-    #ifndef _WIN32
-    tcgetattr(0, &kbhterm);
-    kbhterm2 = kbhterm;
-    kbhterm2.c_lflag &= ~ICANON;
-    tcsetattr(0, TCSANOW, &kbhterm2);
-    sigemptyset(&intmask);
-    sigaddset(&intmask, SIGINT);
-    #endif
+    readyTerm();
     rl_readline_name = "CLIBASIC";
     char* rl_tmpptr = calloc(1, 1);
     rl_completion_entry_function = rl_get_tab;
@@ -1009,7 +1025,10 @@ int main(int argc, char** argv) {
             if (inProg) {
                 if (progbuf[progindex][cp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((progbuf[progindex][cp] == ':' && !inStr) || progbuf[progindex][cp] == '\n' || progbuf[progindex][cp] == 0) {
-                    if (progbuf[progindex][cp - cmdl - 1] == '\n' && !lockpl) progLine++;
+                    if (progbuf[progindex][cp - cmdl - 1] == '\n') {
+                        if (!lockpl) progLine++;
+                        if (inStr) inStr = false;
+                    }
                     if (lockpl) lockpl = false;
                     while (progbuf[progindex][cp - cmdl] == ' ' && cmdl > 0) {cmdl--;}
                     cmd = (char*)realloc(cmd, cmdl + 1);
@@ -1098,32 +1117,13 @@ static inline int isFile(char* path) {
     return !(S_ISDIR(pathstat.st_mode));
 }
 
-#ifndef _WIN32
-int gcpret, gcpi;
-void (*gcpoldsigh)(int);
-bool gcpint = false;
-
-void gcpsigh() {
-    setsig(SIGINT, gcpsigh);
-    gcpoldsigh(0);
-    gcpint = true;
-    if (gcpret < gcpi + 1) getCurPos();
-    txtqunlock();
-    return;
-}
-
-bool gcp_sig = true;
-#endif
-
 static inline void getCurPos() {
     fflush(stdout);
     cury = 0; curx = 0;
     #ifndef _WIN32
-    char buf[16];
-    register int i;
-    if (gcp_sig) sigprocmask(SIG_SETMASK, &intmask, &oldmask);
-    i = kbhit();
-    while (i > 0) {getchar(); i--;}
+    static char buf[16] = {0};
+    for (int i = 0; i < 16; ++i) {buf[i] = 0;}
+    register int i = 0;
     if (!textlock) {
         sneaktextlock = true;
         tcgetattr(0, &term);
@@ -1131,22 +1131,36 @@ static inline void getCurPos() {
         term.c_lflag &= ~(ICANON|ECHO);
         tcsetattr(0, TCSANOW, &term);
     }
-    fputs("\e[6n", stdout);
-    fflush(stdout);
-    i = 0;
-    gcpi = 0;
-    while (!gcpi) {gcpi = kbhit();}
-    while (i) {gcpi += i = kbhit();}
-    gcpret = read(1, &buf, gcpi + 1);
+    i = kbhit();
+    while (i > 0) {getchar(); --i;}
+    for (int r = 0; r < 2; ++r) {
+        i = 0;
+        fputs("\e[6n", stdout);
+        fflush(stdout);
+        int j = 0;
+        while (!(j = kbhit())) {}
+        while (1) {
+            buf[i] = getchar();
+            if (buf[i] == 'R' || buf[i] == '\n' || i >= j - 1) {++i; goto gcplexit;}
+            ++i;
+        }
+        gcplexit:
+        buf[i] = 0;
+        i = kbhit();
+        while (i > 0) {getchar(); --i;}
+    }
     if (!textlock) {
         tcsetattr(0, TCSANOW, &restore);
         sneaktextlock = false;
     }
     i = kbhit();
-    while (i > 0) {getchar(); i--;}
-    if (gcpret != gcpi) {gcp_sig = false; getCurPos(); gcp_sig = true;}
-    else {sscanf(buf, "\e[%d;%dR", &cury, &curx);}
-    if (gcp_sig) sigprocmask(SIG_SETMASK, &oldmask, NULL);
+    while (i > 0) {getchar(); --i;}
+    if (buf[0] == '\e') {
+        sscanf(buf, "\e[%d;%dR", &cury, &curx);
+    } else {
+        sscanf(buf, "[%d;%dR", &cury, &curx);
+    }
+    if (curx == 0 || cury == 0) {getCurPos();}
     #else
     CONSOLE_SCREEN_BUFFER_INFO con;
     GetConsoleScreenBufferInfo(hConsole, &con);
@@ -1277,13 +1291,19 @@ bool loadProg(char* filename) {
     progLine = 1;
     didelse = false;
     didelseif = false;
+    #ifdef _WIN_NO_VT
     getCurPos();
     int tmpx = curx, tmpy = cury;
+    #else
+    fputs("\e[s", stdout);
+    fflush(stdout);
+    #endif
     int32_t fsize = (uint32_t)ftell(prog);
     uint64_t time2 = usTime();
     fseek(prog, 0, SEEK_SET);
     #ifndef _WIN_NO_VT
-    printf("\e[%d;%dH", tmpy, tmpx);
+    fputs("\e[u\e[s", stdout);
+    fflush(stdout);
     #else
     SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
     #endif
@@ -1294,7 +1314,8 @@ bool loadProg(char* filename) {
     bool comment = false;
     bool inStr = false;
     #ifndef _WIN_NO_VT
-    printf("\e[%d;%dH", tmpy, tmpx);
+    fputs("\e[u\e[s", stdout);
+    fflush(stdout);
     #else
     SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
     #endif
@@ -1304,14 +1325,15 @@ bool loadProg(char* filename) {
         int tmpc = fgetc(prog);
         if (tmpc == '"') inStr = !inStr;
         if (!inStr && (tmpc == '\'' || tmpc == '#')) comment = true;
-        if (tmpc == '\n') comment = false;
+        if (tmpc == '\n') {comment = false; inStr = false;}
         if (tmpc == '\r' || tmpc == '\t') tmpc = ' ';
         if (tmpc < 0) tmpc = 0;
         if (!comment) {progbuf[progindex][j] = (char)((inStr) ? tmpc : ((tmpc >= 'a' && tmpc <= 'z') ? tmpc -= 32 : tmpc)); j++;}
         if (usTime() - time2 >= 250000) {
             time2 = usTime();
             #ifndef _WIN_NO_VT
-            printf("\e[%d;%dH", tmpy, tmpx);
+            fputs("\e[u\e[s", stdout);
+            fflush(stdout);
             #else
             SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
             #endif
@@ -1320,7 +1342,8 @@ bool loadProg(char* filename) {
         }
     }
     #ifndef _WIN_NO_VT
-    printf("\e[%d;%dH", tmpy, tmpx);
+    fputs("\e[u\e[s", stdout);
+    fflush(stdout);
     #else
     SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
     #endif
@@ -1585,6 +1608,7 @@ static inline void getStr(char* str1, char* str2) {
                 case 'v': c = '\v'; break;
                 case 'b': c = '\b'; break;
                 case 'e': c = '\e'; break;
+                case 'a': c = '\a'; break;
                 case '[': c = 1; break;
                 case ']': c = 2; break;
                 case 'x':

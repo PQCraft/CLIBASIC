@@ -1,3 +1,4 @@
+_txtlock
 do
     locate 1
     h = date("hr")
@@ -14,5 +15,5 @@ do
     s = date(0)
     waitms 900
     while date(0) = s: loop
-    locate , cury() - 1
+    locate , -1
 loop
