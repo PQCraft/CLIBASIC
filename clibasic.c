@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.23";
+char VER[] = "0.23.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -414,7 +414,6 @@ void updatechars() {
         kbinbuf[++i] = kbc;
         if (!textlock) putchar(kbc);
         if (kbc == 3) {
-            //cmdint = true;
             cmdIntHndl();
         }
     }
@@ -513,10 +512,11 @@ void cleanExit() {
         cmdint = true;
         inProg = false;
         putchar('\n');
+        history_set_pos(history_length);
         rl_on_new_line();
         rl_replace_line("", 0);
         rl_pending_input = false;
-        rl_forced_update_display();
+        rl_redisplay();
         return;
     }
     setsig(SIGINT, forceExit);
@@ -634,8 +634,6 @@ static inline void readyTerm() {
     tcgetattr(0, &kbhterm);
     kbhterm2 = kbhterm;
     kbhterm2.c_lflag &= ~ICANON;
-    //kbhterm2.c_cc[VMIN] = 1;
-    //kbhterm2.c_cc[VTIME] = 0;
     tcsetattr(0, TCSANOW, &kbhterm2);
     sigemptyset(&intmask);
     sigaddset(&intmask, SIGINT);
@@ -750,17 +748,13 @@ int main(int argc, char** argv) {
                 runfile = true;
                 copyStr(argv[i], conbuf);
                 bool inStr = false;
-                bool inCmd = true;
                 for (int32_t i = 0; conbuf[i]; ++i) {
                     switch (conbuf[i]) {
                         case 'a' ... 'z':
-                            if (!inStr || inCmd) conbuf[i] = conbuf[i] - 32;
+                            if (!inStr) conbuf[i] = conbuf[i] - 32;
                             break;
                         case '"':
-                            if (!inCmd) inStr = !inStr;
-                            break;
-                        case ' ':
-                            if (!inStr && inCmd) inCmd = false;
+                            inStr = !inStr;
                             break;
                     }
                 }
@@ -992,17 +986,13 @@ int main(int argc, char** argv) {
             copyStr(tmpstr, conbuf);
             free(tmpstr);
             bool inStr = false;
-            bool inCmd = true;
             for (int32_t i = 0; conbuf[i]; ++i) {
                 switch (conbuf[i]) {
                     case 'a' ... 'z':
-                        if (!inStr || inCmd) conbuf[i] = conbuf[i] - 32;
+                        if (!inStr) conbuf[i] = conbuf[i] - 32;
                         break;
                     case '"':
-                        if (!inCmd) inStr = !inStr;
-                        break;
-                    case ' ':
-                        if (!inStr && inCmd) inCmd = false;
+                        inStr = !inStr;
                         break;
                 }
             }
@@ -1145,7 +1135,6 @@ static inline void getCurPos() {
         uint64_t tmpus = usTime();
         while (!kbhit()) {if (usTime() - tmpus > 50000) {goto resend;}}
         while (kbhit()) {
-            //buf[i] = getchar();
             if (kbhit()) {
                 read(0, &buf[i], 1);
                 if (buf[i] == 'R' || buf[i] == '\n' || kbhit() < 1) {++i; goto gcplexit;}
@@ -1724,7 +1713,9 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     ++getFuncIndex;
     {
         int32_t i;
-        for (i = 0; inbuf[i] != '('; ++i) {}
+        bool invalName = false;
+        for (i = 0; inbuf[i] != '('; ++i) {if (!isValidVarChar(inbuf[i])) {invalName = true;}}
+        if (invalName) {copyStrTo(inbuf, i, gpbuf); seterrstr(gpbuf); cerr = 4; return 0;}
         int32_t j = strlen(inbuf) - 1;
         copyStrSnip(inbuf, i + 1, j, gftmp[0]);
         fargct = getArgCt(gftmp[0]);
@@ -2470,7 +2461,6 @@ static inline int getArg(int num, char* inbuf, char* outbuf) {
             }
         }
     }
-    if (pct || bct || inStr) {outbuf[0] = 0; cerr = 1; return -1;}
     outbuf[len] = 0;
     return len;
 }
@@ -2481,20 +2471,30 @@ void mkargs() {
     int32_t j = 0;
     while (cmd[j] == ' ') {++j;}
     int32_t h = j;
-    while (cmd[h] != ' ' && cmd[h] != '=' && cmd[h]) {++h;}
+    bool sccmd = false;
+    if (cmd[j] == '$' || cmd[j] == '@' || cmd[j] == '%') {
+        int32_t tmpj = j + 1;
+        while (cmd[tmpj] == ' ') {++tmpj;}
+        if (cmd[tmpj] != '=') sccmd = true;
+    }
+    if (!sccmd) {
+        while (cmd[h] != ' ' && cmd[h] != '=' && cmd[h]) {++h;}
+    }
     copyStrSnip(cmd, h + 1, strlen(cmd), tmpbuf[0]);
-    int32_t tmph = h;
-    while (cmd[tmph] == ' ' && cmd[tmph]) {++tmph;}
-    if (cmd[tmph] == '=') {
-        strcpy(tmpbuf[1], "SET ");
-        cmd[tmph] = ',';
-        copyStrApnd(cmd, tmpbuf[1]);
-        cmd = (char*)realloc(cmd, strlen(tmpbuf[1]) + 1);
-        copyStr(tmpbuf[1], cmd);
-        copyStr(tmpbuf[1], tmpbuf[0]);
-        tmpbuf[1][0] = 0;
-        h = 3;
-        j = 0;
+    if (!sccmd) {
+        int32_t tmph = h;
+        while (cmd[tmph] == ' ' && cmd[tmph]) {++tmph;}
+        if (cmd[tmph] == '=') {
+            strcpy(tmpbuf[1], "SET ");
+            cmd[tmph] = ',';
+            copyStrApnd(cmd, tmpbuf[1]);
+            cmd = (char*)realloc(cmd, strlen(tmpbuf[1]) + 1);
+            copyStr(tmpbuf[1], cmd);
+            copyStr(tmpbuf[1], tmpbuf[0]);
+            tmpbuf[1][0] = 0;
+            h = 3;
+            j = 0;
+        }
     }
     argct = getArgCt(tmpbuf[0]);
     tmpargs = (char**)realloc(tmpargs, (argct + 1) * sizeof(char*));
@@ -2505,7 +2505,7 @@ void mkargs() {
     for (int i = 0; i <= argct; ++i) {
         argl[i] = 0;
         if (i == 0) {
-            copyStrSnip(cmd, j, h, tmpbuf[0]);
+            copyStrSnip(cmd, j, ((sccmd) ? h + 1 : h), tmpbuf[0]);
             argl[0] = strlen(tmpbuf[0]);
             tmpargs[0] = malloc(argl[0] + 1);
             copyStr(tmpbuf[0], tmpargs[0]);
@@ -2608,8 +2608,10 @@ static inline uint8_t logictestexpr(char* inbuf) {
     lttmp[2][tmpp] = 0;
     t1 = getVal(lttmp[0], lttmp[0]);
     if (t1 == 0) goto ltreturn;
+    if (t1 == 255) {cerr = 1; goto ltreturn;}
     t2 = getVal(lttmp[2], lttmp[2]);
     if (t2 == 0) goto ltreturn;
+    if (t2 == 255) {cerr = 1; goto ltreturn;}
     if (t1 != t2) {cerr = 2; goto ltreturn;}
     if (!strcmp(lttmp[1], "=")) {
         ret = (uint8_t)(bool)!strcmp(lttmp[0], lttmp[2]);

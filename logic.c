@@ -1,5 +1,5 @@
 if (chkCmd(1, "REM")) return true;
-if (chkCmd(2, "?", "PRINT")) {
+if (chkCmd(2, "?", "PRINT") || cmd[i] == '?') {
     if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) return true;
     }
@@ -9,7 +9,13 @@ if (chkCmd(2, "?", "PRINT")) {
     if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
     }
-    while (cmd[j] == ' ') j++;
+    if (cmd[i] == '?') {j = i + 1;}
+    {
+        int32_t tmpj = j;
+        while (cmd[tmpj] == ' ') ++tmpj;
+        if (cmd[tmpj] == '=') return false;
+    }
+    while (cmd[j] == ' ') ++j;
     if (cmd[j] == 0) {putchar('\n'); return true;}
     else {j--;}
     bool newline = false;

@@ -724,7 +724,7 @@ if (chkCmd(1, "_AUTOCMDHIST")) {
     goto noerr;
 }
 if (chkCmd(1, "_SAVECMDHIST")) {
-    if (inProg) {cerr = 254; goto cmderr;}
+    if (inProg && !autorun) {cerr = 254; goto cmderr;}
     if (argct > 1) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (argct) {
@@ -744,7 +744,7 @@ if (chkCmd(1, "_SAVECMDHIST")) {
     goto noerr;
 }
 if (chkCmd(1, "_LOADCMDHIST")) {
-    if (inProg) {cerr = 254; goto cmderr;}
+    if (inProg && !autorun) {cerr = 254; goto cmderr;}
     if (argct > 1) {cerr = 3; goto cmderr;}
     cerr = 0;
     clear_history();
@@ -759,6 +759,15 @@ if (chkCmd(1, "_LOADCMDHIST")) {
         ret = chdir(tmpcwd);
         (void)ret;
     }
+    goto noerr;
+}
+if (chkCmd(1, "_LIMITCMDHIST")) {
+    if (inProg && !autorun) {cerr = 254; goto cmderr;}
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    stifle_history(atoi(arg[1]));
     goto noerr;
 }
 if (chkCmd(1, "_TXTLOCK")) {
