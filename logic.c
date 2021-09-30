@@ -112,7 +112,7 @@ if (chkCmd(2, "WHILE", "DOWHILE")) {
         updatechars();
         #endif
     }
-    dldcmd[dlstackp] = (bool)testval;
+    dldcmd[dlstackp] = testval;
     dldcmd[dlstackp] = !dldcmd[dlstackp];
     return true;
 }
@@ -189,8 +189,8 @@ if (chkCmd(1, "IF")) {
     if (getArgCt(ltmp[1]) != 1) {cerr = 3; return true;}
     uint8_t testval = logictest(ltmp[1]);
     if (testval == 255) return true;
-    itdcmd[itstackp] = (bool)!testval;
-    didelseif = !itdcmd[itstackp];
+    didelseif = testval;
+    itdcmd[itstackp] = !testval;
     return true;
 }
 if (chkCmd(1, "ELSE")) {
@@ -224,10 +224,11 @@ if (chkCmd(1, "ELSEIF")) {
     }
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     if (getArgCt(ltmp[1]) != 1) {cerr = 3; return true;}
+    if (didelseif) {itdcmd[itstackp] = true; return true;}
     uint8_t testval = logictest(ltmp[1]);
     if (testval == 255) return true;
-    itdcmd[itstackp] = (bool)(!testval);
-    if (!didelseif) didelseif = !itdcmd[itstackp];
+    didelseif = testval;
+    itdcmd[itstackp] = !testval;
     return true;
 }
 if (chkCmd(1, "ENDIF")) {
@@ -277,8 +278,8 @@ if (chkCmd(1, "FOR")) {
     }
     int testval = logictest(forbuf[2]);
     if (testval == 255) return true;
-    fndcmd[fnstackp] = !(bool)testval;
-    if (!(fninfor[fnstackp] = (bool)testval)) {cerr = 0; return true;}
+    fndcmd[fnstackp] = !testval;
+    if (!(fninfor[fnstackp] = testval)) {cerr = 0; return true;}
     if (!fninfor[fnstackp] && fnstack[fnstackp].cp == -1) {
         sprintf(forbuf[0], "%lf", atof(forbuf[0]) - atof(forbuf[3]));
         setVar(fnvar, forbuf[0], 2, -1);

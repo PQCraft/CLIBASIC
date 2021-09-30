@@ -30,6 +30,8 @@ DO
                 STR$ = STR$ + "\\e"
             ELSEIF C$ = "\a"
                 STR$ = STR$ + "\\a"
+            ELSEIF ASC(C$) < 32 | ASC(C$) > 126
+                STR$ = STR$ + "\\x" + PAD$(HEX$(ASC(C$)), 2, "0")
             ELSE
                 STR$ = STR$ + C$
             ENDIF

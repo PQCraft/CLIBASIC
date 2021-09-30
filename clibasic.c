@@ -108,14 +108,14 @@
 // Useful macros
 
 /* Swap function to swap values */
-#define swap(a, b) __typeof__(a) c = a; a = b; b = c
+#define swap(a, b) {__typeof__(a) c = a; a = b; b = c;}
 
 /* Free & set to NULL combo */
 #define nfree(ptr) free(ptr); ptr = NULL
 
 // Base defines
 
-char VER[] = "0.22.6";
+char VER[] = "0.23";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -332,7 +332,7 @@ static inline void* setsig(int sig, void* func) {
     sigemptyset(&act.sa_mask);
     sigaddset(&act.sa_mask, sig);
     act.sa_handler = func;
-    //act.sa_flags = SA_RESTART;
+    act.sa_flags = SA_RESTART;
     sigaction(sig, &act, &old);
     return old.sa_handler;
     #else
@@ -507,7 +507,8 @@ void cleanExit() {
     txtqunlock();
     if (inprompt) {
         int i = kbhit();
-        while (i > 0) {getchar(); i--;}
+        if (i) {read(0, &gpbuf, i);}
+        getCurPos();
         unloadAllProg();
         cmdint = true;
         inProg = false;
@@ -552,11 +553,7 @@ void cleanExit() {
 }
 
 void cmdIntHndl() {
-    setsig(SIGINT, cmdIntHndl);
     if (cmdint) setsig(SIGINT, cleanExit);
-    int i = kbhit();
-    if (i) {read(0, &gpbuf, i);}
-    if (kbhit()) read(0, &gpbuf, kbhit());
     cmdint = true;
 }
 
@@ -637,6 +634,8 @@ static inline void readyTerm() {
     tcgetattr(0, &kbhterm);
     kbhterm2 = kbhterm;
     kbhterm2.c_lflag &= ~ICANON;
+    //kbhterm2.c_cc[VMIN] = 1;
+    //kbhterm2.c_cc[VTIME] = 0;
     tcsetattr(0, TCSANOW, &kbhterm2);
     sigemptyset(&intmask);
     sigaddset(&intmask, SIGINT);
@@ -645,7 +644,7 @@ static inline void readyTerm() {
 
 int main(int argc, char** argv) {
     #if defined(GUI_CHECK) && defined(__unix__)
-    if (system("tty -s 1> /dev/null 2> /dev/null")) {
+    if (!isatty(STDERR_FILENO) && !isatty(STDIN_FILENO) && !isatty(STDOUT_FILENO)) {
         char* command = malloc(CB_BUF_SIZE);
         copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e $'clear;", command);
         for (int i = 0; i < argc; ++i) {
@@ -1117,11 +1116,16 @@ static inline int isFile(char* path) {
     return !(S_ISDIR(pathstat.st_mode));
 }
 
+#ifndef _WIN32
+bool gcp_sig = true;
+#endif
+
 static inline void getCurPos() {
     fflush(stdout);
     cury = 0; curx = 0;
     #ifndef _WIN32
-    static char buf[16] = {0};
+    if (gcp_sig) sigprocmask(SIG_SETMASK, &intmask, &oldmask);
+    static char buf[16];
     for (int i = 0; i < 16; ++i) {buf[i] = 0;}
     register int i = 0;
     if (!textlock) {
@@ -1135,14 +1139,18 @@ static inline void getCurPos() {
     while (i > 0) {getchar(); --i;}
     for (int r = 0; r < 2; ++r) {
         i = 0;
+        resend:
         fputs("\e[6n", stdout);
         fflush(stdout);
-        int j = 0;
-        while (!(j = kbhit())) {}
-        while (1) {
-            buf[i] = getchar();
-            if (buf[i] == 'R' || buf[i] == '\n' || i >= j - 1) {++i; goto gcplexit;}
-            ++i;
+        uint64_t tmpus = usTime();
+        while (!kbhit()) {if (usTime() - tmpus > 50000) {goto resend;}}
+        while (kbhit()) {
+            //buf[i] = getchar();
+            if (kbhit()) {
+                read(0, &buf[i], 1);
+                if (buf[i] == 'R' || buf[i] == '\n' || kbhit() < 1) {++i; goto gcplexit;}
+                ++i;
+            }
         }
         gcplexit:
         buf[i] = 0;
@@ -1160,7 +1168,8 @@ static inline void getCurPos() {
     } else {
         sscanf(buf, "[%d;%dR", &cury, &curx);
     }
-    if (curx == 0 || cury == 0) {getCurPos();}
+    if (curx == 0 || cury == 0) {gcp_sig = false; getCurPos(); gcp_sig = true;}
+    if (gcp_sig) sigprocmask(SIG_SETMASK, &oldmask, NULL);
     #else
     CONSOLE_SCREEN_BUFFER_INFO con;
     GetConsoleScreenBufferInfo(hConsole, &con);
@@ -1585,6 +1594,8 @@ void updateTxtAttrib() {
         b1 = bgc & 1; b2 = (bgc >> 2) & 1; tmpbgc = (b1 ^ b2);
         tmpbgc = (tmpbgc) | (tmpbgc << 2); tmpbgc = bgc ^ tmpbgc;
     }
+    if (txt_dim) {tmpfgc %= 8; tmpbgc %= 8;}
+    if (txt_reverse) swap(tmpfgc, tmpbgc);
 	SetConsoleTextAttribute(hConsole, (tmpfgc % 16) + ((tmpbgc % 16) << 4));
     #endif
     fflush(stdout);

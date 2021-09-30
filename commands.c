@@ -801,7 +801,7 @@ if (chkCmd(1, "_TXTATTRIB")) {
         if (!strcmp(arg[1], "UNDERLINE")) attrib = 3; else
         if (!strcmp(arg[1], "DBL_UNDERLINE") || !strcmp(arg[1], "DOUBLE_UNDERLINE")) attrib = 4; else
         if (!strcmp(arg[1], "SQG_UNDERLINE") || !strcmp(arg[1], "SQUIGGLY_UNDERLINE")) attrib = 5; else
-        if (!strcmp(arg[1], "STRIKETROUGH")) attrib = 6; else
+        if (!strcmp(arg[1], "STRIKETHROUGH")) attrib = 6; else
         if (!strcmp(arg[1], "OVERLINE")) attrib = 7; else
         if (!strcmp(arg[1], "DIM")) attrib = 8; else
         if (!strcmp(arg[1], "BLINK")) attrib = 9; else
