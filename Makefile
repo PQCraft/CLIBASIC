@@ -50,7 +50,8 @@ else
 MAN_INSTALL_PATH = ~/.local/share/man/man1/clibasic.1
 INSTALL_TO = ~/.local/bin/clibasic
 endif
-INSTALL = mkdir -p $(shell dirname -- $(INSTALL_TO)) $(shell dirname -- $(MAN_INSTALL_PATH)); cp $(BUILD_TO) $(INSTALL_TO); cp $(MAN_PATH) $(MAN_INSTALL_PATH); gzip -f $(MAN_INSTALL_PATH)
+INSTALL = mkdir -p $(shell dirname -- $(INSTALL_TO)) $(shell dirname -- $(MAN_INSTALL_PATH)); cp $(BUILD_TO) $(INSTALL_TO);\
+if [ -f $(MAN_PATH) ]; then cp $(MAN_PATH) $(MAN_INSTALL_PATH); gzip -f $(MAN_INSTALL_PATH); fi
 
 UNINSTALL = rm -f $(INSTALL_TO) $(MAN_INSTALL_PATH).gz
 

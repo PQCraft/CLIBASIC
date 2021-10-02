@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.23.1";
+char VER[] = "0.23.2";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -225,6 +225,7 @@ char* errstr = NULL;
 char conbuf[CB_BUF_SIZE];
 char prompt[CB_BUF_SIZE];
 char pstr[CB_BUF_SIZE];
+char cmpstr[CB_BUF_SIZE];
 
 uint8_t fgc = 15;
 uint8_t bgc = 0;
@@ -243,6 +244,9 @@ bool inprompt = false;
 bool runfile = false;
 bool runc = false;
 bool autorun = false;
+
+bool redirection = false;
+bool checknl = false;
 
 bool sh_silent = false;
 bool sh_clearAttrib = true;
@@ -500,8 +504,6 @@ bool closeFile(int);
 static inline void upCase(char*);
 uint8_t logictest(char*);
 
-bool checknl = false;
-
 void cleanExit() {
     txtqunlock();
     if (inprompt) {
@@ -618,8 +620,6 @@ static inline char* pathfilename(char* fn) {
     copyStrTo(fn, i + 1, bfnbuf);
     return bfnbuf;
 }
-
-bool redirection = false;
 
 static inline void ttycheck() {
     if (redirection) return;
@@ -748,6 +748,7 @@ int main(int argc, char** argv) {
                 runfile = true;
                 copyStr(argv[i], conbuf);
                 bool inStr = false;
+                bool sawCmd = false;
                 for (int32_t i = 0; conbuf[i]; ++i) {
                     switch (conbuf[i]) {
                         case 'a' ... 'z':
@@ -755,6 +756,9 @@ int main(int argc, char** argv) {
                             break;
                         case '"':
                             inStr = !inStr;
+                            break;
+                        case ' ':
+                            if (!sawCmd) {sawCmd = true; inStr = false;}
                             break;
                     }
                 }
@@ -900,7 +904,13 @@ int main(int argc, char** argv) {
             char* tmpcwd = getcwd(NULL, 0);
             int ret = chdir(homepath);
             FILE* tmpfile = fopen(HIST_FILE, "r");
-            if ((autohist = (tmpfile != NULL))) {fclose(tmpfile); read_history(HIST_FILE);}
+            if ((autohist = (tmpfile != NULL))) {
+                fclose(tmpfile);
+                read_history(HIST_FILE);
+                history_set_pos(history_length);
+                HIST_ENTRY* tmphist = history_get(where_history());
+                if (tmphist) copyStr(tmphist->line, cmpstr);
+            }
             inProg = true;
             autorun = true;
             if (!loadProg(".clibasicrc"))
@@ -980,12 +990,12 @@ int main(int argc, char** argv) {
                 while (tmpstr[tmpptr] == ' ' && tmpptr) {
                     tmpstr[tmpptr--] = 0;
                 }
-            }
-            HIST_ENTRY* tmphist = history_get(history_length);
-            if (!tmphist || strcmp(tmpstr, tmphist->line)) add_history(tmpstr);
+            }   
+            if (strcmp(tmpstr, cmpstr)) {add_history(tmpstr); copyStr(tmpstr, cmpstr);}
             copyStr(tmpstr, conbuf);
             free(tmpstr);
             bool inStr = false;
+            bool sawCmd = false;
             for (int32_t i = 0; conbuf[i]; ++i) {
                 switch (conbuf[i]) {
                     case 'a' ... 'z':
@@ -993,6 +1003,9 @@ int main(int argc, char** argv) {
                         break;
                     case '"':
                         inStr = !inStr;
+                        break;
+                    case ' ':
+                        if (!sawCmd) {sawCmd = true; inStr = false;}
                         break;
                 }
             }
@@ -1095,7 +1108,7 @@ static inline void cb_wait(uint64_t d) {
     #else
     uint64_t t = d + usTime();
     while (t > usTime() && !cmdint) {
-        updatechars();
+        if (!(usTime() % 5000))updatechars();
     }
     #endif
 }
@@ -1319,9 +1332,11 @@ bool loadProg(char* filename) {
     #endif
     printf("(0/%llu bytes)...", (long long unsigned)fsize);
     fflush(stdout);
+    bool sawCmd = false;
     while (j < fsize && !feof(prog)) {
         int tmpc = fgetc(prog);
         if (tmpc == '"') inStr = !inStr;
+        if (!sawCmd && tmpc == ' ') {sawCmd = true; inStr = false;}
         if (!inStr && (tmpc == '\'' || tmpc == '#')) comment = true;
         if (tmpc == '\n') {comment = false; inStr = false;}
         if (tmpc == '\r' || tmpc == '\t') tmpc = ' ';
@@ -1450,6 +1465,7 @@ static inline bool isValidVarChar(char c) {
         case '[':
         case ']':
         case '_':
+        case '~':
             return true;
             break;
         default:

@@ -30,3 +30,4 @@ mkrel "clibasic-windows-x86.zip" "clibasic.exe *.dll" "cross clean build32" "cro
 mv clibasic.tmp clibasic 2> /dev/null
 mv clibasic.exe.tmp clibasic.exe 2> /dev/null
 
+exit 0

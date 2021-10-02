@@ -35,6 +35,7 @@ if (chkCmd(2, "SET", "LET")) {
 }
 if (chkCmd(3, "@", "LABEL", "LBL")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
+    upCase(tmpargs[1]);
     cerr = 0;
     int i = -1;
     for (int j = 0; j < gotomaxct; ++j) {
@@ -64,6 +65,7 @@ if (chkCmd(3, "@", "LABEL", "LBL")) {
 }
 if (chkCmd(3, "%", "GOTO", "GO")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
+    upCase(tmpargs[1]);
     cerr = 0;
     int i = -1;
     for (int j = 0; j < gotomaxct; ++j) {
@@ -177,12 +179,14 @@ if (chkCmd(1, "LOCATE")) {
         else if (tmp < 0) {
             curx += tmp;
             if (curx < 0) curx = 0;
+            #ifndef _WIN_NO_VT
             printf("\e[%dD", -tmp);
+            #endif
         } else {
             curx = tmp;
             #ifndef _WIN_NO_VT
             --curx;
-            printf("\e[9999D");
+            fputs("\e[9999D", stdout);
             if (curx) printf("\e[%dC", curx);
             ++curx;
             #endif
@@ -196,14 +200,16 @@ if (chkCmd(1, "LOCATE")) {
             tmp = atoi(arg[2]);
             if (tmp == 0) {cerr = 16; goto cmderr;}
             else if (tmp < 0) {
-                curx += tmp;
+                cury += tmp;
                 if (cury < 0) cury = 0;
+                #ifndef _WIN_NO_VT
                 printf("\e[%dA", -tmp);
+                #endif
             } else {
                 cury = tmp;
                 #ifndef _WIN_NO_VT
                 --cury;
-                printf("\e[9999A");
+                fputs("\e[9999A", stdout);
                 if (cury) printf("\e[%dB", cury);
                 ++cury;
                 #endif
@@ -256,6 +262,7 @@ if (chkCmd(1, "WAITUS")) {
     cerr = 0;
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    if (arg[1][0] == '-') {cerr = 16; goto cmderr;}
     uint64_t d;
     sscanf(arg[1], "%llu", (long long unsigned *)&d);
     cb_wait(d);
@@ -266,6 +273,7 @@ if (chkCmd(1, "WAITMS")) {
     cerr = 0;
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    if (arg[1][0] == '-') {cerr = 16; goto cmderr;}
     double d;
     sscanf(arg[1], "%lf", &d);
     cb_wait(d * 1000);
@@ -276,6 +284,7 @@ if (chkCmd(1, "WAIT")) {
     cerr = 0;
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    if (arg[1][0] == '-') {cerr = 16; goto cmderr;}
     double d;
     sscanf(arg[1], "%lf", &d);
     cb_wait(d * 1000000);
@@ -467,6 +476,35 @@ if (chkCmd(1, "EXEC")) {
     #endif
     if (sh_restoreAttrib) updateTxtAttrib();
     if (cerr) goto cmderr;
+    goto noerr;
+}
+if (chkCmd(1, "BELL")) {
+    cerr = 0;
+    int ct = 1;
+    double d = 750;
+    if (argct > 2) {cerr = 3; goto cmderr;}
+    if (argct >= 1) {
+        if (!solvearg(1)) goto cmderr;
+        if (argt[1] == 0) {cerr = 3; goto cmderr;}
+        if (argt[1] != 2) {cerr = 2; goto cmderr;}
+        ct = atoi(arg[1]);
+        if (ct < 1) {cerr = 16; goto cmderr;}
+    }
+    if (argct == 2) {
+        if (!solvearg(2)) goto cmderr;
+        if (argt[2] == 0) {cerr = 3; goto cmderr;}
+        if (argt[2] != 2) {cerr = 2; goto cmderr;}
+        if (arg[2][0] == '-') {cerr = 16; goto cmderr;}
+        sscanf(arg[2], "%lf", &d);
+    }
+    putchar('\a');
+    fflush(stdout);
+    for (int i = 1; i < ct; ++i) {
+        cb_wait(d * 1000);
+        if (cmdint) {goto noerr;}
+        putchar('\a');
+        fflush(stdout);
+    }
     goto noerr;
 }
 if (chkCmd(1, "FILES")) {
@@ -767,7 +805,14 @@ if (chkCmd(1, "_LIMITCMDHIST")) {
     cerr = 0;
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
-    stifle_history(atoi(arg[1]));
+    int32_t l = atoi(arg[1]);
+    if (l < -1) {
+        cerr = 16; goto cmderr;
+    } else if (l == -1) {
+        unstifle_history();
+    } else {
+        stifle_history(l);
+    }
     goto noerr;
 }
 if (chkCmd(1, "_TXTLOCK")) {

@@ -746,12 +746,21 @@ if (chkCmd(1, "INPUT$")) {
     while (curx) {farg[1][ptr] = 22; ptr++; curx--;}
     farg[1][ptr] = 0;
     #endif
+    #ifndef _WIN32
+    __typeof__(rl_getc_function) old_rl_getc_function = rl_getc_function;
+    rl_getc_function = getc;
+    #endif
     tmp = readline(farg[1]);
+    #ifndef _WIN32
+    rl_getc_function = old_rl_getc_function;
+    #endif
     if (tmp != NULL) {
         copyStr(tmp, outbuf);
         free(tmp);
+    #ifdef _WIN32
     } else {
         putchar('\n');
+    #endif
     }
     if (fargct != 1) free(farg[1]);
     goto fexit;
