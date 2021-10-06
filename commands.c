@@ -33,6 +33,64 @@ if (chkCmd(2, "SET", "LET")) {
     if (!setVar(tmpargs[1], arg[2], argt[2], -1)) goto cmderr;
     goto noerr;
 }
+if (chkCmd(1, "DIM")) {
+    if (argct < 2 || argct > 3) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    if (!solvearg(2)) goto cmderr;
+    if (argct == 3 && !solvearg(3)) goto cmderr;
+    if (argt[2] != 2) {cerr = 2; goto cmderr;}
+    int32_t asize = atoi(arg[2]);
+    if (asize < 0) {cerr = 16; goto cmderr;}
+    if (!tmpargs[1][0]) {cerr = 4; seterrstr(""); goto cmderr;}
+    if (!setVar(tmpargs[1],\
+    ((argct == 3) ? arg[3] : ((tmpargs[1][argl[1] - 1] == '$') ? "" : "0")),\
+    ((argct == 3) ? argt[3] : 2 - (tmpargs[1][argl[1] - 1] == '$')),\
+    asize)) goto cmderr;
+    goto noerr;
+}
+if (chkCmd(1, "FILL")) {
+    if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
+    if (getType(tmpargs[1]) != 255) {cerr = 4; seterrstr(tmpargs[1]); goto cmderr;}
+    upCase(tmpargs[1]);
+    int v = -1;
+    for (register int i = 0; i < varmaxct; ++i) {
+        if (!strcmp(tmpargs[1], vardata[i].name)) {v = i; break;}
+    }
+    if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpargs[1]); goto cmderr;}
+    for (int i = 0; i <= vardata[v].size; ++i) {
+        if (argct > 1) {
+            uint8_t t = 0;
+            char* tmpbuf = malloc(CB_BUF_SIZE);
+            if (!(t = getVal(tmpargs[2], tmpbuf))) {free(tmpbuf); goto cmderr;}
+            if (t != vardata[v].type) {free(tmpbuf); cerr = 2; goto cmderr;}
+            tmpbuf = realloc(tmpbuf, strlen(tmpbuf) + 1);
+            swap(tmpbuf, vardata[v].data[i]);
+            free(tmpbuf);
+        } else {
+            copyStr(((vardata[v].type == 1) ? "" : "0"), vardata[v].data[i]);
+        }
+    }
+    goto noerr;
+}
+if (chkCmd(1, "DEL")) {
+    cerr = 0;
+    if (argct < 1) {cerr = 3; goto cmderr;}
+    for (int i = 1; i <= argct; ++i) {
+        if (!delVar(tmpargs[i])) goto cmderr;
+    }
+    goto noerr;
+}
+if (chkCmd(1, "DEFRAG")) {
+    cerr = 0;
+    if (argct > 0) {cerr = 3; goto cmderr;}
+    int vo = 0;
+    for (register int i = 0; i < varmaxct;) {
+        if (!vardata[i].inuse) {++vo; --varmaxct;}
+        else {++i;}
+        if (vo) {vardata[i] = vardata[i + vo];}
+    }
+    goto noerr;
+}
 if (chkCmd(3, "@", "LABEL", "LBL")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
     upCase(tmpargs[1]);
@@ -89,58 +147,6 @@ if (chkCmd(3, "%", "GOTO", "GO")) {
     if (r) gotodata = realloc(gotodata, gotomaxct * sizeof(cb_goto));
     didloop = true;
     lockpl = true;
-    goto noerr;
-}
-if (chkCmd(1, "DIM")) {
-    if (argct < 2 || argct > 3) {cerr = 3; goto cmderr;}
-    cerr = 0;
-    if (!solvearg(2)) goto cmderr;
-    if (argct == 3 && !solvearg(3)) goto cmderr;
-    if (argt[2] != 2) {cerr = 2; goto cmderr;}
-    int32_t asize = atoi(arg[2]);
-    if (asize < 0) {cerr = 16; goto cmderr;}
-    if (!tmpargs[1][0]) {cerr = 4; seterrstr(""); goto cmderr;}
-    if (!setVar(tmpargs[1],\
-    ((argct == 3) ? arg[3] : ((tmpargs[1][argl[1] - 1] == '$') ? "" : "0")),\
-    ((argct == 3) ? argt[3] : 2 - (tmpargs[1][argl[1] - 1] == '$')),\
-    asize)) goto cmderr;
-    goto noerr;
-}
-if (chkCmd(1, "DEL")) {
-    cerr = 0;
-    if (argct < 1) {cerr = 3; goto cmderr;}
-    for (int i = 1; i <= argct; ++i) {
-        if (!delVar(tmpargs[i])) goto cmderr;
-    }
-    goto noerr;
-}
-if (chkCmd(1, "DEFRAG")) {
-    cerr = 0;
-    if (argct > 0) {cerr = 3; goto cmderr;}
-    int vo = 0;
-    printf("OLD VARTABLE: [%d]\n", varmaxct);
-    for (register int i = 0; i < varmaxct; ++i) {
-        if (vardata[i].inuse) {
-            printf("[%d]: [%d],{%s},[%d],[%d],{0:{%s}}\n",\
-            i, vardata[i].inuse, vardata[i].name, vardata[i].type, vardata[i].size, vardata[i].data[0]);
-        } else {
-            printf("[%d]: [0]\n", i);
-        }
-    }
-    for (register int i = 0; i < varmaxct;) {
-        if (!vardata[i].inuse) {++vo; --varmaxct;}
-        else {++i;}
-        if (vo) {vardata[i] = vardata[i + vo];}
-    }
-    printf("NEW VARTABLE: [%d]\n", varmaxct);
-    for (register int i = 0; i < varmaxct; ++i) {
-        if (vardata[i].inuse) {
-            printf("[%d]: [%d],{%s},[%d],[%d],{0:{%s}}\n",\
-            i, vardata[i].inuse, vardata[i].name, vardata[i].type, vardata[i].size, vardata[i].data[0]);
-        } else {
-            printf("[%d]: [0]\n", i);
-        }
-    }
     goto noerr;
 }
 if (chkCmd(1, "COLOR")) {
