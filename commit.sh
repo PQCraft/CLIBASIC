@@ -3,51 +3,47 @@ rev="Beta"
 #-----
 shopt -s extglob
 
-function subrun() {
-    ("$@") 2>&1 | while read line; do echo "> $line"; done
-}
-
-echo "Grabbing version..."
+echo $'\e[1m'"Grabbing version..."$'\e[0m'
 make clean build || exit 1
 ver="$(./clibasic --version | grep "version" | sed 's/.* version //;s/ [(].*//')"
 
-echo "Cleaning..."
+echo $'\e[1m'"Cleaning..."$'\e[0m'
 make clean || exit 1
 make cross clean || exit 1
 
-echo "Testing..."
+echo $'\e[1m'"Testing..."$'\e[0m'
 ./build.sh || exit 1
 
-echo "Committing and releasing [3 sec to cancel]..."
+echo $'\e[1m'"Committing and releasing [3 sec to cancel]..."$'\e[0m'
 sleep 3s
 
-echo "Updating docs submodule..."
+echo $'\e[1m'"Updating docs submodule..."$'\e[0m'
 cd docs/
-subrun git add *
-subrun git commit -m "Updated docs to $ver..."
-subrun git push
+git add *
+git commit -m "Updated docs to $ver..."$'\e[0m'
+git push
 cd ..
 
-echo "Adding files:" !(clibasic|clibasic.exe|*.dll|*.zip|*.bas)
+echo $'\e[1m'"Adding files:" !(clibasic|clibasic.exe|*.dll|*.zip|*.bas) $'\e[0m'
 git add !(clibasic|clibasic.exe|*.dll|*.zip|*.bas) || exit 1
 
-echo "Committing..."
+echo $'\e[1m'"Committing..."$'\e[0m'
 msg="$ver"
 extmsg="$(cat .changelog)"
-echo "Message: $msg"
-echo $'Extended message:\n-----\n'"$(cat .changelog)"$'\n-----'
+echo $'\e[1m'"Message: $msg"$'\e[0m'
+echo $'\e[1mExtended message:\e[0m\n-----\n'"$(cat .changelog)"$'\n-----'
 git commit -m "$msg" -m "$extmsg" || exit 1
 
-echo "Packaging..."
-./package.sh || exit 1
+echo $'\e[1m'"Packaging..."$'\e[0m'
+subrun ./package.sh || exit 1
 
-echo "Pushing..."
+echo $'\e[1m'"Pushing..."$'\e[0m'
 git push
 
-echo "Making release..."
+echo $'\e[1m'"Making release..."$'\e[0m'
 gh release create "$ver" --title "$rev $ver" --notes "$(./release-text.sh)" *.zip
 
-echo "Updating AUR packages..."
+echo $'\e[1m'"Updating AUR packages..."$'\e[0m'
 cd .aur/
 subrun ./update.sh "$ver"
 cd ..
