@@ -30,12 +30,12 @@ git add !(clibasic|clibasic.exe|*.dll|*.zip|*.bas) || exit 1
 echo $'\e[1m'"Committing..."$'\e[0m'
 msg="$ver"
 extmsg="$(cat .changelog)"
-echo $'\e[1m'"Message: $msg"$'\e[0m'
+echo $'\e[1m'"Message:"$'\e[0m'" $msg"
 echo $'\e[1mExtended message:\e[0m\n-----\n'"$(cat .changelog)"$'\n-----'
 git commit -m "$msg" -m "$extmsg" || exit 1
 
 echo $'\e[1m'"Packaging..."$'\e[0m'
-subrun ./package.sh || exit 1
+./package.sh || exit 1
 
 echo $'\e[1m'"Pushing..."$'\e[0m'
 git push
@@ -45,6 +45,6 @@ gh release create "$ver" --title "$rev $ver" --notes "$(./release-text.sh)" *.zi
 
 echo $'\e[1m'"Updating AUR packages..."$'\e[0m'
 cd .aur/
-subrun ./update.sh "$ver"
+./update.sh "$ver"
 cd ..
 
