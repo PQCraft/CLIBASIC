@@ -111,11 +111,11 @@
 #define swap(a, b) {__typeof__(a) c = a; a = b; b = c;}
 
 /* Free & set to NULL combo */
-#define nfree(ptr) free(ptr); ptr = NULL
+#define nfree(ptr) {free(ptr); ptr = NULL;}
 
 // Base defines
 
-char VER[] = "0.23.2";
+char VER[] = "0.23.3";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -167,14 +167,14 @@ int progLine = 1;
 int varmaxct = 0;
 
 typedef struct {
-    int32_t size;
+    bool inuse;
+    char* name;
     uint8_t type;
+    int32_t size;
     char** data;
 } cb_var;
 
-char** varname = NULL;
 cb_var* vardata = NULL;
-bool* varinuse = NULL;
 
 char gpbuf[CB_BUF_SIZE];
 
@@ -1834,7 +1834,7 @@ uint8_t getVar(char* vn, char* varout) {
     }
     int v = -1;
     for (register int i = 0; i < varmaxct; ++i) {
-        if (varinuse[i]) {if (!strcmp(vn, varname[i])) {v = i; break;}}
+        if (vardata[i].inuse) {if (!strcmp(vn, vardata[i].name)) {v = i; break;}}
     }
     if (v == -1) {
         if (isArray) {
@@ -1912,28 +1912,25 @@ bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
     }
     int v = -1;
     for (register int i = 0; i < varmaxct; ++i) {
-        if (!strcmp(vn, varname[i])) {v = i; break;}
+        if (!strcmp(vn, vardata[i].name)) {v = i; break;}
     }
     if (v == -1) {
-        bool incmaxct = true;
         if (isArray) {
             cerr = 23;
             seterrstr(vn);
             return false;
         }
         for (register int i = 0; i < varmaxct; ++i) {
-            if (!varinuse[i]) {v = i; incmaxct = false; break;}
+            if (!vardata[i].inuse) {v = i; break;}
         }
-        if (v == -1) v = varmaxct;
-        if (incmaxct) {
+        if (v == -1) {
+            v = varmaxct;
             varmaxct++;
-            varname = (char**)realloc(varname, varmaxct * sizeof(char*));
             vardata = (cb_var*)realloc(vardata, varmaxct * sizeof(cb_var));
-            varinuse = (bool*)realloc(varinuse, varmaxct * sizeof(bool));
         }
-        varinuse[v] = true;
-        varname[v] = (char*)malloc(vnlen + 1);
-        copyStr(vn, varname[v]);
+        vardata[v].inuse = true;
+        vardata[v].name = (char*)malloc(vnlen + 1);
+        copyStr(vn, vardata[v].name);
         vardata[v].size = s;
         vardata[v].type = t;
         if (s == -1) s = 0;
@@ -1982,20 +1979,18 @@ bool delVar(char* vn) {
     }
     int v = -1;
     for (register int i = 0; i < varmaxct; ++i) {
-        if (!strcmp(vn, varname[i])) {v = i; break;}
+        if (!strcmp(vn, vardata[i].name)) {v = i; break;}
     }
     if (v != -1) {
-        varinuse[v] = false;
-        free(varname[v]);
+        vardata[v].inuse = false;
+        free(vardata[v].name);
         for (int32_t i = 0; i <= vardata[v].size; ++i) {
             free(vardata[v].data[i]);
         }
         free(vardata[v].data);
         if (v == varmaxct - 1) {
-            while (!varinuse[v] && v >= 0) {varmaxct--; v--;}
-            varname = (char**)realloc(varname, varmaxct * sizeof(char*));
+            while (!vardata[v].inuse && v >= 0) {varmaxct--; v--;}
             vardata = (cb_var*)realloc(vardata, varmaxct * sizeof(cb_var));
-            varinuse = (bool*)realloc(varinuse, varmaxct * sizeof(bool));
         }
     }
     return true;

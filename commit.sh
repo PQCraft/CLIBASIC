@@ -1,5 +1,5 @@
 #!/bin/bash
-rel="Beta"
+rev="Beta"
 #-----
 shopt -s extglob
 
@@ -45,7 +45,7 @@ echo "Pushing..."
 git push
 
 echo "Making release..."
-gh release create "$ver" --notes "$(./release-text.sh)" *.zip
+gh release create "$ver" --title "$rev $ver" --notes "$(./release-text.sh)" *.zip
 
 echo "Updating AUR packages..."
 cd .aur/

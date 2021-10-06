@@ -108,8 +108,39 @@ if (chkCmd(1, "DIM")) {
 }
 if (chkCmd(1, "DEL")) {
     cerr = 0;
-    if (argct != 1) {cerr = 3; goto cmderr;}
-    if (!delVar(tmpargs[1])) goto cmderr;
+    if (argct < 1) {cerr = 3; goto cmderr;}
+    for (int i = 1; i <= argct; ++i) {
+        if (!delVar(tmpargs[i])) goto cmderr;
+    }
+    goto noerr;
+}
+if (chkCmd(1, "DEFRAG")) {
+    cerr = 0;
+    if (argct > 0) {cerr = 3; goto cmderr;}
+    int vo = 0;
+    printf("OLD VARTABLE: [%d]\n", varmaxct);
+    for (register int i = 0; i < varmaxct; ++i) {
+        if (vardata[i].inuse) {
+            printf("[%d]: [%d],{%s},[%d],[%d],{0:{%s}}\n",\
+            i, vardata[i].inuse, vardata[i].name, vardata[i].type, vardata[i].size, vardata[i].data[0]);
+        } else {
+            printf("[%d]: [0]\n", i);
+        }
+    }
+    for (register int i = 0; i < varmaxct;) {
+        if (!vardata[i].inuse) {++vo; --varmaxct;}
+        else {++i;}
+        if (vo) {vardata[i] = vardata[i + vo];}
+    }
+    printf("NEW VARTABLE: [%d]\n", varmaxct);
+    for (register int i = 0; i < varmaxct; ++i) {
+        if (vardata[i].inuse) {
+            printf("[%d]: [%d],{%s},[%d],[%d],{0:{%s}}\n",\
+            i, vardata[i].inuse, vardata[i].name, vardata[i].type, vardata[i].size, vardata[i].data[0]);
+        } else {
+            printf("[%d]: [0]\n", i);
+        }
+    }
     goto noerr;
 }
 if (chkCmd(1, "COLOR")) {
