@@ -1,3 +1,6 @@
 [submodule "docs"]
 	path = docs
-	url = git@github.com:PQCraft/clibasic-docs.git
+	url = https://github.com/pqcraft/clibasic-docs
+[submodule "examples"]
+	path = examples
+	url = git@github.com:PQCraft/clibasic-examples.git

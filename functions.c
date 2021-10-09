@@ -121,11 +121,28 @@ if (chkCmd(1, "SH")) {
     if (sh_restoreAttrib) updateTxtAttrib();
     goto fexit;
 }
-if (chkCmd(1, "EXEC")) {
+if (chkCmd(2, "EXEC", "EXECA")) {
     cerr = 0;
     ftype = 2;
     if (fargct < 1) {cerr = 3; goto fexit;} 
-    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    bool execa = false;
+    char** tmpfarg = NULL;
+    int tmpfargct = 0;
+    if (!strcmp(farg[0], "EXECA")) {
+        execa = true;
+        int v = -1;
+        for (register int i = 0; i < varmaxct; ++i) {
+            if (vardata[i].inuse && !strcmp(tmpfargs[1], vardata[i].name)) {v = i; break;}
+        }
+        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpfargs[1]); goto fexit;}
+        if (vardata[v].type != 1) {cerr = 2; goto fexit;}
+        tmpfarg = farg;
+        tmpfargct = fargct;
+        farg = vardata[v].data - 1;
+        fargct = vardata[v].size + 1;
+    } else {
+        if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    }
     #ifndef _WIN_NO_VT
     if (sh_clearAttrib) fputs("\e[0m", stdout);
     #else
@@ -193,6 +210,10 @@ if (chkCmd(1, "EXEC")) {
     }
     free(tmpcmd);
     #endif
+    if (execa) {
+        fargct = tmpfargct;
+        farg = tmpfarg;
+    }
     if (sh_restoreAttrib) updateTxtAttrib();
     goto fexit;
 }
@@ -215,11 +236,28 @@ if (chkCmd(1, "SH$")) {
     close(duperr);
     goto fexit;
 }
-if (chkCmd(1, "EXEC$")) {
+if (chkCmd(2, "EXEC$", "EXECA$")) {
     cerr = 0;
     ftype = 1;
     if (fargct < 1) {cerr = 3; goto fexit;} 
-    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    bool execa = false;
+    char** tmpfarg = NULL;
+    int tmpfargct = 0;
+    if (!strcmp(farg[0], "EXECA$")) {
+        execa = true;
+        int v = -1;
+        for (register int i = 0; i < varmaxct; ++i) {
+            if (vardata[i].inuse && !strcmp(tmpfargs[1], vardata[i].name)) {v = i; break;}
+        }
+        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpfargs[1]); goto fexit;}
+        if (vardata[v].type != 1) {cerr = 2; goto fexit;}
+        tmpfarg = farg;
+        tmpfargct = fargct;
+        farg = vardata[v].data - 1;
+        fargct = vardata[v].size + 1;
+    } else {
+        if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    }
     #ifndef _WIN32
     char** runargs = (char**)malloc((fargct + 1) * sizeof(char*));
     runargs[0] = farg[1];
@@ -278,6 +316,11 @@ if (chkCmd(1, "EXEC$")) {
     close(duperr);
     free(tmpcmd);
     #endif
+    if (execa) {
+        fargct = tmpfargct;
+        farg = tmpfarg;
+    }
+    //printf("farg[1]: {%s}\n", farg[1]);
     goto fexit;
 }
 if (chkCmd(1, "CINT")) {

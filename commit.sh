@@ -24,6 +24,13 @@ git commit -m "Updated docs to $ver"
 git push
 cd ..
 
+echo $'\e[1m'"Updating examples submodule..."$'\e[0m'
+cd examples/
+git add *
+git commit -m "Updated examples to $ver"
+git push
+cd ..
+
 echo $'\e[1m'"Adding files:" !(clibasic|clibasic.exe|*.dll|*.zip|*.bas) $'\e[0m'
 git add !(clibasic|clibasic.exe|*.dll|*.zip|*.bas) || exit 1
 

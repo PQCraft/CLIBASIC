@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.23.4";
+char VER[] = "0.23.5";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -219,6 +219,14 @@ int fnstackp = -1;
 int* minfnstackp = NULL;
 char fnvar[CB_BUF_SIZE];
 char forbuf[4][CB_BUF_SIZE];
+
+typedef struct {
+    uint8_t type;
+    uint8_t block;
+} cb_brkinfo;
+
+cb_brkinfo brkinfo;
+cb_brkinfo* oldbrkinfo = NULL;
 
 char* errstr = NULL;
 
@@ -640,6 +648,27 @@ static inline void readyTerm() {
     #endif
 }
 
+static inline void clearGlobals() {
+    dlstackp = -1;
+    itstackp = -1;
+    fnstackp = -1;
+    memset(&brkinfo, 0, sizeof(brkinfo));
+    for (int i = 0; i < CB_PROG_LOGIC_MAX; ++i) {
+        memset(&dlstack[i], 0, sizeof(cb_jump));
+        dldcmd[i] = false;
+        memset(&fnstack[i], 0, sizeof(cb_jump));
+        fnstack[i].cp = -1;
+        fndcmd[i] = false;
+        fninfor[i] = false;
+        itdcmd[i] = false;
+    }
+    for (int i = 0; i < gotomaxct; ++i) {
+        nfree(gotodata[i].name);
+    }
+    nfree(gotodata);
+    gotomaxct = 0;
+}
+
 int main(int argc, char** argv) {
     #if defined(GUI_CHECK) && defined(__unix__)
     if (!isatty(STDERR_FILENO) && !isatty(STDIN_FILENO) && !isatty(STDOUT_FILENO)) {
@@ -924,29 +953,14 @@ int main(int argc, char** argv) {
     cerr = 0;
     initBaseMem();
     resetTimer();
+    clearGlobals();
     while (!pexit) {
         fchkint:;
         cp = 0;
         if (chkinProg) {inProg = true; chkinProg = false;}
         if (!inProg && !runc) {
             if (runfile) cleanExit();
-            dlstackp = -1;
-            itstackp = -1;
-            fnstackp = -1;
-            for (int i = 0; i < CB_PROG_LOGIC_MAX; ++i) {
-                memset(&dlstack[i], 0, sizeof(cb_jump));
-                dldcmd[i] = false;
-                memset(&fnstack[i], 0, sizeof(cb_jump));
-                fnstack[i].cp = -1;
-                fndcmd[i] = false;
-                fninfor[i] = false;
-                itdcmd[i] = false;
-            }
-            for (int i = 0; i < gotomaxct; ++i) {
-                nfree(gotodata[i].name);
-            }
-            nfree(gotodata);
-            gotomaxct = 0;
+            clearGlobals();
             char* tmpstr = NULL;
             int tmpt = getVal(prompt, pstr);
             if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
@@ -1195,6 +1209,7 @@ void unloadProg() {
     progLine = proglinebuf[progindex];
     didelse = olddidelse[progindex];
     didelseif = olddidelseif[progindex];
+    brkinfo = oldbrkinfo[progindex];
     dlstackp = mindlstackp[progindex];
     itstackp = minitstackp[progindex];
     fnstackp = minfnstackp[progindex];
@@ -1206,6 +1221,7 @@ void unloadProg() {
     minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
     olddidelse = (bool*)realloc(olddidelse, progindex * sizeof(bool));
     olddidelseif = (bool*)realloc(olddidelseif, progindex * sizeof(bool));
+    oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(bool));
     proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
     proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
     progindex--;
@@ -1282,6 +1298,7 @@ bool loadProg(char* filename) {
     minitstackp = (int*)realloc(minitstackp, progindex * sizeof(int));
     olddidelse = (bool*)realloc(olddidelse, progindex * sizeof(bool));
     olddidelseif = (bool*)realloc(olddidelseif, progindex * sizeof(bool));
+    oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(bool));
     minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
     proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
     proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
@@ -1292,6 +1309,8 @@ bool loadProg(char* filename) {
     mindlstackp[progindex] = dlstackp;
     minitstackp[progindex] = itstackp;
     olddidelse[progindex] = didelse;
+    olddidelseif[progindex] = didelseif;
+    oldbrkinfo[progindex] = brkinfo;
     minfnstackp[progindex] = fnstackp;
     proggotodata[progindex] = gotodata;
     proggotomaxct[progindex] = gotomaxct;
@@ -1302,6 +1321,7 @@ bool loadProg(char* filename) {
     progLine = 1;
     didelse = false;
     didelseif = false;
+    memset(&brkinfo, 0, sizeof(brkinfo));
     #ifdef _WIN_NO_VT
     getCurPos();
     int tmpx = curx, tmpy = cury;
@@ -1712,6 +1732,7 @@ uint16_t getFuncIndex = 0;
 char* getFunc_gftmp[2] = {NULL, NULL};
 
 uint8_t getFunc(char* inbuf, char* outbuf) {
+    char** tmpfargs;
     char** farg;
     uint8_t* fargt;
     int* flen;
@@ -1719,6 +1740,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     int ftmpct = 0;
     int ftype = 0;
     char* gftmp[2];
+    bool skipfargsolve = false;
     if (getFuncIndex) {
         gftmp[0] = malloc(CB_BUF_SIZE);
         gftmp[1] = malloc(CB_BUF_SIZE);
@@ -1735,6 +1757,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
         int32_t j = strlen(inbuf) - 1;
         copyStrSnip(inbuf, i + 1, j, gftmp[0]);
         fargct = getArgCt(gftmp[0]);
+        tmpfargs = malloc((fargct + 1) * sizeof(char*));
         farg = malloc((fargct + 1) * sizeof(char*));
         flen = malloc((fargct + 1) * sizeof(int));
         fargt = malloc((fargct + 1) * sizeof(uint8_t));
@@ -1746,6 +1769,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
                 flen[0] = i;
                 farg[0] = (char*)malloc(flen[0] + 1);
                 copyStrTo(inbuf, i, farg[0]);
+                tmpfargs[0] = farg[0];
                 if (!strcmp(farg[0], "~") || !strcmp(farg[0], "_TEST")) {
                     ftype = 2;
                     if (fargct != 1) {cerr = 3; goto fexit;}
@@ -1756,19 +1780,34 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
                     outbuf[0] = '0' + ret;
                     outbuf[1] = 0;
                     goto fexit;
+                } else if (!strcmp(farg[0], "EXECA") || !strcmp(farg[0], "EXECA$")) {
+                    skipfargsolve = true;
                 }
             } else {
-                if (getArg(j - 1, gftmp[0], gftmp[1]) == -1) {outbuf[0] = 0; goto fexit;}
-                fargt[j] = getVal(gftmp[1], gftmp[1]);
-                if (fargt[j] == 0) goto fnoerrscan;
-                if (fargt[j] == 255) fargt[j] = 0;
-                flen[j] = strlen(gftmp[1]);
-                farg[j] = (char*)malloc(flen[j] + 1);
-                copyStr(gftmp[1], farg[j]);
+                tmpfargs[j] = malloc(CB_BUF_SIZE);
+                int32_t tmpsize;
+                if ((tmpsize = getArg(j - 1, gftmp[0], tmpfargs[j])) == -1) {outbuf[0] = 0; goto fexit;}
+                tmpfargs[j] = realloc(tmpfargs[j], tmpsize + 1);
+                if (skipfargsolve) {
+                    flen[j] = tmpsize;
+                } else {
+                    fargt[j] = getVal(tmpfargs[j], gftmp[1]);
+                    if (fargt[j] == 0) goto fnoerrscan;
+                    if (fargt[j] == 255) fargt[j] = 0;
+                    flen[j] = strlen(gftmp[1]);
+                    farg[j] = (char*)malloc(flen[j] + 1);
+                    copyStr(gftmp[1], farg[j]);
+                }
                 ftmpct++;
             }
         }
     }
+    /*
+    for (int j = 0; j <= ftmpct; ++j) {
+        printf("farg[%d]: {%s}\n", j, farg[j]);
+        printf("tmpfargs[%d]: {%s}\n", j, tmpfargs[j]);
+    }
+    */
     outbuf[0] = 0;
     cerr = 127;
     chkCmdPtr = farg[0];
@@ -1776,10 +1815,19 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     fexit:;
     if (cerr > 124 && cerr < 128) seterrstr(farg[0]);
     fnoerrscan:;
-    for (int j = 0; j <= ftmpct; ++j) {
-        free(farg[j]);
+    free(farg[0]);
+    if (skipfargsolve) {
+        for (int j = 1; j <= ftmpct; ++j) {
+            free(tmpfargs[j]);
+        }
+    } else {
+        for (int j = 1; j <= ftmpct; ++j) {
+            free(farg[j]);
+            free(tmpfargs[j]);
+        }
     }
     free(farg);
+    free(tmpfargs);
     free(flen);
     free(fargt);
     --getFuncIndex;
@@ -2913,6 +2961,9 @@ static inline void printError(int error) {
             break;
         case 29:
             fputs("Label is not defined", stdout);
+            break;
+        case 30:
+            fputs("Not in DO/FOR block", stdout);
             break;
         case 125:
             printf("Function only valid in program: '%s'", errstr);
