@@ -522,7 +522,7 @@ if (chkCmd(2, "EXEC", "EXECA")) {
     if (sh_silent) {
         stdout_dup = dup(1);
         stderr_dup = dup(2);
-        int fd = open("/dev/null", O_WRONLY | O_CREAT);
+        int fd = open("/dev/null", O_WRONLY);
         dup2(fd, 1);
         dup2(fd, 2);
     }

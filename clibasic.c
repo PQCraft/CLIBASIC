@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.23.6";
+char VER[] = "0.23.6.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -514,9 +514,10 @@ uint8_t logictest(char*);
 
 void cleanExit() {
     txtqunlock();
+    int ret;
     if (inprompt) {
         int i = kbhit();
-        if (i) {read(0, &gpbuf, i);}
+        if (i) {ret = read(0, &gpbuf, i);}
         getCurPos();
         unloadAllProg();
         cmdint = true;
@@ -533,7 +534,7 @@ void cleanExit() {
     setsig(SIGTERM, forceExit);
     fflush(stdout);
     closeFile(-1);
-    int ret = chdir(gethome());
+    ret = chdir(gethome());
     (void)ret;
     if (autohist && !runfile) {
         write_history(HIST_FILE);
@@ -1163,7 +1164,8 @@ static inline void getCurPos() {
         while (!kbhit()) {if (usTime() - tmpus > 50000) {goto resend;}}
         while (kbhit()) {
             if (kbhit()) {
-                read(0, &buf[i], 1);
+                int ret = read(0, &buf[i], 1);
+                (void)ret;
                 if (buf[i] == 'R' || buf[i] == '\n' || kbhit() < 1) {++i; goto gcplexit;}
                 ++i;
             }
