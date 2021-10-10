@@ -161,7 +161,7 @@ if (chkCmd(2, "EXEC", "EXECA")) {
     if (sh_silent) {
         stdout_dup = dup(1);
         stderr_dup = dup(2);
-        fd = open("/dev/null", O_WRONLY | O_CREAT);
+        fd = open("/dev/null", O_WRONLY);
         dup2(fd, 1);
         dup2(fd, 2);
     }
@@ -199,7 +199,7 @@ if (chkCmd(2, "EXEC", "EXECA")) {
     if (sh_silent) {
         stdout_dup = dup(1);
         stderr_dup = dup(2);
-        int fd = open("NUL", _O_WRONLY | _O_CREAT);
+        int fd = open("NUL", _O_WRONLY);
         dup2(fd, 1);
         dup2(fd, 2);
     }
@@ -902,7 +902,9 @@ if (chkCmd(1, "CWD$")) {
     cerr = 0;
     ftype = 1;
     if (fargct) {cerr = 3; goto fexit;}
-    getcwd(outbuf, CB_BUF_SIZE);
+    char* ret;
+    ret = getcwd(outbuf, CB_BUF_SIZE);
+    (void)ret;
     goto fexit;
 }
 if (chkCmd(1, "FILES$")) {
@@ -911,10 +913,12 @@ if (chkCmd(1, "FILES$")) {
     ftype = 1;
     if (fargct > 1) {cerr = 3; goto fexit;}
     char* olddn = NULL;
+    char* bret;
+    int ret;
     if (fargct) {
         if (fargt[1] != 1) {cerr = 2; goto fexit;}
         olddn = malloc(CB_BUF_SIZE);
-        getcwd(olddn, CB_BUF_SIZE);
+        bret = getcwd(olddn, CB_BUF_SIZE);
         if (chdir(farg[1])) {
             fileerror = errno;
             free(olddn);
@@ -922,8 +926,9 @@ if (chkCmd(1, "FILES$")) {
             goto fexit;
         }
     }
+    (void)bret;
     DIR* cwd = opendir(".");
-    if (!cwd) {if (fargct) {chdir(olddn); free(olddn);} outbuf[0] = 0; goto fexit;}
+    if (!cwd) {if (fargct) {ret = chdir(olddn); free(olddn);} outbuf[0] = 0; goto fexit;}
     struct dirent* dir;
     #ifdef _WIN32
         #define FSC '\\'
@@ -951,10 +956,11 @@ if (chkCmd(1, "FILES$")) {
         }
     }
     if (fargct) {
-        chdir(olddn);
+        ret = chdir(olddn);
         free(olddn);
     }
     closedir(cwd);
+    (void)ret;
     goto fexit;
 }
 if (chkCmd(2, "CD", "CHDIR")) {

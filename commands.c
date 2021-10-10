@@ -624,7 +624,8 @@ if (chkCmd(1, "FILES")) {
             goto cmderr;
         }
         olddn = malloc(CB_BUF_SIZE);
-        getcwd(olddn, CB_BUF_SIZE);
+        char* bret = getcwd(olddn, CB_BUF_SIZE);
+        (void)bret;
         if (chdir(arg[1])) {
             free(olddn);
             seterrstr(arg[1]);
@@ -633,7 +634,8 @@ if (chkCmd(1, "FILES")) {
         }
     }
     DIR* cwd = opendir(".");
-    if (!cwd) {if (argct) {chdir(olddn); free(olddn);} goto noerr;}
+    int ret;
+    if (!cwd) {if (argct) {ret = chdir(olddn); free(olddn);} goto noerr;}
     struct dirent* dir;
     #ifdef _WIN32
         #define DIRPFS "%s\\\n"
@@ -654,10 +656,11 @@ if (chkCmd(1, "FILES")) {
         if (!(S_ISDIR(pathstat.st_mode))) puts(dir->d_name);
     }
     if (argct) {
-        chdir(olddn);
+        ret = chdir(olddn);
         free(olddn);
     }
     closedir(cwd);
+    (void)ret;
     goto noerr;
 }
 if (chkCmd(2, "CHDIR", "CD")) {

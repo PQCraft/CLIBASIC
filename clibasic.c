@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.23.5";
+char VER[] = "0.23.6";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -1713,13 +1713,14 @@ bool cbrm(char* path) {
         }
     }
     --cbrmIndex;
-    chdir((cbrmIndex) ? ".." : odir);
+    int ret = chdir((cbrmIndex) ? ".." : odir);
     if (!cbrmIndex) free(odir);
     if (rmdir(path)) {fileerror = errno; return false;}
     return true;
     cbrm_fail:
     --cbrmIndex;
-    chdir((cbrmIndex) ? ".." : odir);
+    ret = chdir((cbrmIndex) ? ".." : odir);
+    (void)ret;
     if (!cbrmIndex) free(odir);
     if (rmdir(path)) fileerror = errno;
     return false;

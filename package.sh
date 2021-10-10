@@ -16,7 +16,7 @@ mv clibasic.exe clibasic.exe.tmp 2> /dev/null
 # package the examples
 echo "Packaging examples..."
 rm -f examples.zip
-zip -r examples.zip examples 1> /dev/null || exit 1
+zip -r examples.zip examples/* 1> /dev/null || exit 1
 
 # build
 mkrel "clibasic-linux-x64.zip" "clibasic" "clean build" "clean"
