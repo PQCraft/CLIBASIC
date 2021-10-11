@@ -129,6 +129,7 @@ if (chkCmd(2, "EXEC", "EXECA")) {
     char** tmpfarg = NULL;
     int tmpfargct = 0;
     if (!strcmp(farg[0], "EXECA")) {
+        if (fargct != 1) {cerr = 3; goto fexit;}
         execa = true;
         int v = -1;
         for (register int i = 0; i < varmaxct; ++i) {
@@ -244,6 +245,7 @@ if (chkCmd(2, "EXEC$", "EXECA$")) {
     char** tmpfarg = NULL;
     int tmpfargct = 0;
     if (!strcmp(farg[0], "EXECA$")) {
+        if (fargct != 1) {cerr = 3; goto fexit;}
         execa = true;
         int v = -1;
         for (register int i = 0; i < varmaxct; ++i) {
@@ -1339,8 +1341,8 @@ if (chkCmd(1, "_ARG$")) {
         int i = atoi(farg[1]);
         if (i < 0) {cerr = 16; goto fexit;}
         if (i > progargc - 1 && i > 0) {outbuf[0] = 0; goto fexit;}
-        if (i == 0) copyStr(progfn[progindex], outbuf);
-        else copyStr(progargs[i], outbuf);
+        if (i == 0) {copyStr(progfn[progindex], outbuf);}
+        else {copyStr(progargs[i], outbuf);}
     } else {
         cerr = 3; goto fexit;
     }

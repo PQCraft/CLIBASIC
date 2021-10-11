@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.23.6.1";
+char VER[] = "0.24";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -152,7 +152,8 @@ char VER[] = "0.23.6.1";
 int progindex = -1;
 char** progbuf = NULL;
 char** progfn = NULL;
-char* progfnstr = NULL;
+//char* progfnstr = NULL;
+#define progfnstr (progfn[progindex])
 int32_t* progcp = NULL;
 int* progcmdl = NULL;
 int* proglinebuf = NULL;
@@ -289,8 +290,13 @@ bool autohist = false;
 int tab_width = 4;
 
 int progargc = 0;
+int * oldprogargc = NULL;
+int newprogargc = 0;
 char** progargs = NULL;
+char*** oldprogargs = NULL;
+char** newprogargs = NULL;
 char* startcmd = NULL;
+bool argslater = false;
 
 bool changedtitle = false;
 bool changedtitlecmd = false;
@@ -320,6 +326,16 @@ typedef struct {
 cb_file* filedata = NULL;
 int filemaxct = 0;
 int fileerror = 0;
+
+typedef struct {
+    char* name;
+    char* data;
+} cb_sub;
+
+cb_sub* subdata = NULL;
+int submaxct = 0;
+bool addsub = false;
+int subindex = -1;
 
 #ifndef _WIN32
 struct termios term, restore;
@@ -730,22 +746,25 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--args")) {
                 if (runc || !runfile) {fputs("Args can only be passed when running a program.\n", stderr); exit(1);}
                 progargs = (char**)malloc((argc - i) * sizeof(char*));
-                for (progargc = 1; progargc < argc - i; ++progargc) {
-                    progargs[progargc] = argv[i + progargc];
+                for (progargc = 1; progargc < argc - i; ++progargc) {	
+                    progargs[progargc] = malloc(strlen(argv[i + progargc]) + 1);
+                    copyStr(argv[i + progargc], progargs[progargc]);
                 }
                 i = argc;
             } else if (!strcmp(argv[i], "--exec") || !strcmp(argv[i], "-x")) {
                 if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
                 if (runfile) {fputs("Program already loaded, use --args.\n", stderr); exit(1); unloadAllProg();}
                 if (runfile) {unloadProg(); fputs("Incorrect number of options passed.\n", stderr); exit(1);}
-                i++;
+                ++i;
                 if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
+                argslater = true;
                 if (!loadProg(argv[i])) {printError(cerr); exit(1);}
                 inProg = true;
                 runfile = true;
                 progargs = (char**)malloc((argc - i) * sizeof(char*));
-                for (progargc = 1; progargc < argc - i; ++progargc) {
-                    progargs[progargc] = argv[i + progargc];
+                for (progargc = 1; progargc < argc - i; ++progargc) {	
+                    progargs[progargc] = malloc(strlen(argv[i + progargc]) + 1);
+                    copyStr(argv[i + progargc], progargs[progargc]);
                 }
                 i = argc;
             } else if (!strcmp(argv[i], "--keep") || (shortopt && argv[i][shortopti] == 'k')) {
@@ -809,6 +828,7 @@ int main(int argc, char** argv) {
                 i++;
                 if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
             }
+            argslater = true;
             if (!loadProg(argv[i])) {printError(cerr); exit(1);}
             inProg = true;
             runfile = true;
@@ -943,10 +963,11 @@ int main(int argc, char** argv) {
             }
             inProg = true;
             autorun = true;
+            argslater = true;
             if (!loadProg(".clibasicrc"))
                 if (!loadProg("autorun.bas"))
                     if (!loadProg(".autorun.bas"))
-                        {autorun = false; inProg = false;}
+                        {autorun = false; inProg = false; argslater = false;}
             ret = chdir(tmpcwd);
             (void)ret;
         }
@@ -1196,8 +1217,14 @@ static inline void getCurPos() {
     #endif
 }
 
-void unloadProg() { 
-    if (progindex > 0) progfnstr = progfn[progindex - 1];
+void unloadProg() {
+    //if (progindex > 0) progfnstr = progfn[progindex - 1];
+    for (int i = 1; i < progargc; ++i) {
+        free(progargs[i]);
+    }
+    free(progargs);
+    progargs = oldprogargs[progindex];
+    progargc = oldprogargc[progindex];
     free(progbuf[progindex]);
     free(progfn[progindex]);
     progbuf[progindex] = NULL;
@@ -1290,7 +1317,7 @@ bool loadProg(char* filename) {
     #else
     progfn[progindex] = realpath(filename, NULL);
     #endif
-    progfnstr = progfn[progindex];
+    //progfnstr = progfn[progindex];
     ++progindex;
     progbuf = (char**)realloc(progbuf, progindex * sizeof(char*));
     progcp = (int32_t*)realloc(progcp, progindex * sizeof(int32_t));
@@ -1304,6 +1331,8 @@ bool loadProg(char* filename) {
     minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
     proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
     proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
+    oldprogargc = (int*)realloc(oldprogargc, progindex * sizeof(int));
+    oldprogargs = (char***)realloc(oldprogargs, progindex * sizeof(char**));
     --progindex;
     progcp[progindex] = cp;
     progcmdl[progindex] = cmdl;
@@ -1316,6 +1345,8 @@ bool loadProg(char* filename) {
     minfnstackp[progindex] = fnstackp;
     proggotodata[progindex] = gotodata;
     proggotomaxct[progindex] = gotomaxct;
+    oldprogargc[progindex] = progargc;
+    oldprogargs[progindex] = progargs;
     gotodata = NULL;
     gotomaxct = 0;
     cp = 0;
@@ -1324,6 +1355,14 @@ bool loadProg(char* filename) {
     didelse = false;
     didelseif = false;
     memset(&brkinfo, 0, sizeof(brkinfo));
+    if (argslater) {
+        argslater = false;
+    } else {
+        progargc = newprogargc;
+        newprogargc = 0;
+        progargs = newprogargs;
+        newprogargs = NULL;
+    }
     #ifdef _WIN_NO_VT
     getCurPos();
     int tmpx = curx, tmpy = cury;
@@ -1783,7 +1822,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
                     outbuf[0] = '0' + ret;
                     outbuf[1] = 0;
                     goto fexit;
-                } else if (!strcmp(farg[0], "EXECA") || !strcmp(farg[0], "EXECA$")) {
+                } else if (farg[0][0] == 'E' && (!strcmp(farg[0] + 1, "XECA") || !strcmp(farg[0] + 1, "XECA$"))) {
                     skipfargsolve = true;
                 }
             } else {
@@ -1805,12 +1844,6 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
             }
         }
     }
-    /*
-    for (int j = 0; j <= ftmpct; ++j) {
-        printf("farg[%d]: {%s}\n", j, farg[j]);
-        printf("tmpfargs[%d]: {%s}\n", j, tmpfargs[j]);
-    }
-    */
     outbuf[0] = 0;
     cerr = 127;
     chkCmdPtr = farg[0];

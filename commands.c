@@ -388,24 +388,79 @@ if (chkCmd(2, "SRAND", "SRND")) {
     srand(rs);
     goto noerr;
 }
-if (chkCmd(1, "CALL")) {
-    if (argct != 1) {cerr = 3; goto cmderr;}
+if (chkCmd(2, "CALL", "CALLA")) {
+    if (argct < 1) {cerr = 3; goto cmderr;}
     cerr = 0;
-    if (!solvearg(1)) goto cmderr;
-    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    bool execa = false;
+    char** tmparg = NULL;
+    int tmpargct = 0;
+    if (!strcmp(arg[0], "CALLA")) {
+        if (argct != 1) {cerr = 3; goto cmderr;}
+        execa = true;
+        int v = -1;
+        for (register int i = 0; i < varmaxct; ++i) {
+            if (vardata[i].inuse && !strcmp(tmpargs[1], vardata[i].name)) {v = i; break;}
+        }
+        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpargs[1]); goto cmderr;}
+        if (vardata[v].type != 1) {cerr = 2; goto cmderr;}
+        tmparg = arg;
+        tmpargct = argct;
+        arg = vardata[v].data - 1;
+        argct = vardata[v].size + 1;
+    } else {
+        if (!solvearg(1)) goto cmderr;
+        if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    }
+    newprogargc = argct;
+    newprogargs = (char**)malloc((argct + 1) * sizeof(char*));
+    for (int i = 2; i <= argct; ++i) {
+        if (!execa) {
+            if (!solvearg(i)) {
+                for (int j = i - 1; j > 0; --j) {
+                    free(newprogargs[j]);
+                }
+                free(newprogargs);
+                goto cmderr;
+            }
+        }
+        newprogargs[i - 1] = malloc(argl[i] + 1);
+        copyStr(arg[i], newprogargs[i - 1]);
+    }
     inprompt = !runfile;
     setsig(SIGINT, cleanExit);
     if (!loadProg(arg[1])) goto cmderr;
     chkinProg = true;
     cp = 0;
     didloop = true;
+    if (execa) {
+        argct = tmpargct;
+        arg = tmparg;
+    }
     goto noerr;
 }
-if (chkCmd(1, "RUN")) {
+if (chkCmd(2, "RUN", "RUNA")) {
     if (argct < 1) {cerr = 3; goto cmderr;}
     cerr = 0;
-    if (!solvearg(1)) goto cmderr;
-    if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    bool execa = false;
+    char** tmparg = NULL;
+    int tmpargct = 0;
+    if (!strcmp(arg[0], "RUNA")) {
+        if (argct != 1) {cerr = 3; goto cmderr;}
+        execa = true;
+        int v = -1;
+        for (register int i = 0; i < varmaxct; ++i) {
+            if (vardata[i].inuse && !strcmp(tmpargs[1], vardata[i].name)) {v = i; break;}
+        }
+        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpargs[1]); goto cmderr;}
+        if (vardata[v].type != 1) {cerr = 2; goto cmderr;}
+        tmparg = arg;
+        tmpargct = argct;
+        arg = vardata[v].data - 1;
+        argct = vardata[v].size + 1;
+    } else {
+        if (!solvearg(1)) goto cmderr;
+        if (argt[1] != 1) {cerr = 2; goto cmderr;}
+    }
     #ifndef _WIN32
     char** runargs = (char**)malloc((argct + 3) * sizeof(char*));
     runargs[0] = startcmd;
@@ -414,7 +469,7 @@ if (chkCmd(1, "RUN")) {
     argct += 2;
     int argno = 3;
     for (; argno < argct; argno++) {
-        if (!solvearg(argno - 1)) {free(runargs); goto cmderr;}
+        if (!execa) if (!solvearg(argno - 1)) {free(runargs); goto cmderr;}
         runargs[argno] = arg[argno - 1];
     }
     argct -= 2;
@@ -439,7 +494,7 @@ if (chkCmd(1, "RUN")) {
     if (nq) strApndChar(tmpcmd, '"');
     copyStrApnd(" -x", tmpcmd);
     for (int argno = 1; argno <= argct; ++argno) {
-        if (argno > 1) solvearg(argno);
+        if (!execa) if (argno > 1) if (!solvearg(argno)) {free(tmpcmd); goto cmderr;}
         strApndChar(tmpcmd, ' ');
         bool nq = winArgNeedsQuotes(arg[argno]);
         if (nq) strApndChar(tmpcmd, '"');
@@ -450,6 +505,10 @@ if (chkCmd(1, "RUN")) {
     (void)ret;
     free(tmpcmd);
     #endif
+    if (execa) {
+        argct = tmpargct;
+        arg = tmparg;
+    }
     updateTxtAttrib();
     goto noerr;
 }
@@ -488,6 +547,7 @@ if (chkCmd(2, "EXEC", "EXECA")) {
     char** tmparg = NULL;
     int tmpargct = 0;
     if (!strcmp(arg[0], "EXECA")) {
+        if (argct != 1) {cerr = 3; goto cmderr;}
         execa = true;
         int v = -1;
         for (register int i = 0; i < varmaxct; ++i) {

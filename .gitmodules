@@ -1,6 +1,12 @@
+[submodule "clibasic-docs"]
+	path = clibasic-docs
+	url = git@github.com:PQCraft/clibasic-docs.git
+[submodule "clibasic-examples"]
+	path = clibasic-examples
+	url = git@github.com:PQCraft/clibasic-examples.git
 [submodule "docs"]
 	path = docs
-	url = https://github.com/pqcraft/clibasic-docs
+	url = git@github.com:PQCraft/clibasic-docs.git
 [submodule "examples"]
 	path = examples
 	url = git@github.com:PQCraft/clibasic-examples.git
