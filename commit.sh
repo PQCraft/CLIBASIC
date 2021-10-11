@@ -31,7 +31,8 @@ git commit -m "Updated examples to $ver"
 git push
 cd ..
 
-echo $'\e[1m'"Adding files:" !(clibasic|clibasic.exe|*.dll|*.zip|*.bas|lib) $'\e[0m'
+echo $'\e[1m'"Adding files..."$'\e[0m'
+echo !(clibasic|clibasic.exe|*.dll|*.zip|*.bas|lib)
 git add !(clibasic|clibasic.exe|*.dll|*.zip|*.bas|lib) || exit 1
 
 echo $'\e[1m'"Committing..."$'\e[0m'
