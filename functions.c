@@ -389,9 +389,17 @@ if (chkCmd(1, "VAL")) {
             sscanf(farg[1], "%llo", (long long unsigned int*)&num);
             sprintf(outbuf, "%llu", (long long unsigned int)num);
             break;
+        case 3:
+            char* tmpi = farg[1];
+            num = 0;
+            while (*tmpi == '0' || *tmpi == '1' || *tmpi == 'b') {
+                num <<= 1;
+                num += (*tmpi++ == '1');
+            }
+            sprintf(outbuf, "%llu", (long long unsigned int)num);
+            break;            
         default:
-            sscanf(farg[1], "%lf", &dbl);
-            sprintf(outbuf, "%lf", dbl);
+            cerr = 16;
             break;
     }
     goto fexit;
@@ -510,10 +518,70 @@ if (chkCmd(1, "LOG10")) {
     sprintf(outbuf, "%lf", dbl);
     goto fexit;
 }
-if (chkCmd(1, "EXP")) {
+if (chkCmd(1, "SHIFT")) {
+    if (fargct != 2) {cerr = 3; goto fexit;}
     cerr = 0;
     ftype = 2;
+    if (fargt[1] != 2 || fargt[2] != 2) {cerr = 2; goto fexit;}
+    uint64_t num;
+    sscanf(farg[1], "%llu", (long long unsigned int*)&num);
+    int l = atoi(farg[2]);
+    if (l < 0) {
+        l *= -1;
+        num >>= l;
+    } else {
+        num <<= l;
+    }
+    sprintf(outbuf, "%llu", (long long unsigned int)num);
+    goto fexit;
+}
+if (chkCmd(1, "NOT")) {
     if (fargct != 1) {cerr = 3; goto fexit;}
+    cerr = 0;
+    ftype = 2;
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    uint64_t num;
+    sscanf(farg[1], "%llu", (long long unsigned int*)&num);
+    sprintf(outbuf, "%llu", (long long unsigned int)~num);
+    goto fexit;
+}
+if (chkCmd(1, "AND")) {
+    if (fargct != 2) {cerr = 3; goto fexit;}
+    cerr = 0;
+    ftype = 2;
+    if (fargt[1] != 2 || fargt[2] != 2) {cerr = 2; goto fexit;}
+    uint64_t num1, num2;
+    sscanf(farg[1], "%llu", (long long unsigned int*)&num1);
+    sscanf(farg[2], "%llu", (long long unsigned int*)&num2);
+    sprintf(outbuf, "%llu", (long long unsigned int)(num1 & num2));
+    goto fexit;
+}
+if (chkCmd(1, "OR")) {
+    if (fargct != 2) {cerr = 3; goto fexit;}
+    cerr = 0;
+    ftype = 2;
+    if (fargt[1] != 2 || fargt[2] != 2) {cerr = 2; goto fexit;}
+    uint64_t num1, num2;
+    sscanf(farg[1], "%llu", (long long unsigned int*)&num1);
+    sscanf(farg[2], "%llu", (long long unsigned int*)&num2);
+    sprintf(outbuf, "%llu", (long long unsigned int)(num1 | num2));
+    goto fexit;
+}
+if (chkCmd(1, "XOR")) {
+    if (fargct != 2) {cerr = 3; goto fexit;}
+    cerr = 0;
+    ftype = 2;
+    if (fargt[1] != 2 || fargt[2] != 2) {cerr = 2; goto fexit;}
+    uint64_t num1, num2;
+    sscanf(farg[1], "%llu", (long long unsigned int*)&num1);
+    sscanf(farg[2], "%llu", (long long unsigned int*)&num2);
+    sprintf(outbuf, "%llu", (long long unsigned int)(num1 ^ num2));
+    goto fexit;
+}
+if (chkCmd(1, "EXP")) {
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    cerr = 0;
+    ftype = 2;
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
     double dbl;
     sscanf(farg[1], "%lf", &dbl);
@@ -523,9 +591,9 @@ if (chkCmd(1, "EXP")) {
     goto fexit;
 }
 if (chkCmd(1, "INKEY$")) {
+    if (fargct) {cerr = 3; goto fexit;}
     cerr = 0;
     ftype = 1;
-    if (fargct) {cerr = 3; goto fexit;}
     #ifndef _WIN32
     int tmp;
     if (!(tmp = kbhit())) goto fexit;
@@ -545,35 +613,35 @@ if (chkCmd(1, "INKEY$")) {
     goto fexit;
 }
 if (chkCmd(1, "UCASE$")) {
+    if (fargct != 1) {cerr = 3; goto fexit;}
     cerr = 0;
     ftype = 1;
-    if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     upCase(farg[1]);
     copyStr(farg[1], outbuf);
     goto fexit;
 }
 if (chkCmd(1, "LCASE$")) {
+    if (fargct != 1) {cerr = 3; goto fexit;}
     cerr = 0;
     ftype = 1;
-    if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     lowCase(farg[1]);
     copyStr(farg[1], outbuf);
     goto fexit;
 }
 if (chkCmd(1, "LEN")) {
+    if (fargct != 1) {cerr = 3; goto fexit;}
     cerr = 0;
     ftype = 2;
-    if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     sprintf(outbuf, "%lu", (long unsigned)strlen(farg[1]));
     goto fexit;
 }
 if (chkCmd(1, "SNIP$")) {
+    if (fargct < 2 || fargct > 3) {cerr = 3; goto fexit;}
     cerr = 0;
     ftype = 1;
-    if (fargct < 2 || fargct > 3) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     int32_t start, end;
     if (fargct == 2) {
