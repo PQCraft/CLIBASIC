@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.24.1";
+char VER[] = "0.24.2";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -337,6 +337,8 @@ int submaxct = 0;
 bool addsub = false;
 int subindex = -1;
 
+char* rl_tmpptr = NULL;
+
 #ifndef _WIN32
 struct termios term, restore;
 struct termios kbhterm, kbhterm2;
@@ -460,23 +462,23 @@ void updatechars() {
 bool winArgNeedsQuotes(char* str) {
     for (int32_t i = 0; str[i]; ++i) {
         switch (str[i]) {
-            case ' ':
-            case '&':
-            case '(':
-            case ')':
-            case '[':
-            case ']':
-            case '{':
-            case '}':
-            case '^':
-            case '=':
-            case ';':
-            case '!':
-            case '\'':
-            case '+':
-            case ',':
-            case '`':
-            case '~':
+            case ' ':;
+            case '&':;
+            case '(':;
+            case ')':;
+            case '[':;
+            case ']':;
+            case '{':;
+            case '}':;
+            case '^':;
+            case '=':;
+            case ';':;
+            case '!':;
+            case '\'':;
+            case '+':;
+            case ',':;
+            case '`':;
+            case '~':;
                 return true;
                 break;
         }
@@ -558,6 +560,8 @@ void cleanExit() {
         SetFileAttributesA(HIST_FILE, FILE_ATTRIBUTE_HIDDEN);
         #endif
     }
+    rl_clear_history();
+    clear_history();
     #if defined(CHANGE_TITLE) && !defined(_WIN_NO_VT)
     if (changedtitle) fputs("\e[23;0t", stdout);
     #endif
@@ -576,6 +580,27 @@ void cleanExit() {
         if (curx != 1) putchar('\n');
     }
     freeBaseMem();
+    free(startcmd);
+    free(rl_tmpptr);
+    free(cmd);
+    free(arg);
+    free(argt);
+    free(argl);
+    free(tmpargs);
+    free(oldprogargc);
+    free(oldprogargs);
+    free(errstr);
+    for (register int i = 0; i < varmaxct; ++i) {
+        if (vardata[i].inuse) {
+            if (vardata[i].size == -1) vardata[i].size = 0;
+            for (int32_t j = 0; j <= vardata[i].size; ++j) {
+                free(vardata[i].data[j]);
+            }
+            free(vardata[i].data);
+            free(vardata[i].name);
+        }
+    }
+    free(vardata);
     exit(err);
 }
 
@@ -800,13 +825,13 @@ int main(int argc, char** argv) {
                 bool sawCmd = false;
                 for (int32_t i = 0; conbuf[i]; ++i) {
                     switch (conbuf[i]) {
-                        case 'a' ... 'z':
+                        case 'a' ... 'z':;
                             if (!inStr) conbuf[i] = conbuf[i] - 32;
                             break;
-                        case '"':
+                        case '"':;
                             inStr = !inStr;
                             break;
-                        case ' ':
+                        case ' ':;
                             if (!sawCmd) {sawCmd = true; inStr = false;}
                             break;
                     }
@@ -837,7 +862,7 @@ int main(int argc, char** argv) {
     if (pexit) exit(0);
     readyTerm();
     rl_readline_name = "CLIBASIC";
-    char* rl_tmpptr = calloc(1, 1);
+    rl_tmpptr = calloc(1, 1);
     rl_completion_entry_function = rl_get_tab;
     rl_attempted_completion_function = (rl_completion_func_t*)rl_tab;
     rl_special_prefixes = rl_tmpptr;
@@ -873,6 +898,7 @@ int main(int argc, char** argv) {
                     if ((scsize = readlink("/proc/curproc/file", startcmd, CB_BUF_SIZE)) == -1)
                     #endif
                         goto scargv;
+                startcmd[scsize] = 0;
                 startcmd = realloc(startcmd, scsize + 1);
             #else
                 int mib[4];
@@ -938,7 +964,6 @@ int main(int argc, char** argv) {
         #endif
         #endif
     }
-    errstr = NULL;
     cmd = NULL;
     argt = NULL;
     arg = NULL;
@@ -969,6 +994,7 @@ int main(int argc, char** argv) {
                     if (!loadProg(".autorun.bas"))
                         {autorun = false; inProg = false; argslater = false;}
             ret = chdir(tmpcwd);
+            free(tmpcwd);
             (void)ret;
         }
     }
@@ -1034,13 +1060,13 @@ int main(int argc, char** argv) {
             bool sawCmd = false;
             for (int32_t i = 0; conbuf[i]; ++i) {
                 switch (conbuf[i]) {
-                    case 'a' ... 'z':
+                    case 'a' ... 'z':;
                         if (!inStr) conbuf[i] = conbuf[i] - 32;
                         break;
-                    case '"':
+                    case '"':;
                         inStr = !inStr;
                         break;
-                    case ' ':
+                    case ' ':;
                         if (!sawCmd) {sawCmd = true; inStr = false;}
                         break;
                 }
@@ -1063,7 +1089,7 @@ int main(int argc, char** argv) {
             if (inProg) {
                 if (progbuf[progindex][cp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((progbuf[progindex][cp] == ':' && !inStr) || progbuf[progindex][cp] == '\n' || progbuf[progindex][cp] == 0) {
-                    if (progbuf[progindex][cp - cmdl - 1] == '\n') {
+                    if (cp - cmdl > 0 && progbuf[progindex][cp - cmdl - 1] == '\n') {
                         if (!lockpl) progLine++;
                         if (inStr) inStr = false;
                     }
@@ -1178,7 +1204,7 @@ static inline void getCurPos() {
     while (i > 0) {getchar(); --i;}
     for (int r = 0; r < 2; ++r) {
         i = 0;
-        resend:
+        resend:;
         fputs("\e[6n", stdout);
         fflush(stdout);
         uint64_t tmpus = usTime();
@@ -1191,7 +1217,7 @@ static inline void getCurPos() {
                 ++i;
             }
         }
-        gcplexit:
+        gcplexit:;
         buf[i] = 0;
         i = kbhit();
         while (i > 0) {getchar(); --i;}
@@ -1218,19 +1244,18 @@ static inline void getCurPos() {
 }
 
 void unloadProg() {
-    //if (progindex > 0) progfnstr = progfn[progindex - 1];
     for (int i = 1; i < progargc; ++i) {
         free(progargs[i]);
     }
-    free(progargs);
+    nfree(progargs);
     progargs = oldprogargs[progindex];
     progargc = oldprogargc[progindex];
-    free(progbuf[progindex]);
-    free(progfn[progindex]);
+    nfree(progbuf[progindex]);
+    nfree(progfn[progindex]);
     progbuf[progindex] = NULL;
     progfn = (char**)realloc(progfn, progindex * sizeof(char*));
     progbuf = (char**)realloc(progbuf, progindex * sizeof(char*));
-    free(gotodata);
+    nfree(gotodata);
     gotodata = proggotodata[progindex];
     gotomaxct = proggotomaxct[progindex];
     cp = progcp[progindex];
@@ -1250,7 +1275,7 @@ void unloadProg() {
     minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
     olddidelse = (bool*)realloc(olddidelse, progindex * sizeof(bool));
     olddidelseif = (bool*)realloc(olddidelseif, progindex * sizeof(bool));
-    oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(bool));
+    oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(cb_brkinfo));
     proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
     proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
     progindex--;
@@ -1317,7 +1342,6 @@ bool loadProg(char* filename) {
     #else
     progfn[progindex] = realpath(filename, NULL);
     #endif
-    //progfnstr = progfn[progindex];
     ++progindex;
     progbuf = (char**)realloc(progbuf, progindex * sizeof(char*));
     progcp = (int32_t*)realloc(progcp, progindex * sizeof(int32_t));
@@ -1327,7 +1351,7 @@ bool loadProg(char* filename) {
     minitstackp = (int*)realloc(minitstackp, progindex * sizeof(int));
     olddidelse = (bool*)realloc(olddidelse, progindex * sizeof(bool));
     olddidelseif = (bool*)realloc(olddidelseif, progindex * sizeof(bool));
-    oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(bool));
+    oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(cb_brkinfo));
     minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
     proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
     proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
@@ -1481,14 +1505,14 @@ static inline bool chkCmd(int ct, ...) {
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 static inline bool isSpChar(char c) {
     switch (c) {
-        case '+':
-        case '-':
-        case '*':
-        case '/':
-        case '^':
+        case '+':;
+        case '-':;
+        case '*':;
+        case '/':;
+        case '^':;
             return true;
             break;
-        default:
+        default:;
             return false;
             break;
     }
@@ -1496,18 +1520,18 @@ static inline bool isSpChar(char c) {
 
 static inline bool isExSpChar(char c) {
     switch (c) {
-        case '+':
-        case '-':
-        case '*':
-        case '/':
-        case '^':
-        case '=':
-        case '<':
-        case '>':
-        case ',':
+        case '+':;
+        case '-':;
+        case '*':;
+        case '/':;
+        case '^':;
+        case '=':;
+        case '<':;
+        case '>':;
+        case ',':;
             return true;
             break;
-        default:
+        default:;
             return false;
             break;
     }
@@ -1515,21 +1539,21 @@ static inline bool isExSpChar(char c) {
 
 static inline bool isValidVarChar(char c) {
     switch (c) {
-        case 'A' ... 'Z':
-        case '0' ... '9':
-        case '#':
-        case '$':
-        case '%':
-        case '!':
-        case '?':
-        case '@':
-        case '[':
-        case ']':
-        case '_':
-        case '~':
+        case 'A' ... 'Z':;
+        case '0' ... '9':;
+        case '#':;
+        case '$':;
+        case '%':;
+        case '!':;
+        case '?':;
+        case '@':;
+        case '[':;
+        case ']':;
+        case '_':;
+        case '~':;
             return true;
             break;
-        default:
+        default:;
             return false;
             break;
     }
@@ -1537,12 +1561,12 @@ static inline bool isValidVarChar(char c) {
 
 static inline bool isValidHexChar(char c) {
     switch (c) {
-        case 'a' ... 'f':
-        case 'A' ... 'F':
-        case '0' ... '9':
+        case 'a' ... 'f':;
+        case 'A' ... 'F':;
+        case '0' ... '9':;
             return true;
             break;
-        default:
+        default:;
             return false;
             break;
     }
@@ -1688,7 +1712,7 @@ static inline void getStr(char* str1, char* str2) {
                 case 'a': c = '\a'; break;
                 case '[': c = 1; break;
                 case ']': c = 2; break;
-                case 'x':
+                case 'x':;
                     h[0] = '0';
                     h[1] = 'x';
                     if (!isValidHexChar(str1[++i])) {i -= 2; break;}
@@ -1758,7 +1782,7 @@ bool cbrm(char* path) {
     if (!cbrmIndex) free(odir);
     if (rmdir(path)) {fileerror = errno; return false;}
     return true;
-    cbrm_fail:
+    cbrm_fail:;
     --cbrmIndex;
     ret = chdir((cbrmIndex) ? ".." : odir);
     (void)ret;
@@ -2193,11 +2217,11 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     seenStr[0] = false;
     for (register int32_t i = 0; inbuf[i]; ++i) {
         switch (inbuf[i]) {
-            default:
+            default:;
                 if (inStr) break;
                 if (inbuf[i] == ',' || isSpChar(inbuf[i])) seenStr[pct] = false;
                 break;
-            case '"':
+            case '"':;
                 inStr = !inStr;
                 if (inStr && seenStr[pct]) {
                     dt = 0;
@@ -2206,14 +2230,14 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 }
                 seenStr[pct] = true;
                 break;
-            case '(':
+            case '(':;
                 if (inStr) break;
                 if (pct == 0) {ip = i;}
                 pct++;
                 seenStr = (bool*)realloc(seenStr, (pct + 1) * sizeof(bool));
                 seenStr[pct] = false;
                 break;
-            case ')':
+            case ')':;
                 if (inStr) break;
                 pct--;
                 seenStr = (bool*)realloc(seenStr, (pct + 1) * sizeof(bool));
@@ -2238,11 +2262,11 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                     i -= tmplen[0] - tmplen[1];
                 }
                 break;
-            case '[':
+            case '[':;
                 if (inStr) break;
                 bct++;
                 break;
-            case ']':
+            case ']':;
                 if (inStr) break;
                 bct--;
                 break;
@@ -2262,7 +2286,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                     case ')': pct--; break;
                     case '[': bct++; break;
                     case ']': bct--; break;
-                    default:
+                    default:;
                         if (isSpChar(inbuf[jp]) && !pct && !bct) goto gvwhileexit1;
                         break;
                 }
@@ -2309,7 +2333,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                         case ')': pct--; break;
                         case '[': bct++; break;
                         case ']': bct--; break;
-                        case '^':
+                        case '^':;
                             if (!inStr && !pct && !bct) {
                                 if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
                                 p2 = i; numAct = 4;
@@ -2325,14 +2349,14 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                         case ')': pct--; break;
                         case '[': bct++; break;
                         case ']': bct--; break;
-                        case '*':
+                        case '*':;
                             if (!inStr && !pct && !bct) {
                                 if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
                                 p2 = i; numAct = 2;
                                 if (p2) goto foundact;
                             }
                             break;
-                        case '/':
+                        case '/':;
                             if (!inStr && !pct && !bct) {
                                 if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
                                 p2 = i; numAct = 3;
@@ -2348,14 +2372,14 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                         case ')': pct--; break;
                         case '[': bct++; break;
                         case ']': bct--; break;
-                        case '+':
+                        case '+':;
                             if (!inStr && !pct && !bct) {
                                 if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
                                 p2 = i; numAct = 0;
                                 if (p2) goto foundact;
                             }
                             break;
-                        case '-':
+                        case '-':;
                             if (!inStr && !pct && !bct) {
                                 if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
                                 p2 = i; numAct = 1;
@@ -2391,7 +2415,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                             case ')': pct--; break;
                             case '[': bct++; break;
                             case ']': bct--; break;
-                            default:
+                            default:;
                                 if (isSpChar(tmp[0][i]) && !inStr && !pct && !bct) {p1 = i; goto gvforexit1;}
                                 break;
                         }
@@ -2407,7 +2431,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                             case '[': bct++; break;
                             case ']': bct--; break;
                             case 0: p3 = i; goto gvforexit2;
-                            default:
+                            default:;
                                 if (isSpChar(tmp[0][i]) && i != p2 + 1 && !pct && !bct) {p3 = i; goto gvforexit2;}
                                 break;
                         }
@@ -2432,7 +2456,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                     case 1: num3 = num1 - num2; break;
                     case 2: num3 = num1 * num2; break;
                     case 3: if (num2 == 0) {cerr = 5; dt = 0; goto gvreturn;} num3 = num1 / num2; break;
-                    case 4:
+                    case 4:;
                         if (num1 == 0) {if (num2 == 0) {cerr = 5; dt = 0; goto gvreturn;} num3 = 0; break;}
                         if (num2 == 0) {num3 = 1; break;}
                         num3 = pow(num1, num2);
@@ -2799,15 +2823,15 @@ uint8_t logictest(char* inbuf) {
         }
         copyStrSnip(inbuf, i, j, ltbuf);
         switch (logicActOld) {
-            case 1:
+            case 1:;
                 if ((ret = logictestexpr(ltbuf)) == 255) {out = 255; goto ltexit;}
                 out |= ret;
                 break;
-            case 2:
+            case 2:;
                 if ((ret = logictestexpr(ltbuf)) == 255) {out = 255; goto ltexit;}
                 out &= ret;
                 break;
-            default:
+            default:;
                 out = logictestexpr(ltbuf);
                 break;
         }
@@ -2908,115 +2932,115 @@ static inline void printError(int error) {
     if (inProg) {printf("Error %d on line %d of '%s':\n%s\n", error, progLine, basefilename(progfnstr), cmd);}
     else {printf("Error %d: ", error);}
     switch (error) {
-        default:
+        default:;
             fputs("Unknown", stdout);
             break;
-        case 1:
+        case 1:;
             fputs("Syntax", stdout);
             break;
-        case 2:
+        case 2:;
             fputs("Type mismatch", stdout);
             break;
-        case 3:
+        case 3:;
             fputs("Argument count mismatch", stdout);
             break;
-        case 4:
+        case 4:;
             printf("Invalid variable name or identifier: '%s'", errstr);
             break;
-        case 5:
+        case 5:;
             fputs("Operation resulted in undefined", stdout);
             break;
-        case 6:
+        case 6:;
             fputs("LOOP without DO", stdout);
             break;
-        case 7:
+        case 7:;
             fputs("ENDIF without IF", stdout);
             break;
-        case 8:
+        case 8:;
             fputs("ELSE or ELSEIF without IF", stdout);
             break;
-        case 9:
+        case 9:;
             fputs("NEXT without FOR", stdout);
             break;
-        case 10:
+        case 10:;
             fputs("Expected expression", stdout);
             break;
-        case 11:
+        case 11:;
             fputs("Unexpected ELSE", stdout);
             break;
-        case 12:
+        case 12:;
             fputs("Reached DO limit", stdout);
             break;
-        case 13:
+        case 13:;
             fputs("Reached IF limit", stdout);
             break;
-        case 14:
+        case 14:;
             fputs("Reached FOR limit", stdout);
             break;
-        case 15:
+        case 15:;
             printf("File or directory not found: '%s'", errstr);
             break;
-        case 16:
+        case 16:;
             fputs("Invalid data or data range exceeded", stdout);
             break;
-        case 17:
+        case 17:;
             printf("Cannot change to directory '%s' (errno: [%d] %s)", errstr, errno, strerror(errno));
             break;
-        case 18:
+        case 18:;
             fputs("Expected file instead of directory", stdout);
             break;
-        case 19:
+        case 19:;
             fputs("Expected directory instead of file", stdout);
             break;
-        case 20:
+        case 20:;
             fputs("File or directory error", stdout);
             break;
-        case 21:
+        case 21:;
             printf("Permission error: '%s'", errstr);
             break;
-        case 22:
+        case 22:;
             printf("Array index out of bounds: '%s'", errstr);
             break;
-        case 23:
+        case 23:;
             printf("Variable is not an array: '%s'", errstr);
             break;
-        case 24:
+        case 24:;
             printf("Variable is an array: '%s'", errstr);
             break;
-        case 25:
+        case 25:;
             fputs("Array is already dimensioned", stdout);
             break;
-        case 26:
+        case 26:;
             fputs("Memory error", stdout);
             break;
-        case 27:
+        case 27:;
             printf("Failed to open file '%s' (errno: [%d] %s)", errstr, errno, strerror(errno));
             break;
-        case 28:
+        case 28:;
             fputs("Label is already defined", stdout);
             break;
-        case 29:
+        case 29:;
             fputs("Label is not defined", stdout);
             break;
-        case 30:
+        case 30:;
             fputs("Not in DO/FOR block", stdout);
             break;
-        case 125:
+        case 125:;
             printf("Function only valid in program: '%s'", errstr);
             break;
-        case 126:
+        case 126:;
             printf("Function not valid in program: '%s'", errstr);
             break;
-        case 127:
+        case 127:;
             printf("Not a function: '%s'", errstr);
             break;
-        case 253:
+        case 253:;
             printf("Command only valid in program: '%s'", arg[0]);
             break;
-        case 254:
+        case 254:;
             printf("Command not valid in program: '%s'", arg[0]);
             break;
-        case 255:
+        case 255:;
             printf("Not a command: '%s'", arg[0]);
             break;
     }
@@ -3055,11 +3079,11 @@ void runcmd() {
     noerr:;
     if (lgc) return;
     for (int i = 0; i <= argct; ++i) {
-        free(tmpargs[i]);
+        nfree(tmpargs[i]);
     }
     if (madeargs) {
         for (int i = 1; i <= argct; ++i) {
-            free(arg[i]);
+            nfree(arg[i]);
         }
     }
     return;

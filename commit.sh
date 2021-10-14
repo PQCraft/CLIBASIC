@@ -1,6 +1,7 @@
 #!/bin/bash
 rev="Beta"
 #-----
+
 shopt -s extglob
 
 echo $'\e[1m'"Grabbing version..."$'\e[0m'
@@ -32,8 +33,12 @@ git push
 cd ..
 
 echo $'\e[1m'"Adding files..."$'\e[0m'
-echo !(clibasic|clibasic.exe|*.dll|*.zip|*.bas|lib)
-git add !(clibasic|clibasic.exe|*.dll|*.zip|*.bas|lib) || exit 1
+mv lib .lib
+echo LICENSE Makefile *.c *.sh *.md */
+git add LICENSE Makefile *.c *.sh *.md */
+e=$?
+mv .lib lib
+[ $e -ne 0 ] && exit 1
 
 echo $'\e[1m'"Committing..."$'\e[0m'
 msg="$ver"

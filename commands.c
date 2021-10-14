@@ -838,7 +838,7 @@ if (chkCmd(4, "MV", "MOVE", "REN", "RENAME")) {
     goto noerr;
 }
 goto cmderr;
-_cmd:
+_cmd:;
 if (chkCmd(1, "_RESETTITLE")) {
     if (inProg) {cerr = 254; goto cmderr;}
     if (argct) {cerr = 3; goto cmderr;}

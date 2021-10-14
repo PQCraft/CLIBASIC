@@ -365,7 +365,7 @@ if (chkCmd(1, "VAL")) {
     int32_t tmppos = 0;
     if (fargct == 2) act = atoi(farg[2]);
     switch (act) {
-        case 0:
+        case 0:;
             tmplen = strlen(farg[1]);
             for (int32_t i = 0; farg[1][i] == '0' && i < tmplen; i++) {
                 tmppos++;
@@ -381,15 +381,15 @@ if (chkCmd(1, "VAL")) {
             free(tmpstr);
             sprintf(outbuf, "%lf", dbl);
             break;
-        case 1:
+        case 1:;
             sscanf(farg[1], "%llx", (long long unsigned int*)&num);
             sprintf(outbuf, "%llu", (long long unsigned int)num);
             break;
-        case 2:
+        case 2:;
             sscanf(farg[1], "%llo", (long long unsigned int*)&num);
             sprintf(outbuf, "%llu", (long long unsigned int)num);
             break;
-        case 3:
+        case 3:;
             char* tmpi = farg[1];
             num = 0;
             while (*tmpi == '0' || *tmpi == '1' || *tmpi == 'b') {
@@ -398,7 +398,7 @@ if (chkCmd(1, "VAL")) {
             }
             sprintf(outbuf, "%llu", (long long unsigned int)num);
             break;            
-        default:
+        default:;
             cerr = 16;
             break;
     }
@@ -937,31 +937,31 @@ if (chkCmd(1, "DATE")) {
     timeinfo = localtime(&rawtime);
     int edata = -1;
     switch (element) {
-        case 0:
+        case 0:;
             edata = timeinfo->tm_sec;
             break;
-        case 1:
+        case 1:;
             edata = timeinfo->tm_min;
             break;
-        case 2:
+        case 2:;
             edata = timeinfo->tm_hour;
             break;
-        case 3:
+        case 3:;
             edata = timeinfo->tm_mday;
             break;
-        case 4:
+        case 4:;
             edata = timeinfo->tm_mon;
             break;
-        case 5:
+        case 5:;
             edata = 1900 + timeinfo->tm_year;
             break;
-        case 6:
+        case 6:;
             edata = timeinfo->tm_wday;
             break;
-        case 7:
+        case 7:;
             edata = timeinfo->tm_yday;
             break;
-        case 8:
+        case 8:;
             edata = timeinfo->tm_isdst;
             break;
     }
@@ -1289,7 +1289,7 @@ if (chkCmd(1, "ISFILE")) {
     goto fexit;
 }
 goto fexit;
-_func:
+_func:;
 if (chkCmd(1, "_HOME$")) {
     cerr = 0;
     ftype = 1;
