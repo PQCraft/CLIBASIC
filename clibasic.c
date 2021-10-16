@@ -111,11 +111,11 @@
 #define swap(a, b) {__typeof__(a) c = a; a = b; b = c;}
 
 /* Free & set to NULL combo */
-#define nfree(ptr) {free(ptr); ptr = NULL;}
+#define nfree(ptr) {if (ptr) {free(ptr);} ptr = NULL;}
 
 // Base defines
 
-char VER[] = "0.24.2";
+char VER[] = "0.25";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -152,7 +152,6 @@ char VER[] = "0.24.2";
 int progindex = -1;
 char** progbuf = NULL;
 char** progfn = NULL;
-//char* progfnstr = NULL;
 #define progfnstr (progfn[progindex])
 int32_t* progcp = NULL;
 int* progcmdl = NULL;
@@ -220,6 +219,9 @@ int fnstackp = -1;
 int* minfnstackp = NULL;
 char fnvar[CB_BUF_SIZE];
 char forbuf[4][CB_BUF_SIZE];
+
+cb_jump gsstack[CB_PROG_LOGIC_MAX];
+int gsstackp = -1;
 
 typedef struct {
     uint8_t type;
@@ -394,6 +396,29 @@ char** rl_tab(const char* text, int start, int end) {
     return tab;
 }
 
+static inline void clearGlobals() {
+    dlstackp = -1;
+    itstackp = -1;
+    fnstackp = -1;
+    gsstackp = -1;
+    memset(&brkinfo, 0, sizeof(brkinfo));
+    for (int i = 0; i < CB_PROG_LOGIC_MAX; ++i) {
+        memset(&dlstack[i], 0, sizeof(cb_jump));
+        dldcmd[i] = false;
+        memset(&fnstack[i], 0, sizeof(cb_jump));
+        fnstack[i].cp = -1;
+        fndcmd[i] = false;
+        fninfor[i] = false;
+        itdcmd[i] = false;
+        memset(&gsstack[i], 0, sizeof(cb_jump));
+    }
+    for (int i = 0; i < gotomaxct; ++i) {
+        nfree(gotodata[i].name);
+    }
+    nfree(gotodata);
+    gotomaxct = 0;
+}
+
 #ifdef _WIN32
 #define hConsole GetStdHandle(STD_OUTPUT_HANDLE)
 char* rlptr;
@@ -551,6 +576,7 @@ void cleanExit() {
     setsig(SIGINT, forceExit);
     setsig(SIGTERM, forceExit);
     fflush(stdout);
+    unloadAllProg();
     closeFile(-1);
     ret = chdir(gethome());
     (void)ret;
@@ -580,27 +606,51 @@ void cleanExit() {
         if (curx != 1) putchar('\n');
     }
     freeBaseMem();
-    free(startcmd);
-    free(rl_tmpptr);
-    free(cmd);
-    free(arg);
-    free(argt);
-    free(argl);
-    free(tmpargs);
-    free(oldprogargc);
-    free(oldprogargs);
-    free(errstr);
-    for (register int i = 0; i < varmaxct; ++i) {
+    for (int i = 0; i < varmaxct; ++i) {
         if (vardata[i].inuse) {
             if (vardata[i].size == -1) vardata[i].size = 0;
             for (int32_t j = 0; j <= vardata[i].size; ++j) {
-                free(vardata[i].data[j]);
+                nfree(vardata[i].data[j]);
             }
-            free(vardata[i].data);
-            free(vardata[i].name);
+            nfree(vardata[i].data);
+            nfree(vardata[i].name);
         }
     }
-    free(vardata);
+    for (int i = 0; i < argct; ++i) {
+        nfree(tmpargs[i]);
+        if (i > 0) nfree(arg[i]);
+    }
+    nfree(startcmd);
+    nfree(rl_tmpptr);
+    nfree(cmd);
+    nfree(arg);
+    nfree(argt);
+    nfree(argl);
+    nfree(tmpargs);
+    nfree(errstr);
+    nfree(vardata);
+    if (progindex > -1) {
+        nfree(progbuf[0]);
+        nfree(progfn[0]);
+    }
+    nfree(progbuf);
+    nfree(progfn);
+    nfree(progcp);
+    nfree(progcmdl);
+    /*
+    nfree(olddidelse);
+    nfree(olddidelseif);
+    nfree(oldbrkinfo);
+    nfree(minfnstackp);
+    nfree(mindlstackp);
+    nfree(minitstackp);
+    nfree(proggotodata);
+    nfree(proggotomaxct);
+    nfree(oldprogargc);
+    nfree(oldprogargs);
+    free(proglinebuf);
+    */
+    clearGlobals();
     exit(err);
 }
 
@@ -690,27 +740,6 @@ static inline void readyTerm() {
     #endif
 }
 
-static inline void clearGlobals() {
-    dlstackp = -1;
-    itstackp = -1;
-    fnstackp = -1;
-    memset(&brkinfo, 0, sizeof(brkinfo));
-    for (int i = 0; i < CB_PROG_LOGIC_MAX; ++i) {
-        memset(&dlstack[i], 0, sizeof(cb_jump));
-        dldcmd[i] = false;
-        memset(&fnstack[i], 0, sizeof(cb_jump));
-        fnstack[i].cp = -1;
-        fndcmd[i] = false;
-        fninfor[i] = false;
-        itdcmd[i] = false;
-    }
-    for (int i = 0; i < gotomaxct; ++i) {
-        nfree(gotodata[i].name);
-    }
-    nfree(gotodata);
-    gotomaxct = 0;
-}
-
 int main(int argc, char** argv) {
     #if defined(GUI_CHECK) && defined(__unix__)
     if (!isatty(STDERR_FILENO) && !isatty(STDIN_FILENO) && !isatty(STDOUT_FILENO)) {
@@ -725,7 +754,7 @@ int main(int argc, char** argv) {
         }
         strApndChar(command, '\'');
         int ret = system(command);
-        free(command);
+        nfree(command);
         exit(ret);
     }
     #endif
@@ -911,7 +940,7 @@ int main(int argc, char** argv) {
                 startcmd = realloc(startcmd, strlen(startcmd) + 1);
                 char* tmpstartcmd = realpath(startcmd, NULL);
                 swap(startcmd, tmpstartcmd);
-                free(tmpstartcmd);
+                nfree(tmpstartcmd);
                 startcmd = realloc(startcmd, strlen(startcmd) + 1);
             #endif
         #else
@@ -921,7 +950,7 @@ int main(int argc, char** argv) {
             }
             char* tmpstartcmd = realpath(startcmd, NULL);
             swap(startcmd, tmpstartcmd);
-            free(tmpstartcmd);
+            nfree(tmpstartcmd);
             startcmd = realloc(startcmd, strlen(startcmd) + 1);
         #endif
     #else
@@ -934,7 +963,7 @@ int main(int argc, char** argv) {
     goto skipscargv;
     scargv:;
     if (strcmp(argv[0], basefilename(argv[0]))) {
-        free(startcmd);
+        nfree(startcmd);
         #ifndef _WIN32
         startcmd = realpath(argv[0], NULL);
         #else
@@ -960,7 +989,7 @@ int main(int argc, char** argv) {
         char* tmpstr = (char*)malloc(CB_BUF_SIZE);
         sprintf(tmpstr, "CLIBASIC %s (%s-bit)", VER, BVER);
         SetConsoleTitleA(tmpstr);
-        free(tmpstr);
+        nfree(tmpstr);
         #endif
         #endif
     }
@@ -994,7 +1023,7 @@ int main(int argc, char** argv) {
                     if (!loadProg(".autorun.bas"))
                         {autorun = false; inProg = false; argslater = false;}
             ret = chdir(tmpcwd);
-            free(tmpcwd);
+            nfree(tmpcwd);
             (void)ret;
         }
     }
@@ -1037,7 +1066,7 @@ int main(int argc, char** argv) {
             inprompt = false;
             if (!tmpstr) {err = 0; cleanExit();}
             int32_t tmpptr;
-            if (tmpstr[0] == 0) {free(tmpstr); goto brkproccmd;}
+            if (tmpstr[0] == 0) {nfree(tmpstr); goto brkproccmd;}
             for (tmpptr = 0; tmpstr[tmpptr] == ' '; ++tmpptr) {}
             if (tmpptr) {
                 int32_t iptr;
@@ -1046,7 +1075,7 @@ int main(int argc, char** argv) {
                 }
                 tmpstr[iptr] = 0;
             }
-            if (tmpstr[0] == 0) {free(tmpstr); goto brkproccmd;}
+            if (tmpstr[0] == 0) {nfree(tmpstr); goto brkproccmd;}
             tmpptr = strlen(tmpstr);
             if (tmpptr--) {
                 while (tmpstr[tmpptr] == ' ' && tmpptr) {
@@ -1055,7 +1084,7 @@ int main(int argc, char** argv) {
             }   
             if (strcmp(tmpstr, cmpstr)) {add_history(tmpstr); copyStr(tmpstr, cmpstr);}
             copyStr(tmpstr, conbuf);
-            free(tmpstr);
+            nfree(tmpstr);
             bool inStr = false;
             bool sawCmd = false;
             for (int32_t i = 0; conbuf[i]; ++i) {
@@ -1245,14 +1274,13 @@ static inline void getCurPos() {
 
 void unloadProg() {
     for (int i = 1; i < progargc; ++i) {
-        free(progargs[i]);
+        nfree(progargs[i]);
     }
     nfree(progargs);
     progargs = oldprogargs[progindex];
     progargc = oldprogargc[progindex];
     nfree(progbuf[progindex]);
     nfree(progfn[progindex]);
-    progbuf[progindex] = NULL;
     progfn = (char**)realloc(progfn, progindex * sizeof(char*));
     progbuf = (char**)realloc(progbuf, progindex * sizeof(char*));
     nfree(gotodata);
@@ -1779,14 +1807,14 @@ bool cbrm(char* path) {
     }
     --cbrmIndex;
     int ret = chdir((cbrmIndex) ? ".." : odir);
-    if (!cbrmIndex) free(odir);
+    if (!cbrmIndex) nfree(odir);
     if (rmdir(path)) {fileerror = errno; return false;}
     return true;
     cbrm_fail:;
     --cbrmIndex;
     ret = chdir((cbrmIndex) ? ".." : odir);
     (void)ret;
-    if (!cbrmIndex) free(odir);
+    if (!cbrmIndex) nfree(odir);
     if (rmdir(path)) fileerror = errno;
     return false;
 }
@@ -1875,23 +1903,23 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     fexit:;
     if (cerr > 124 && cerr < 128) seterrstr(farg[0]);
     fnoerrscan:;
-    free(farg[0]);
+    nfree(farg[0]);
     if (skipfargsolve) {
         for (int j = 1; j <= ftmpct; ++j) {
-            free(tmpfargs[j]);
+            nfree(tmpfargs[j]);
         }
     } else {
         for (int j = 1; j <= ftmpct; ++j) {
-            free(farg[j]);
-            free(tmpfargs[j]);
+            nfree(farg[j]);
+            nfree(tmpfargs[j]);
         }
     }
-    free(farg);
-    free(tmpfargs);
-    free(flen);
-    free(fargt);
+    nfree(farg);
+    nfree(tmpfargs);
+    nfree(flen);
+    nfree(fargt);
     --getFuncIndex;
-    if (getFuncIndex) {free(gftmp[0]); free(gftmp[1]);}
+    if (getFuncIndex) {nfree(gftmp[0]); nfree(gftmp[1]);}
     if (cerr) return 0;
     return ftype;
 }
@@ -1942,7 +1970,7 @@ uint8_t getVar(char* vn, char* varout) {
     }
     int v = -1;
     for (register int i = 0; i < varmaxct; ++i) {
-        if (vardata[i].inuse) {if (!strcmp(vn, vardata[i].name)) {v = i; break;}}
+        if (vardata[i].inuse && !strcmp(vn, vardata[i].name)) {v = i; break;}
     }
     if (v == -1) {
         if (isArray) {
@@ -2020,7 +2048,7 @@ bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
     }
     int v = -1;
     for (register int i = 0; i < varmaxct; ++i) {
-        if (!strcmp(vn, vardata[i].name)) {v = i; break;}
+        if (vardata[i].inuse && !strcmp(vn, vardata[i].name)) {v = i; break;}
     }
     if (v == -1) {
         if (isArray) {
@@ -2087,15 +2115,15 @@ bool delVar(char* vn) {
     }
     int v = -1;
     for (register int i = 0; i < varmaxct; ++i) {
-        if (!strcmp(vn, vardata[i].name)) {v = i; break;}
+        if (vardata[i].inuse && !strcmp(vn, vardata[i].name)) {v = i; break;}
     }
     if (v != -1) {
         vardata[v].inuse = false;
-        free(vardata[v].name);
+        nfree(vardata[v].name);
         for (int32_t i = 0; i <= vardata[v].size; ++i) {
-            free(vardata[v].data[i]);
+            nfree(vardata[v].data[i]);
         }
-        free(vardata[v].data);
+        nfree(vardata[v].data);
         if (v == varmaxct - 1) {
             while (!vardata[v].inuse && v >= 0) {varmaxct--; v--;}
             vardata = (cb_var*)realloc(vardata, varmaxct * sizeof(cb_var));
@@ -2176,7 +2204,7 @@ static inline bool gvchkchar(char* tmp, int32_t i) {
             cerr = 1; return false;
         }
     } else {
-        if (isSpChar(tmp[i - 1])) {
+        if (i > 0 && isSpChar(tmp[i - 1])) {
             cerr = 1; return false;
         }
     }
@@ -2503,8 +2531,8 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     if (outbuf[0] == 0 && dt != 1) {outbuf[0] = '0'; outbuf[1] = 0; dt = 2;}
     gvreturn:;
     getValIndex--;
-    free(seenStr);
-    if (getValIndex) {free(tmp[0]); free(tmp[1]); free(tmp[2]); free(tmp[3]);}
+    nfree(seenStr);
+    if (getValIndex) {nfree(tmp[0]); nfree(tmp[1]); nfree(tmp[2]); nfree(tmp[3]);}
     return dt;
 }
 
@@ -2626,6 +2654,7 @@ void mkargs() {
         if (i == 0) {
             copyStrSnip(cmd, j, ((sccmd) ? h + 1 : h), tmpbuf[0]);
             argl[0] = strlen(tmpbuf[0]);
+            nfree(tmpargs[0]);
             tmpargs[0] = malloc(argl[0] + 1);
             copyStr(tmpbuf[0], tmpargs[0]);
             copyStrSnip(cmd, h + 1, strlen(cmd), tmpbuf[0]);
@@ -2785,9 +2814,9 @@ static inline uint8_t logictestexpr(char* inbuf) {
     ltreturn:;
     --logictestexpr_index;
     if (logictestexpr_index) {
-        free(lttmp[0]);
-        free(lttmp[1]);
-        free(lttmp[2]);
+        nfree(lttmp[0]);
+        nfree(lttmp[1]);
+        nfree(lttmp[2]);
     }
     return ret;
 }
@@ -2842,7 +2871,7 @@ uint8_t logictest(char* inbuf) {
     }
     ltexit:;
     --logictest_index;
-    if (logictest_index) free(ltbuf);
+    if (logictest_index) nfree(ltbuf);
     return out;
 }
 
@@ -3025,6 +3054,12 @@ static inline void printError(int error) {
         case 30:;
             fputs("Not in DO/FOR block", stdout);
             break;
+        case 31:;
+            fputs("RETURN without GOSUB", stdout);
+            break;
+        case 32:;
+            fputs("Reached GOSUB limit", stdout);
+            break;
         case 125:;
             printf("Function only valid in program: '%s'", errstr);
             break;
@@ -3053,9 +3088,18 @@ void runcmd() {
     bool lgc = runlogic();
     if (lgc) goto cmderr;
     if (cmd[0] == 0) return;
-    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {if (dldcmd[dlstackp]) return;}
-    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {if (itdcmd[itstackp]) return;}
-    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {if (fndcmd[fnstackp]) return;}
+    int32_t tmpi = 0;
+    while (cmd[tmpi] && cmd[tmpi] != ' ') {tmpi++;}
+    if (!cmd[tmpi]) tmpi = -1;
+    if (tmpi > -1) cmd[tmpi] = 0;
+    chkCmdPtr = cmd;
+    if (!chkCmd(2, "LABEL", "LBL") && cmd[0] != '@') {
+        if (tmpi > -1) cmd[tmpi] = ' ';
+        if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {if (dldcmd[dlstackp]) return;}
+        if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {if (itdcmd[itstackp]) return;}
+        if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {if (fndcmd[fnstackp]) return;}
+    }
+    if (tmpi > -1) cmd[tmpi] = ' ';
     bool madeargs = false;
     mkargs();
     if (cerr) goto cmderr;
@@ -3086,6 +3130,7 @@ void runcmd() {
             nfree(arg[i]);
         }
     }
+    argct = 0;
     return;
 }
 

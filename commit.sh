@@ -34,8 +34,8 @@ cd ..
 
 echo $'\e[1m'"Adding files..."$'\e[0m'
 mv lib .lib
-echo LICENSE Makefile *.c *.sh *.md */
-git add LICENSE Makefile *.c *.sh *.md */
+echo LICENSE Makefile *.c *.sh *.md .gitmodules .gitattributes */
+git add LICENSE Makefile *.c *.sh *.md .gitmodules .gitattributes */
 e=$?
 mv .lib lib
 [ $e -ne 0 ] && exit 1

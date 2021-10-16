@@ -13,7 +13,7 @@ if (chkCmd(2, "EXIT", "QUIT")) {
     }
     if (inProg) {
         if (progindex > 0) unloadProg();
-        else inProg = false;
+        else cmdint = true;
         retval = err;
     } else {
         cleanExit();
@@ -70,8 +70,13 @@ if (chkCmd(1, "REDIM")) {
         newdata[i] = vardata[v].data[i];
     }
     for (; i <= s; ++i) {
-        newdata[i] = malloc(1);
-        newdata[i][0] = 0;
+        newdata[i] = malloc(vardata[v].type);
+        if (vardata[v].type == 1) {
+            newdata[i][0] = 0;
+        } else {
+            newdata[i][0] = '0';
+            newdata[i][1] = 0;
+        }
     }
     for (i = s + 1; i <= os; ++i) {
         free(vardata[v].data[i]);
@@ -104,6 +109,22 @@ if (chkCmd(1, "FILL")) {
     }
     goto noerr;
 }
+if (chkCmd(1, "SWAP")) {
+    if (argct != 2) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    int v1 = -1;
+    for (register int i = 0; i < varmaxct; ++i) {
+        if (vardata[i].inuse && !strcmp(tmpargs[1], vardata[i].name)) {v1 = i; break;}
+    }
+    if (v1 == -1 || vardata[v1].size == -1) {cerr = 23; seterrstr(tmpargs[1]); goto cmderr;}
+    int v2 = -1;
+    for (register int i = 0; i < varmaxct; ++i) {
+        if (vardata[i].inuse && !strcmp(tmpargs[2], vardata[i].name)) {v2 = i; break;}
+    }
+    if (v2 == -1 || vardata[v2].size == -1) {cerr = 23; seterrstr(tmpargs[2]); goto cmderr;}
+    swap(vardata[v1].name, vardata[v2].name);
+    goto noerr;
+}   
 if (chkCmd(1, "DEL")) {
     cerr = 0;
     if (argct < 1) {cerr = 3; goto cmderr;}
@@ -125,8 +146,8 @@ if (chkCmd(1, "DEFRAG")) {
 }
 if (chkCmd(3, "@", "LABEL", "LBL")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
-    upCase(tmpargs[1]);
     cerr = 0;
+    upCase(tmpargs[1]);
     int i = -1;
     for (int j = 0; j < gotomaxct; ++j) {
         if (!gotodata[j].used) {i = j; break;}
@@ -140,7 +161,7 @@ if (chkCmd(3, "@", "LABEL", "LBL")) {
         ++gotomaxct;
         gotodata = realloc(gotodata, gotomaxct * sizeof(cb_goto));
     }
-    gotodata[i].name = malloc(argl[i] + 1);
+    gotodata[i].name = malloc(strlen(tmpargs[1]) + 1);
     copyStr(tmpargs[1], gotodata[i].name);
     gotodata[i].cp = cmdpos;
     gotodata[i].pl = progLine;
@@ -155,8 +176,8 @@ if (chkCmd(3, "@", "LABEL", "LBL")) {
 }
 if (chkCmd(3, "%", "GOTO", "GO")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
-    upCase(tmpargs[1]);
     cerr = 0;
+    upCase(tmpargs[1]);
     int i = -1;
     for (int j = 0; j < gotomaxct; ++j) {
         if (gotodata[j].used) {
@@ -164,15 +185,16 @@ if (chkCmd(3, "%", "GOTO", "GO")) {
         }
     }
     if (i == -1) {cerr = 29; goto cmderr;}
+    nfree(gotodata[i].name);
     if (inProg) {
         cp = gotodata[i].cp;
     } else {
         concp = gotodata[i].cp;
     }
     progLine = gotodata[i].pl;
-    dlstackp = gotodata[i].dlsp;
-    fnstackp = gotodata[i].fnsp;
-    itstackp = gotodata[i].itsp;
+    //dlstackp = gotodata[i].dlsp;
+    //fnstackp = gotodata[i].fnsp;
+    //itstackp = gotodata[i].itsp;
     gotodata[i].used = false;
     bool r = false;
     while (gotomaxct > 0 && !gotodata[gotomaxct - 1].used) {--gotomaxct; r = true;}
@@ -181,8 +203,63 @@ if (chkCmd(3, "%", "GOTO", "GO")) {
     lockpl = true;
     goto noerr;
 }
+if (chkCmd(1, "GOSUB")) {
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    if (gsstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 32; goto cmderr;}
+    upCase(tmpargs[1]);
+    int i = -1;
+    for (int j = 0; j < gotomaxct; ++j) {
+        if (gotodata[j].used) {
+            if (!strcmp(gotodata[j].name, tmpargs[1])) {i = j;}
+        }
+    }
+    if (i == -1) {cerr = 29; goto cmderr;}
+    nfree(gotodata[i].name);
+    ++gsstackp;
+    gsstack[gsstackp].cp = ((inProg) ? cp : concp);
+    gsstack[gsstackp].pl = progLine;
+    gsstack[gsstackp].dlsp = dlstackp;
+    gsstack[gsstackp].fnsp = fnstackp;
+    gsstack[gsstackp].itsp = itstackp;
+    if (inProg) {
+        cp = gotodata[i].cp;
+    } else {
+        concp = gotodata[i].cp;
+    }
+    progLine = gotodata[i].pl;
+    //dlstackp = gotodata[i].dlsp;
+    //fnstackp = gotodata[i].fnsp;
+    //itstackp = gotodata[i].itsp;
+    gotodata[i].used = false;
+    bool r = false;
+    while (gotomaxct > 0 && !gotodata[gotomaxct - 1].used) {--gotomaxct; r = true;}
+    if (r) gotodata = realloc(gotodata, gotomaxct * sizeof(cb_goto));
+    didloop = true;
+    lockpl = true;
+    goto noerr;
+}
+if (chkCmd(1, "RETURN")) {
+    if (argct) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    if (gsstackp < 0) {cerr = 31; goto cmderr;}
+    if (inProg) {
+        cp = gsstack[gsstackp].cp;
+    } else {
+        concp = gsstack[gsstackp].cp;
+    }
+    progLine = gsstack[gsstackp].pl;
+    dlstackp = gsstack[gsstackp].dlsp;
+    fnstackp = gsstack[gsstackp].fnsp;
+    itstackp = gsstack[gsstackp].itsp;
+    --gsstackp;
+    didloop = true;
+    lockpl = true;
+    goto noerr;
+}
 if (chkCmd(2, "CONTINUE", "BREAK")) {
     if (argct) {cerr = 3; goto cmderr;}
+    cerr = 0;
     if (brkinfo.block == 1) {
         dldcmd[dlstackp] = !dldcmd[dlstackp];
     } else if (brkinfo.block == 2) {

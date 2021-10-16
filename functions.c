@@ -430,6 +430,14 @@ if (chkCmd(1, "PI")) {
     strcpy(outbuf, "3.141593");
     goto fexit;
 }
+if (chkCmd(1, "ABS")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    sprintf(outbuf, "%lf", fabs(atof(farg[1])));
+    goto fexit;
+}
 if (chkCmd(1, "SIN")) {
     cerr = 0;
     ftype = 2;
