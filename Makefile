@@ -1,4 +1,4 @@
-BASE_CFLAGS = --std=c99 -Wall -Wextra -Ofast -lm -lreadline
+BASE_CFLAGS = --std=c99 -Wall -Wextra -Ofast -lm -lreadline -funsigned-char
 
 ifndef OS
 

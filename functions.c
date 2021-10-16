@@ -662,7 +662,7 @@ if (chkCmd(1, "SNIP$")) {
         if (fargt[2] == 1 || fargt[3] == 1) {cerr = 2; goto fexit;}
         if (fargt[2] + fargt[3]) {
             if (!fargt[2]) {start = 0;}
-            else {start = atoi(farg[2]); if (start < 0) {cerr = 16; goto fexit;}}
+            else {start = atoi(farg[2]);}
             if (!fargt[3]) {end = 32;}
             else {end = atoi(farg[3]); if (end < 0 || end < start) {cerr = 16; goto fexit;}}
         } else {
@@ -670,6 +670,8 @@ if (chkCmd(1, "SNIP$")) {
             goto fexit;
         }
     }
+    if (start < 0) start = 0;
+    if (end > flen[1]) end = flen[1];
     copyStrSnip(farg[1], start, end, outbuf);
 }
 if (chkCmd(1, "CURX")) {

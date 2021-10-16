@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.25";
+char VER[] = "0.25.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -192,11 +192,17 @@ bool didloop = false;
 bool lockpl = false;
 
 typedef struct {
+    uint8_t type;
+    uint8_t block;
+} cb_brkinfo;
+
+typedef struct {
     int pl;
     int32_t cp;
     int dlsp;
     int fnsp;
     int itsp;
+    cb_brkinfo oldbrk;
 } cb_jump;
 
 cb_jump dlstack[CB_PROG_LOGIC_MAX];
@@ -222,11 +228,6 @@ char forbuf[4][CB_BUF_SIZE];
 
 cb_jump gsstack[CB_PROG_LOGIC_MAX];
 int gsstackp = -1;
-
-typedef struct {
-    uint8_t type;
-    uint8_t block;
-} cb_brkinfo;
 
 cb_brkinfo brkinfo;
 cb_brkinfo* oldbrkinfo = NULL;
@@ -348,9 +349,9 @@ struct termios kbhterm, kbhterm2;
 void txtqunlock() {if (textlock || sneaktextlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}}
 
 int kbhit() {
-    int byteswaiting;
-    ioctl(0, FIONREAD, &byteswaiting);
-    return byteswaiting;
+    int inchar;
+    ioctl(0, FIONREAD, &inchar);
+    return inchar;
 }
 
 sigset_t intmask, oldmask;
@@ -564,7 +565,6 @@ void cleanExit() {
         getCurPos();
         unloadAllProg();
         cmdint = true;
-        inProg = false;
         putchar('\n');
         history_set_pos(history_length);
         rl_on_new_line();
@@ -637,6 +637,7 @@ void cleanExit() {
     nfree(progfn);
     nfree(progcp);
     nfree(progcmdl);
+    nfree(proglinebuf);
     /*
     nfree(olddidelse);
     nfree(olddidelseif);
@@ -648,7 +649,6 @@ void cleanExit() {
     nfree(proggotomaxct);
     nfree(oldprogargc);
     nfree(oldprogargs);
-    free(proglinebuf);
     */
     clearGlobals();
     exit(err);
@@ -740,6 +740,10 @@ static inline void readyTerm() {
     #endif
 }
 
+#define RARG() {fprintf(stderr, "Short option '%c' requires argument(s) and must be last.\n", argv[i][shortopti]);}
+#define IACT() {fputs("Incorrect number of arguments passed.\n", stderr);}
+#define IOCT() {fputs("Incorrect number of options passed.\n", stderr);}
+
 int main(int argc, char** argv) {
     #if defined(GUI_CHECK) && defined(__unix__)
     if (!isatty(STDERR_FILENO) && !isatty(STDIN_FILENO) && !isatty(STDOUT_FILENO)) {
@@ -764,7 +768,7 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         int shortopti = 0;
         bool shortopt;
-        if (argv[i][0] == '-' && strcmp(argv[i], "--file") && strcmp(argv[i], "-f")) {
+        if (argv[i][0] == '-') {
             chkshortopt:;
             shortopt = false;
             if (!argv[i][1]) {
@@ -776,41 +780,32 @@ int main(int argc, char** argv) {
             if (!strcmp(argv[i], "--")) {
                 fputs("No long option following dash.\n", stderr); exit(1);
             } else if (!strcmp(argv[i], "--version")) {
-                if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                if (argc > 2) {IOCT(); exit(1);}
                 printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
                 puts("Copyright (C) 2021 PQCraft");
                 puts("This software is licensed under the GNU GPL v3.");
                 pexit = true;
             } else if (!strcmp(argv[i], "--help")) {
-                if (argc > 2) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
-                printf("Usage: %s [OPTION]...\n", argv[0]);
+                if (argc > 2) {IOCT(); exit(1);}
+                printf("Usage: %s [[-x] FILE [ARG]...]\n", argv[0]);
                 puts("Options:");
-                puts("    --help                      Displays this help text.");
+                puts("    --help                      Displays the usage and option information.");
                 puts("    --version                   Displays the version and license information.");
-                puts("    --args [ARG]...             Passes ARGs to the program.");
-                puts("    -x, --exec FILE [ARG]...    Runs and passes ARGs to FILE, then exits.");
-                puts("    -f, --file FILE             Runs FILE and exits.");
-                puts("    -c, --command COMMAND       Runs COMMAND and exits.");
-                puts("    -k, --keep                  Stops CLIBASIC from resetting text attributes before exiting.");
+                puts("    -x, --exec FILE [ARG]...    Runs FILE and passes ARGs to FILE.");
+                puts("    -c, --command COMMAND       Runs COMMAND as if in shell mode.");
+                puts("    -k, --keep                  Stops CLIBASIC from resetting text attributes when exiting.");
                 puts("    -s, --skip                  Skips searching for autorun programs.");
                 puts("    -i, --info                  Displays an info string when starting in shell mode.");
                 puts("    -r, --redirection           Allows for redirection (this may cause issues).");
-                puts("    -n, --newline               Prints a newline if the cursor is not at the beginning of the line.");
+                puts("    -n, --newline               Ensures the cursor is placed on a new line when exiting.");
                 pexit = true;
-            } else if (!strcmp(argv[i], "--args")) {
-                if (runc || !runfile) {fputs("Args can only be passed when running a program.\n", stderr); exit(1);}
-                progargs = (char**)malloc((argc - i) * sizeof(char*));
-                for (progargc = 1; progargc < argc - i; ++progargc) {	
-                    progargs[progargc] = malloc(strlen(argv[i + progargc]) + 1);
-                    copyStr(argv[i + progargc], progargs[progargc]);
-                }
-                i = argc;
-            } else if (!strcmp(argv[i], "--exec") || !strcmp(argv[i], "-x")) {
+            } else if (!strcmp(argv[i], "--exec") || (shortopt && argv[i][shortopti] == 'x')) {
+                if (shortopt && argv[i][shortopti + 1]) {RARG(); exit(1);}
                 if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
-                if (runfile) {fputs("Program already loaded, use --args.\n", stderr); exit(1); unloadAllProg();}
-                if (runfile) {unloadProg(); fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                if (runfile) {unloadProg(); IOCT(); exit(1);}
                 ++i;
                 if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
+                readyTerm();
                 argslater = true;
                 if (!loadProg(argv[i])) {printError(cerr); exit(1);}
                 inProg = true;
@@ -822,29 +817,30 @@ int main(int argc, char** argv) {
                 }
                 i = argc;
             } else if (!strcmp(argv[i], "--keep") || (shortopt && argv[i][shortopti] == 'k')) {
-                if (keep) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                if (keep) {IOCT(); exit(1);}
                 keep = true;
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--skip") || (shortopt && argv[i][shortopti] == 's')) {
-                if (skip) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                if (skip) {IOCT(); exit(1);}
                 skip = true;
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--info") || (shortopt && argv[i][shortopti] == 'i')) {
-                if (info) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                if (info) {IOCT(); exit(1);}
                 info = true;
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--redirection") || (shortopt && argv[i][shortopti] == 'r')) {
-                if (redirection) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                if (redirection) {IOCT(); exit(1);}
                 redirection = true;
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--newline") || (shortopt && argv[i][shortopti] == 'n')) {
-                if (checknl) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                if (checknl) {IOCT(); exit(1);}
                 checknl = true;
                 if (shortopt) goto chkshortopt;
-            } else if (!strcmp(argv[i], "--command") || !strcmp(argv[i], "-c")) {
+            } else if (!strcmp(argv[i], "--command") || (shortopt && argv[i][shortopti] == 'c')) {
+                if (shortopt && argv[i][shortopti + 1]) {RARG(); exit(1);}
                 if (runfile) {fputs("Cannot run file and command.\n", stderr); exit(1);}
                 readyTerm();
-                if (runc) {fputs("Incorrect number of options passed.\n", stderr); exit(1);}
+                if (runc) {IOCT(); exit(1);}
                 i++;
                 if (!argv[i]) {fputs( "No command provided.\n", stderr); exit(1);}
                 runc = true;
@@ -865,8 +861,6 @@ int main(int argc, char** argv) {
                             break;
                     }
                 }
-            } else if (shortopt && (argv[i][shortopti] == 'c' || argv[i][shortopti] == 'f' || argv[i][shortopti] == 'x')) {
-                fprintf(stderr, "Short option '%c' requires argument and cannot be grouped.\n", argv[i][shortopti]); exit(1);
             } else {
                 if (shortopt) {
                     fprintf(stderr, "Invalid short option '%c'.\n", argv[i][shortopti]); exit(1);
@@ -876,16 +870,19 @@ int main(int argc, char** argv) {
             }
         } else {
             if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
+            if (runfile) {unloadProg(); IOCT(); exit(1);}
+            if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
             readyTerm();
-            if (runfile) {unloadProg(); fputs("Incorrect number of options passed.\n", stderr); exit(1);}
-            if (!strcmp(argv[i], "--file") || !strcmp(argv[i], "-f")) {
-                i++;
-                if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
-            }
             argslater = true;
             if (!loadProg(argv[i])) {printError(cerr); exit(1);}
             inProg = true;
             runfile = true;
+            progargs = (char**)malloc((argc - i) * sizeof(char*));
+            for (progargc = 1; progargc < argc - i; ++progargc) {	
+                progargs[progargc] = malloc(strlen(argv[i + progargc]) + 1);
+                copyStr(argv[i + progargc], progargs[progargc]);
+            }
+            i = argc;
         }
     }
     if (pexit) exit(0);
@@ -2248,6 +2245,12 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             default:;
                 if (inStr) break;
                 if (inbuf[i] == ',' || isSpChar(inbuf[i])) seenStr[pct] = false;
+                break;
+            case '&':;
+                if (!inStr && pct > 0) seenStr[pct] = false;
+                break;
+            case '|':;
+                if (!inStr && pct > 0) seenStr[pct] = false;
                 break;
             case '"':;
                 inStr = !inStr;
