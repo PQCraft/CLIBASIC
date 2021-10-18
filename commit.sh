@@ -22,14 +22,14 @@ sleep 3s
 echo $'\e[1m'"Updating docs submodule..."$'\e[0m'
 cd docs/
 git add *
-git commit -m "Updated docs to $ver"
+git commit -S -m "Updated docs to $ver"
 git push
 cd ..
 
 echo $'\e[1m'"Updating examples submodule..."$'\e[0m'
 cd examples/
 git add *
-git commit -m "Updated examples to $ver"
+git commit -S -m "Updated examples to $ver"
 git push
 cd ..
 
