@@ -257,6 +257,7 @@ if (chkCmd(1, "RETURN")) {
     lockpl = true;
     goto noerr;
 }
+/* TODO: Fix crippling amount of inconsistant bugs
 if (chkCmd(2, "CONTINUE", "BREAK")) {
     if (argct) {cerr = 3; goto cmderr;}
     cerr = 0;
@@ -271,6 +272,7 @@ if (chkCmd(2, "CONTINUE", "BREAK")) {
     brkinfo.type = 1 + !strcmp(arg[0], "BREAK");
     goto noerr;
 }
+*/
 if (chkCmd(1, "COLOR")) {
     if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
     cerr = 0;

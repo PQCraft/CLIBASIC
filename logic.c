@@ -88,8 +88,6 @@ if (chkCmd(1, "DO")) {
     dlstack[dlstackp].pl = progLine;
     dlstack[dlstackp].fnsp = fnstackp;
     dlstack[dlstackp].itsp = itstackp;
-    dlstack[dlstackp].oldbrk = brkinfo;
-    brkinfo.block = 1;
     #ifdef _WIN32
     updatechars();
     #endif
@@ -116,8 +114,6 @@ if (chkCmd(2, "WHILE", "DOWHILE")) {
         dlstack[dlstackp].cp = cmdpos;
         dlstack[dlstackp].fnsp = fnstackp;
         dlstack[dlstackp].itsp = itstackp;
-        dlstack[dlstackp].oldbrk = brkinfo;
-        brkinfo.block = 1;
         #ifdef _WIN32
         updatechars();
         #endif
@@ -127,7 +123,6 @@ if (chkCmd(2, "WHILE", "DOWHILE")) {
 }
 if (chkCmd(1, "LOOP")) {
     if (dlstackp <= -1) {cerr = 6; return true;}
-    if (brkinfo.block == 1 && brkinfo.type > 0) {dldcmd[dlstackp] = !dldcmd[dlstackp];}
     if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) {dlstackp--; return true;}
     }
@@ -138,19 +133,15 @@ if (chkCmd(1, "LOOP")) {
         if (fndcmd[fnstackp]) return true;
     }
     while (cmd[j]) {if (cmd[j] != ' ') {cerr = 3; return true;} ++j;}
-    if (!(brkinfo.block == 1 && brkinfo.type == 2)) {
-        if (inProg) {
-            cp = dlstack[dlstackp].cp;
-        } else {
-            concp = dlstack[dlstackp].cp;
-        }
-        progLine = dlstack[dlstackp].pl;
-        fnstackp = dlstack[dlstackp].fnsp;
-        itstackp = dlstack[dlstackp].itsp;
-        brkinfo = dlstack[dlstackp].oldbrk;
-        lockpl = true;
+    if (inProg) {
+        cp = dlstack[dlstackp].cp;
+    } else {
+        concp = dlstack[dlstackp].cp;
     }
-    brkinfo.type = 0;
+    progLine = dlstack[dlstackp].pl;
+    fnstackp = dlstack[dlstackp].fnsp;
+    itstackp = dlstack[dlstackp].itsp;
+    lockpl = true;
     dldcmd[dlstackp] = false;
     dlstackp--;
     didloop = true;
@@ -158,12 +149,11 @@ if (chkCmd(1, "LOOP")) {
 }
 if (chkCmd(1, "LOOPWHILE")) {
     if (dlstackp <= -1) {cerr = 6; return true;}
-    if (brkinfo.block == 1 && brkinfo.type > 0) {dldcmd[dlstackp] = !dldcmd[dlstackp];}
-    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
-        if (itdcmd[itstackp]) return true;
-    }
     if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) {dlstackp--; return true;}
+    }
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
+        if (itdcmd[itstackp]) return true;
     }
     if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
         if (fndcmd[fnstackp]) return true;
@@ -172,7 +162,7 @@ if (chkCmd(1, "LOOPWHILE")) {
     if (getArgCt(ltmp[1]) != 1) {cerr = 3; return true;}
     uint8_t testval = logictest(ltmp[1]);
     if (testval == 255) return true;
-    if (testval == 1 && !(brkinfo.block == 1 && brkinfo.type == 2)) {
+    if (testval == 1) {
         if (inProg) {
             cp = dlstack[dlstackp].cp;
         } else {
@@ -181,10 +171,8 @@ if (chkCmd(1, "LOOPWHILE")) {
         progLine = dlstack[dlstackp].pl;
         fnstackp = dlstack[dlstackp].fnsp;
         itstackp = dlstack[dlstackp].itsp;
-        brkinfo = dlstack[dlstackp].oldbrk;
         lockpl = true;
     }
-    brkinfo.type = 0;
     dldcmd[dlstackp] = false;
     dlstackp--;
     didloop = true;
@@ -306,8 +294,6 @@ if (chkCmd(1, "FOR")) {
     fnstack[fnstackp].pl = progLine;
     fnstack[fnstackp].dlsp = dlstackp;
     fnstack[fnstackp].itsp = itstackp;
-    fnstack[fnstackp].oldbrk = brkinfo;
-    brkinfo.block = 2;
     #ifdef _WIN32
     updatechars();
     #endif
@@ -315,7 +301,6 @@ if (chkCmd(1, "FOR")) {
 }
 if (chkCmd(1, "NEXT")) {
     if (fnstackp <= -1) {cerr = 9; return true;}
-    if (brkinfo.block == 2 && brkinfo.type > 0) {fndcmd[fnstackp] = !fndcmd[fnstackp]; brkinfo.type = 0;}
     fnstackp--;
     if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
         if (itdcmd[itstackp]) {return true;}
@@ -325,7 +310,7 @@ if (chkCmd(1, "NEXT")) {
     }
     fnstackp++;
     while (cmd[j]) {if (cmd[j] != ' ') {cerr = 3; return true;} ++j;}
-    if (fninfor[fnstackp] && !(brkinfo.block == 2 && brkinfo.type == 2)) {
+    if (fninfor[fnstackp]) {
         if (inProg) {
             cp = fnstack[fnstackp].cp;
         } else {
@@ -334,10 +319,8 @@ if (chkCmd(1, "NEXT")) {
         progLine = fnstack[fnstackp].pl;
         dlstackp = fnstack[fnstackp].dlsp;
         itstackp = fnstack[fnstackp].itsp;
-        brkinfo = fnstack[fnstackp].oldbrk;
         lockpl = true;
         didloop = true;
-        brkinfo.type = 0;
     } else {
         fnstack[fnstackp].cp = -1;
     }

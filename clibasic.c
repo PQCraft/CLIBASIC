@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.25.1";
+char VER[] = "0.25.2";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -202,7 +202,6 @@ typedef struct {
     int dlsp;
     int fnsp;
     int itsp;
-    cb_brkinfo oldbrk;
 } cb_jump;
 
 cb_jump dlstack[CB_PROG_LOGIC_MAX];
@@ -228,9 +227,6 @@ char forbuf[4][CB_BUF_SIZE];
 
 cb_jump gsstack[CB_PROG_LOGIC_MAX];
 int gsstackp = -1;
-
-cb_brkinfo brkinfo;
-cb_brkinfo* oldbrkinfo = NULL;
 
 char* errstr = NULL;
 
@@ -402,7 +398,6 @@ static inline void clearGlobals() {
     itstackp = -1;
     fnstackp = -1;
     gsstackp = -1;
-    memset(&brkinfo, 0, sizeof(brkinfo));
     for (int i = 0; i < CB_PROG_LOGIC_MAX; ++i) {
         memset(&dlstack[i], 0, sizeof(cb_jump));
         dldcmd[i] = false;
@@ -641,7 +636,6 @@ void cleanExit() {
     /*
     nfree(olddidelse);
     nfree(olddidelseif);
-    nfree(oldbrkinfo);
     nfree(minfnstackp);
     nfree(mindlstackp);
     nfree(minitstackp);
@@ -1288,7 +1282,6 @@ void unloadProg() {
     progLine = proglinebuf[progindex];
     didelse = olddidelse[progindex];
     didelseif = olddidelseif[progindex];
-    brkinfo = oldbrkinfo[progindex];
     dlstackp = mindlstackp[progindex];
     itstackp = minitstackp[progindex];
     fnstackp = minfnstackp[progindex];
@@ -1300,7 +1293,6 @@ void unloadProg() {
     minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
     olddidelse = (bool*)realloc(olddidelse, progindex * sizeof(bool));
     olddidelseif = (bool*)realloc(olddidelseif, progindex * sizeof(bool));
-    oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(cb_brkinfo));
     proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
     proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
     progindex--;
@@ -1376,7 +1368,6 @@ bool loadProg(char* filename) {
     minitstackp = (int*)realloc(minitstackp, progindex * sizeof(int));
     olddidelse = (bool*)realloc(olddidelse, progindex * sizeof(bool));
     olddidelseif = (bool*)realloc(olddidelseif, progindex * sizeof(bool));
-    oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(cb_brkinfo));
     minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
     proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
     proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
@@ -1390,7 +1381,6 @@ bool loadProg(char* filename) {
     minitstackp[progindex] = itstackp;
     olddidelse[progindex] = didelse;
     olddidelseif[progindex] = didelseif;
-    oldbrkinfo[progindex] = brkinfo;
     minfnstackp[progindex] = fnstackp;
     proggotodata[progindex] = gotodata;
     proggotomaxct[progindex] = gotomaxct;
@@ -1403,7 +1393,6 @@ bool loadProg(char* filename) {
     progLine = 1;
     didelse = false;
     didelseif = false;
-    memset(&brkinfo, 0, sizeof(brkinfo));
     if (argslater) {
         argslater = false;
     } else {
@@ -1923,20 +1912,28 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
 
 bool chkvar = true;
 
+uint16_t getVarIndex = 0;
+char* getVarBuf = NULL;
+
 uint8_t getVar(char* vn, char* varout) {
+    //printf("getVar: {%s}\n", vn);
+    char* lgetVarBuf = (getVarIndex) ? malloc(CB_BUF_SIZE) : getVarBuf;
+    ++getVarIndex;
+    uint8_t ret = 0;
     int32_t vnlen = strlen(vn);
     if (vn[vnlen - 1] == ')') {
-        return getFunc(vn, varout);
+        ret = getFunc(vn, varout);
+        goto gvret;
     }
     if (!vn[0] || vn[0] == '[' || vn[0] == ']') {
         cerr = 4;
         seterrstr(vn);
-        return 0;
+        goto gvret;
     }
     if (getType(vn) != 255) {
         cerr = 4;
         seterrstr(vn);
-        return 0;
+        goto gvret;
     }
     bool isArray = false;
     int32_t aindex = 0;
@@ -1944,21 +1941,21 @@ uint8_t getVar(char* vn, char* varout) {
         if (chkvar && !isValidVarChar(vn[i])) {
             cerr = 4;
             seterrstr(vn);
-            return 0;
+            goto gvret;
         }
         if (vn[i] == ']') {
             cerr = 1;
-            return 0;
+            goto gvret;
         }
         if (vn[i] == '[') {
-            if (vn[vnlen - 1] != ']') {cerr = 1; return 0;}
-            copyStrSnip(vn, i + 1, vnlen - 1, gpbuf);
-            if (!gpbuf[0]) {cerr = 1; return 0;}
+            if (vn[vnlen - 1] != ']') {cerr = 1; goto gvret;}
+            copyStrSnip(vn, i + 1, vnlen - 1, lgetVarBuf);
+            if (!lgetVarBuf[0]) {cerr = 1; goto gvret;}
             cerr = 2;
-            uint8_t tmpt = getVal(gpbuf, gpbuf);
-            if (tmpt != 2) {return 0;}
+            uint8_t tmpt = getVal(lgetVarBuf, lgetVarBuf);
+            if (tmpt != 2) goto gvret;
             cerr = 0;
-            aindex = atoi(gpbuf);
+            aindex = atoi(lgetVarBuf);
             vn[i] = 0;
             vnlen = strlen(vn);
             isArray = true;
@@ -1973,35 +1970,41 @@ uint8_t getVar(char* vn, char* varout) {
         if (isArray) {
             cerr = 23;
             seterrstr(vn);
-            return 0;
+            goto gvret;
         }
-        if (vn[vnlen - 1] == '$') {varout[0] = 0; return 1;}
-        else {varout[0] = '0'; varout[1] = 0; return 2;}
+        if (vn[vnlen - 1] == '$') {varout[0] = 0; ret = 1; goto gvret;}
+        else {varout[0] = '0'; varout[1] = 0; ret = 2; goto gvret;}
     } else {
         if (vardata[v].size == -1) {
             if (isArray) {
                 cerr = 23;
                 seterrstr(vn);
-                return 0;
+                goto gvret;
             }
         } else {
             if (!isArray) {
                 cerr = 24;
                 seterrstr(vn);
-                return 0;
+                goto gvret;
             }
             if (aindex < 0 || aindex > vardata[v].size) {
                 cerr = 22;
-                sprintf(gpbuf, "%s[%li]", vn, (long int)aindex);
-                seterrstr(gpbuf);
-                return 0;
+                sprintf(lgetVarBuf, "%s[%li]", vn, (long int)aindex);
+                seterrstr(lgetVarBuf);
+                goto gvret;
             }
         }
         copyStr(vardata[v].data[aindex], varout);
-        return vardata[v].type;
+        ret = vardata[v].type;
+        goto gvret;
     }
-    return 0;
+    gvret:;
+    --getVarIndex;
+    if (getVarIndex) free(lgetVarBuf);
+    return ret;
 }
+
+char setVarBuf[CB_BUF_SIZE];
 
 bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
     int32_t vnlen = strlen(vn);
@@ -2030,13 +2033,13 @@ bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
         if (vn[i] == '[') {
             if (vn[vnlen - 1] != ']') {cerr = 1; return 0;}
             if (s != -1) {cerr = 4; seterrstr(vn); return 0;}
-            copyStrSnip(vn, i + 1, vnlen - 1, gpbuf);
-            if (!gpbuf[0]) {cerr = 1; return 0;}
+            copyStrSnip(vn, i + 1, vnlen - 1, setVarBuf);
+            if (!setVarBuf[0]) {cerr = 1; return 0;}
             cerr = 2;
-            uint8_t tmpt = getVal(gpbuf, gpbuf);
+            uint8_t tmpt = getVal(setVarBuf, setVarBuf);
             if (tmpt != 2) {return 0;}
             cerr = 0;
-            aindex = atoi(gpbuf);
+            aindex = atoi(setVarBuf);
             vn[i] = 0;
             vnlen = strlen(vn);
             isArray = true;
@@ -2077,8 +2080,8 @@ bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
         if (t != vardata[v].type) {cerr = 2; return false;}
         if (isArray && (aindex < 0 || aindex > vardata[v].size)) {
             cerr = 22;
-            sprintf(gpbuf, "%s[%li]", vn, (long int)aindex);
-            seterrstr(gpbuf);
+            sprintf(setVarBuf, "%s[%li]", vn, (long int)aindex);
+            seterrstr(setVarBuf);
             return 0;
         }
         vardata[v].data[aindex] = (char*)realloc(vardata[v].data[aindex], strlen(val) + 1);
@@ -2359,7 +2362,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 p1 = 0, p2 = 0, p3 = 0;
                 for (register int32_t i = 0; tmp[0][i]; ++i) {
                     switch (tmp[0][i]) {
-                        case '"': inStr = !inStr; break;
+                        case '"': if (!pct && !bct) inStr = !inStr; break;
                         case '(': pct++; break;
                         case ')': pct--; break;
                         case '[': bct++; break;
@@ -2375,7 +2378,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 }
                 for (register int32_t i = 0; tmp[0][i]; ++i) {
                     switch (tmp[0][i]) {
-                        case '"': inStr = !inStr; break;
+                        case '"': if (!pct && !bct) inStr = !inStr; break;
                         case '(': pct++; break;
                         case ')': pct--; break;
                         case '[': bct++; break;
@@ -2398,7 +2401,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 }
                 for (register int32_t i = 0; tmp[0][i]; ++i) {
                     switch (tmp[0][i]) {
-                        case '"': inStr = !inStr; break;
+                        case '"': if (!pct && !bct) inStr = !inStr; break;
                         case '(': pct++; break;
                         case ')': pct--; break;
                         case '[': bct++; break;
@@ -2439,7 +2442,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 }
                 tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
                 for (register int32_t i = p2 - 1; i > 0; --i) {
-                    if (tmp[0][i] == '"') inStr = !inStr;
+                    if (!pct && !bct && tmp[0][i] == '"') inStr = !inStr;
                     if (!inStr) {
                         switch (tmp[0][i]) {
                             case '(': pct++; break;
@@ -2454,7 +2457,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 }
                 gvforexit1:;
                 for (register int32_t i = p2 + 1; true; ++i) {
-                    if (tmp[0][i] == '"') inStr = !inStr;
+                    if (!pct && !bct && tmp[0][i] == '"') inStr = !inStr;
                     if (!inStr) {
                         switch (tmp[0][i]) {
                             case '(': pct++; break;
@@ -2856,10 +2859,12 @@ uint8_t logictest(char* inbuf) {
         copyStrSnip(inbuf, i, j, ltbuf);
         switch (logicActOld) {
             case 1:;
+                if (out) goto ltexit;
                 if ((ret = logictestexpr(ltbuf)) == 255) {out = 255; goto ltexit;}
                 out |= ret;
                 break;
             case 2:;
+                if (!out) goto ltexit;
                 if ((ret = logictestexpr(ltbuf)) == 255) {out = 255; goto ltexit;}
                 out &= ret;
                 break;
@@ -2942,6 +2947,7 @@ static inline void initBaseMem() {
     lttmp_tmp[0] = malloc(CB_BUF_SIZE);
     lttmp_tmp[1] = malloc(CB_BUF_SIZE);
     lttmp_tmp[2] = malloc(CB_BUF_SIZE);
+    getVarBuf = malloc(CB_BUF_SIZE);
 }
 
 static inline void freeBaseMem() {
@@ -2956,6 +2962,7 @@ static inline void freeBaseMem() {
     nfree(lttmp_tmp[0]);
     nfree(lttmp_tmp[1]);
     nfree(lttmp_tmp[2]);
+    nfree(getVarBuf);
 }
 
 static inline void printError(int error) {

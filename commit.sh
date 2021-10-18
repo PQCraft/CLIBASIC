@@ -7,6 +7,7 @@ shopt -s extglob
 echo $'\e[1m'"Grabbing version..."$'\e[0m'
 make clean build || exit 1
 ver="$(./clibasic --version | grep "version" | sed 's/.* version //;s/ [(].*//')"
+echo "[$ver]"
 
 echo $'\e[1m'"Cleaning..."$'\e[0m'
 make clean || exit 1
