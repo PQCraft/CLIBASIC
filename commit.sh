@@ -45,7 +45,7 @@ echo $'\e[1m'"Committing..."$'\e[0m'
 msg="$ver"
 extmsg="$(cat .changelog)"
 echo $'\e[1m'"Message:"$'\e[0m'" $msg"
-echo $'\e[1mExtended message:\e[0m\n-----\n'"$(cat .changelog)"$'\n-----'
+echo $'\e[1mExtended message:\e[0m\n-----\n'"$extmsg"$'\n-----'
 git commit -S -m "$msg" -m "$extmsg" || exit 1
 
 echo $'\e[1m'"Packaging..."$'\e[0m'
@@ -55,7 +55,7 @@ echo $'\e[1m'"Pushing..."$'\e[0m'
 git push
 
 echo $'\e[1m'"Making tag..."$'\e[0m'
-git tag -s "$ver"
+git tag -s "$ver" -m "$extmsg"
 
 echo $'\e[1m'"Making release..."$'\e[0m'
 gh release create "$ver" --title "$rev $ver" --notes "$(./release-text.sh)" *.zip
