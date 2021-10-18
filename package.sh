@@ -9,16 +9,22 @@ mkrel() {
     make $4 1> /dev/null
 }
 
+pack() {
+    echo "Packaging $1..."
+    rm -f "$1".zip
+    zip -r "$1".zip "$1"/* 1> /dev/null || exit 1
+}
+
 # backup built executables
 mv clibasic clibasic.tmp 2> /dev/null
 mv clibasic.exe clibasic.exe.tmp 2> /dev/null
 
-# package the examples
-echo "Packaging examples..."
-rm -f examples.zip
-zip -r examples.zip examples/* 1> /dev/null || exit 1
+# package extras
+pack examples
+pack docs
+pack lib
 
-# build
+# build release
 mkrel "clibasic-linux-x64.zip" "clibasic" "clean build" "clean"
 mkrel "clibasic-linux-x86.zip" "clibasic" "clean build32" "clean"
 mkrel "clibasic-windows-vt-x64.zip" "clibasic.exe *.dll" "cross clean vt build" "cross clean"

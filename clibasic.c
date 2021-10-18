@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.25.2";
+char VER[] = "0.25.2.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -517,17 +517,6 @@ uint64_t tval;
 
 void* oldsigh = NULL;
 
-#if 0
-static inline void nokill() {
-    if (!oldsigh) oldsigh = setsig(SIGINT, nokill);
-}
-
-static inline void yeskill() {
-    setsig(SIGINT, oldsigh);
-    oldsigh = NULL;
-}
-#endif
-
 void forceExit() {
     #ifndef _WIN32
     txtqunlock();
@@ -775,9 +764,18 @@ int main(int argc, char** argv) {
                 fputs("No long option following dash.\n", stderr); exit(1);
             } else if (!strcmp(argv[i], "--version")) {
                 if (argc > 2) {IOCT(); exit(1);}
-                printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
+                printf("Command Line Interface BASIC version %s (%s %s-bit) using ", VER, OSVER, BVER);
+                #ifdef _WIN32
+                    fputs("Windows API calls", stdout);
+                    #ifndef _WIN_NO_VT
+                        fputs(" and VT escape codes", stdout);
+                    #endif
+                #else
+                    fputs("VT escape codes", stdout);
+                #endif
+                putchar('\n');
                 puts("Copyright (C) 2021 PQCraft");
-                puts("This software is licensed under the GNU GPL v3.");
+                puts("This software is licensed under the GNU GPL v3");
                 pexit = true;
             } else if (!strcmp(argv[i], "--help")) {
                 if (argc > 2) {IOCT(); exit(1);}
@@ -859,7 +857,7 @@ int main(int argc, char** argv) {
                 if (shortopt) {
                     fprintf(stderr, "Invalid short option '%c'.\n", argv[i][shortopti]); exit(1);
                 } else {
-                    fprintf(stderr, "Invalid option '%s'.\n", argv[i]); exit(1);
+                    fprintf(stderr, "Invalid long option '%s'.\n", argv[i]); exit(1);
                 }
             }
         } else {

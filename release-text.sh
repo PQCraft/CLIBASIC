@@ -21,4 +21,6 @@ $(sed 's/^/- /' "$@" "$FILE")
 <br>
 
 **Extras:**
-- Example programs: \`examples.zip\`"
+- Example programs: \`examples.zip\`
+- Documentation: \`docs.zip\`
+- Windows Readline library: \`lib.zip\`"
