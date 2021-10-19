@@ -4,7 +4,6 @@
 <p align="center">CLIBASIC is a version of BASIC designed to run in the command line or terminal</p>
 
 <!----> <br>
-<!----> <br>
 ---
 ### Required Packages/Programs <br>
 #### Linux <br>
