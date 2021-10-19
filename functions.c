@@ -603,9 +603,12 @@ if (chkCmd(1, "INKEY$")) {
     cerr = 0;
     ftype = 1;
     #ifndef _WIN32
-    int tmp;
+    int32_t tmp = 0;
+    copyStr(inkeybuf, outbuf);
+    int obp = strlen(inkeybuf);
+    inkeybuf[0] = 0;
     if (!(tmp = kbhit())) goto fexit;
-    int obp = 0;
+    tmp += obp;
     while (obp < tmp) {
         outbuf[obp] = 0;
         outbuf[obp] = getchar();

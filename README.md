@@ -1,9 +1,9 @@
-# CLIBASIC <br>
 <!----> <br>
-### <ins>C</ins>ommand <ins>L</ins>ine <ins>I</ins>nterface <ins>B</ins>eginners <ins>A</ins>ll-purpose <ins>S</ins>ymbolic <ins>I</ins>nstruction <ins>C</ins>ode <br>
-CLIBASIC is a version of BASIC designed to run in the command line or terminal
+[![image](https://github.com/PQCraft/clibasic-docs/raw/master/clibasic-banner.png)](#?)
+### <p align="center"><ins>C</ins>ommand <ins>L</ins>ine <ins>I</ins>nterface <ins>B</ins>eginners <ins>A</ins>ll-purpose <ins>S</ins>ymbolic <ins>I</ins>nstruction <ins>C</ins>ode<br></p>
+<p align="center">CLIBASIC is a version of BASIC designed to run in the command line or terminal</p>
+
 <!----> <br>
-[![image](https://github.com/PQCraft/clibasic-docs/raw/master/clibasic_logo_rounded.png)](#?)
 <!----> <br>
 ---
 ### Required Packages/Programs <br>
@@ -80,3 +80,4 @@ To build CLIBASIC with support for VT escape codes, add `vt` before the rest of 
 - If the file `.clibasic_history` is present in the user's home directory CLIBASIC will automatically save history there. Run `_AUTOCMDHIST`, `_SAVECMDHIST` (without any arguments), or create the file `.clibasic_history` in your home/user folder to enable this feature. Remove the file to disable this feature.
 - CLIBASIC will look for `~/.clibasicrc`, `~/autorun.bas`, then `~/.autorun.bas` in this order in the user's home directory and run the first file found.
 - The development scripts are `build.sh` which is for testing if CLIBASIC compiles correctly for Linux and Windows, `package.sh` which creates the zip files for making a CLIBASIC release, `commit.sh` which automates the build and push process, and `release-text.sh` which generates the text for making a CLIBASIC release.
+

@@ -222,6 +222,7 @@ if (chkCmd(1, "GOSUB")) {
     gsstack[gsstackp].dlsp = dlstackp;
     gsstack[gsstackp].fnsp = fnstackp;
     gsstack[gsstackp].itsp = itstackp;
+    gsstack[gsstackp].brkinfo = brkinfo;
     if (inProg) {
         cp = gotodata[i].cp;
     } else {
@@ -252,12 +253,12 @@ if (chkCmd(1, "RETURN")) {
     dlstackp = gsstack[gsstackp].dlsp;
     fnstackp = gsstack[gsstackp].fnsp;
     itstackp = gsstack[gsstackp].itsp;
+    brkinfo = gsstack[gsstackp].brkinfo;
     --gsstackp;
     didloop = true;
     lockpl = true;
     goto noerr;
 }
-/* TODO: Fix crippling amount of inconsistant bugs
 if (chkCmd(2, "CONTINUE", "BREAK")) {
     if (argct) {cerr = 3; goto cmderr;}
     cerr = 0;
@@ -272,7 +273,6 @@ if (chkCmd(2, "CONTINUE", "BREAK")) {
     brkinfo.type = 1 + !strcmp(arg[0], "BREAK");
     goto noerr;
 }
-*/
 if (chkCmd(1, "COLOR")) {
     if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
     cerr = 0;
@@ -329,14 +329,43 @@ if (chkCmd(1, "LOCATE")) {
     cerr = 0;
     int tmp = 0;
     if (!solvearg(1)) goto cmderr;
-    #ifdef _WIN_NO_VT
     getCurPos();
-    #endif
     if (argt[1] == 0) {}
     else if (argt[1] != 2) {cerr = 2; goto cmderr;}
     else {
         tmp = atoi(arg[1]);
-        if (tmp == 0) {cerr = 16; goto cmderr;}
+        if (tmp < 1) {cerr = 16; goto cmderr;}
+        else {curx = tmp;}
+    }
+    if (argct > 1) {
+        if (!solvearg(2)) goto cmderr;
+        if (argt[2] == 0) {}
+        else if (argt[2] != 2) {cerr = 2; goto cmderr;}
+        else {
+            tmp = atoi(arg[2]);
+            if (tmp < 1) {cerr = 16; goto cmderr;}
+            else {cury = tmp;}
+        }
+    }
+    #ifdef _WIN_NO_VT
+    SetConsoleCursorPosition(hConsole, (COORD){curx - 1, cury - 1});
+    #else
+    printf("\e[%d;%dH", cury, curx);
+    fflush(stdout);
+    #endif
+    goto noerr;
+}
+if (chkCmd(1, "RLOCATE")) {
+    if (argct > 2 || argct < 1) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    int tmp = 0;
+    if (!solvearg(1)) goto cmderr;
+    getCurPos();
+    if (argt[1] == 0) {}
+    else if (argt[1] != 2) {cerr = 2; goto cmderr;}
+    else {
+        tmp = atoi(arg[1]);
+        if (tmp == 0) {}
         else if (tmp < 0) {
             curx += tmp;
             if (curx < 0) curx = 0;
@@ -344,12 +373,9 @@ if (chkCmd(1, "LOCATE")) {
             printf("\e[%dD", -tmp);
             #endif
         } else {
-            curx = tmp;
+            curx += tmp;
             #ifndef _WIN_NO_VT
-            --curx;
-            fputs("\e[9999D", stdout);
-            if (curx) printf("\e[%dC", curx);
-            ++curx;
+            printf("\e[%dC", tmp);
             #endif
         }
     }
@@ -359,7 +385,7 @@ if (chkCmd(1, "LOCATE")) {
         else if (argt[2] != 2) {cerr = 2; goto cmderr;}
         else {
             tmp = atoi(arg[2]);
-            if (tmp == 0) {cerr = 16; goto cmderr;}
+            if (tmp == 0) {}
             else if (tmp < 0) {
                 cury += tmp;
                 if (cury < 0) cury = 0;
@@ -367,12 +393,9 @@ if (chkCmd(1, "LOCATE")) {
                 printf("\e[%dA", -tmp);
                 #endif
             } else {
-                cury = tmp;
+                cury += tmp;
                 #ifndef _WIN_NO_VT
-                --cury;
-                fputs("\e[9999A", stdout);
-                if (cury) printf("\e[%dB", cury);
-                ++cury;
+                printf("\e[%dB", tmp);
                 #endif
             }
         }
