@@ -131,6 +131,7 @@ if (chkCmd(1, "LOOP")) {
     if (brkinfo.block == 1) {
         if (brkinfo.type >= 1) {dldcmd[dlstackp] = false;}
         if (brkinfo.type == 2) {brk = true;}
+        brkinfo.type = 0;
     }
     if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) {dlstackp--; return true;}
@@ -165,6 +166,7 @@ if (chkCmd(1, "LOOPWHILE")) {
     if (brkinfo.block == 1) {
         if (brkinfo.type >= 1) {dldcmd[dlstackp] = false;}
         if (brkinfo.type == 2) {brk = true;}
+        brkinfo.type = 0;
     }
     if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
         if (dldcmd[dlstackp]) {dlstackp--; return true;}
