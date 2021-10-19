@@ -115,7 +115,7 @@
 
 // Base defines
 
-char VER[] = "0.26";
+char VER[] = "0.26.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -216,10 +216,8 @@ int* mindlstackp = NULL;
 bool itdcmd[CB_PROG_LOGIC_MAX];
 int itstackp = -1;
 int* minitstackp = NULL;
-bool didelse = false;
-bool didelseif = false;
-bool* olddidelse = NULL;
-bool* olddidelseif = NULL;
+bool didelse[CB_PROG_LOGIC_MAX];
+bool didelseif[CB_PROG_LOGIC_MAX];
 
 cb_jump fnstack[CB_PROG_LOGIC_MAX];
 bool fndcmd[CB_PROG_LOGIC_MAX];
@@ -415,6 +413,8 @@ static inline void clearGlobals() {
         fndcmd[i] = false;
         fninfor[i] = false;
         itdcmd[i] = false;
+        didelse[i] = false;
+        didelseif[i] = false;
         memset(&gsstack[i], 0, sizeof(cb_jump));
     }
     for (int i = 0; i < gotomaxct; ++i) {
@@ -1109,8 +1109,6 @@ int main(int argc, char** argv) {
         if (runc) runc = false;
         cmdl = 0;
         didloop = false;
-        didelse = false;
-        didelseif = false;
         bool inStr = false;
         if (!runfile) setsig(SIGINT, cmdIntHndl);
         progLine = 1;
@@ -1295,8 +1293,6 @@ void unloadProg() {
     cp = progcp[progindex];
     cmdl = progcmdl[progindex];
     progLine = proglinebuf[progindex];
-    didelse = olddidelse[progindex];
-    didelseif = olddidelseif[progindex];
     brkinfo = oldbrkinfo[progindex];
     dlstackp = mindlstackp[progindex];
     itstackp = minitstackp[progindex];
@@ -1307,8 +1303,6 @@ void unloadProg() {
     mindlstackp = (int*)realloc(mindlstackp, progindex * sizeof(int));
     minitstackp = (int*)realloc(minitstackp, progindex * sizeof(int));
     minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
-    olddidelse = (bool*)realloc(olddidelse, progindex * sizeof(bool));
-    olddidelseif = (bool*)realloc(olddidelseif, progindex * sizeof(bool));
     oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(cb_brkinfo));
     proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
     proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
@@ -1383,8 +1377,6 @@ bool loadProg(char* filename) {
     proglinebuf = (int*)realloc(proglinebuf, progindex * sizeof(int));
     mindlstackp = (int*)realloc(mindlstackp, progindex * sizeof(int));
     minitstackp = (int*)realloc(minitstackp, progindex * sizeof(int));
-    olddidelse = (bool*)realloc(olddidelse, progindex * sizeof(bool));
-    olddidelseif = (bool*)realloc(olddidelseif, progindex * sizeof(bool));
     oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(cb_brkinfo));
     minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
     proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
@@ -1397,8 +1389,6 @@ bool loadProg(char* filename) {
     proglinebuf[progindex] = progLine;
     mindlstackp[progindex] = dlstackp;
     minitstackp[progindex] = itstackp;
-    olddidelse[progindex] = didelse;
-    olddidelseif[progindex] = didelseif;
     oldbrkinfo[progindex] = brkinfo;
     minfnstackp[progindex] = fnstackp;
     proggotodata[progindex] = gotodata;
@@ -1410,8 +1400,6 @@ bool loadProg(char* filename) {
     cp = 0;
     cmdl = 0;
     progLine = 1;
-    didelse = false;
-    didelseif = false;
     memset(&brkinfo, 0, sizeof(brkinfo));
     if (argslater) {
         argslater = false;

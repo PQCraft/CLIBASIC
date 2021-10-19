@@ -660,20 +660,21 @@ if (chkCmd(1, "SNIP$")) {
         if (fargt[2] == 0) {cerr = 3; goto fexit;}
         start = 0;
         end = atoi(farg[2]);
-        if (end < 0) {cerr = 16; goto fexit;}
     } else {
         if (fargt[2] == 1 || fargt[3] == 1) {cerr = 2; goto fexit;}
         if (fargt[2] + fargt[3]) {
             if (!fargt[2]) {start = 0;}
             else {start = atoi(farg[2]);}
             if (!fargt[3]) {end = 32;}
-            else {end = atoi(farg[3]); if (end < 0 || end < start) {cerr = 16; goto fexit;}}
+            else {end = atoi(farg[3]);}
         } else {
             cerr = 3;
             goto fexit;
         }
     }
     if (start < 0) start = 0;
+    if (start > flen[1]) start = flen[1];
+    if (end < start) end = start;
     if (end > flen[1]) end = flen[1];
     copyStrSnip(farg[1], start, end, outbuf);
 }
