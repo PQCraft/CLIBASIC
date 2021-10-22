@@ -1,3 +1,14 @@
+int extcerr = 255;
+for (int i = extmaxct - 1; i > -1; --i) {
+    if (extdata[i].inuse && extdata[i].runcmd) {
+        extcerr = extdata[i].runcmd(argct, tmpargs, arg, argt, argl);
+        if (extcerr != 255) {
+            cerr = extcerr;
+            if (!extcerr) goto noerr;
+            else goto cmderr;
+        }
+    }
+}
 if (chkCmdPtr[0] == '_') goto _cmd;
 if (chkCmd(2, "EXIT", "QUIT")) {
     if (argct > 1) {cerr = 3; goto cmderr;}
@@ -282,17 +293,17 @@ if (chkCmd(1, "COLOR")) {
     if (argt[1] != 2) {cerr = 2; goto cmderr;}
     else {
         tmp = atoi(arg[1]);
-        if (txt_truecolor) {
+        if (txtattrib.truecolor) {
             if (tmp < 0 || tmp > 0xFFFFFF) {cerr = 16; goto cmderr;}
-            truefgc = tmp;
+            txtattrib.truefgc = tmp;
         } else {
             if (tmp < 0 || tmp > 255) {cerr = 16; goto cmderr;}
-            fgc = (uint8_t)tmp;
+            txtattrib.fgc = (uint8_t)tmp;
         }
         #ifndef _WIN_NO_VT
-        if (txt_fgc) {
-            if (txt_truecolor) printf("\e[38;2;%u;%u;%um", (uint8_t)(truefgc >> 16), (uint8_t)(truefgc >> 8), (uint8_t)truefgc);
-            else printf("\e[38;5;%um", fgc);
+        if (txtattrib.fgce) {
+            if (txtattrib.truecolor) printf("\e[38;2;%u;%u;%um", (uint8_t)(txtattrib.truefgc >> 16), (uint8_t)(txtattrib.truefgc >> 8), (uint8_t)txtattrib.truefgc);
+            else printf("\e[38;5;%um", txtattrib.fgc);
         }
         #else
         updateTxtAttrib();
@@ -304,17 +315,17 @@ if (chkCmd(1, "COLOR")) {
         if (argt[2] != 2) {cerr = 2; goto cmderr;}
         else {
             tmp = atoi(arg[2]);
-            if (txt_truecolor) {
+            if (txtattrib.truecolor) {
                 if (tmp < 0 || tmp > 0xFFFFFF) {cerr = 16; goto cmderr;}
-                truebgc = tmp;
+                txtattrib.truebgc = tmp;
             } else {
                 if (tmp < 0 || tmp > 255) {cerr = 16; goto cmderr;}
-                bgc = (uint8_t)tmp;
+                txtattrib.bgc = (uint8_t)tmp;
             }
             #ifndef _WIN_NO_VT
-            if (txt_bgc) {
-                if (txt_truecolor) printf("\e[48;2;%u;%u;%um", (uint8_t)(truebgc >> 16), (uint8_t)(truebgc >> 8), (uint8_t)truebgc);
-                else printf("\e[48;5;%um", bgc);
+            if (txtattrib.bgce) {
+                if (txtattrib.truecolor) printf("\e[48;2;%u;%u;%um", (uint8_t)(txtattrib.truebgc >> 16), (uint8_t)(txtattrib.truebgc >> 8), (uint8_t)txtattrib.truebgc);
+                else printf("\e[48;5;%um", txtattrib.bgc);
             }
             #else
             updateTxtAttrib();
@@ -339,7 +350,8 @@ if (chkCmd(1, "LOCATE")) {
     }
     if (argct > 1) {
         if (!solvearg(2)) goto cmderr;
-        if (argt[2] == 0) {}
+        if (argt[1] == 0 && argt[2] == 0) {cerr = 3; goto cmderr;}
+        else if (argt[2] == 0) {}
         else if (argt[2] != 2) {cerr = 2; goto cmderr;}
         else {
             tmp = atoi(arg[2]);
@@ -381,7 +393,8 @@ if (chkCmd(1, "RLOCATE")) {
     }
     if (argct > 1) {
         if (!solvearg(2)) goto cmderr;
-        if (argt[2] == 0) {}
+        if (argt[1] == 0 && argt[2] == 0) {cerr = 3; goto cmderr;}
+        else if (argt[2] == 0) {}
         else if (argt[2] != 2) {cerr = 2; goto cmderr;}
         else {
             tmp = atoi(arg[2]);
@@ -409,15 +422,15 @@ if (chkCmd(1, "RLOCATE")) {
 if (chkCmd(1, "CLS")) {
     if (argct > 1) {cerr = 3; goto cmderr;}
     cerr = 0;
-    uint8_t tbgc = bgc;
+    uint8_t tbgc = txtattrib.bgc;
     #ifndef _WIN_NO_VT
-    uint32_t ttbgc = truebgc;
+    uint32_t ttbgc = txtattrib.truebgc;
     #endif
     if (argct) {
         if (!solvearg(1)) goto cmderr;
         if (argt[1] != 2) {cerr = 2; goto cmderr;}
         #ifndef _WIN_NO_VT
-        if (txt_truecolor) {
+        if (txtattrib.truecolor) {
             ttbgc = (uint32_t)atoi(arg[1]);
         } else {
             tbgc = (uint8_t)atoi(arg[1]);
@@ -428,14 +441,14 @@ if (chkCmd(1, "CLS")) {
     }
     #ifndef _WIN_NO_VT
     if (argct) {
-        if (txt_truecolor) printf("\e[48;2;%u;%u;%um", (uint8_t)(ttbgc >> 16), (uint8_t)(ttbgc >> 8), (uint8_t)ttbgc);
+        if (txtattrib.truecolor) printf("\e[48;2;%u;%u;%um", (uint8_t)(ttbgc >> 16), (uint8_t)(ttbgc >> 8), (uint8_t)ttbgc);
         else printf("\e[48;5;%um", tbgc);
     }
     fputs("\e[H\e[2J\e[3J", stdout);
     updateTxtAttrib();
     fflush(stdout);
     #else
-	SetConsoleTextAttribute(hConsole, (fgc % 16) + (tbgc % 16) * 16);
+	SetConsoleTextAttribute(hConsole, (txtattrib.fgc % 16) + (tbgc % 16) * 16);
     system("cls");
     updateTxtAttrib();
     #endif
@@ -825,6 +838,14 @@ if (chkCmd(1, "FILES")) {
     (void)ret;
     goto noerr;
 }
+if (chkCmd(1, "EXTENSIONS")) {
+    if (argct) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    for (register int i = 0; i < extmaxct; ++i) {
+        if (extdata[i].inuse) {puts(extdata[i].name);}
+    }
+    goto noerr;
+}
 if (chkCmd(2, "CHDIR", "CD")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
     cerr = 0;
@@ -937,6 +958,34 @@ if (chkCmd(4, "MV", "MOVE", "REN", "RENAME")) {
     errno = 0;
     rename(arg[1], arg[2]);
     fileerror = errno;
+    goto noerr;
+}
+if (chkCmd(1, "LOADEXT")) {
+    if (argct < 1) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    for (int i = 1; i <= argct; i++) {
+        if (!solvearg(i) || argt[i] != 1) {cerr = 2; goto cmderr;}
+        if (loadExt(arg[i]) < 0) {goto cmderr;}
+    }
+    goto noerr;
+}
+if (chkCmd(1, "UNLOADEXT")) {
+    if (argct != 1) {cerr = 3; goto cmderr;}
+    cerr = 0;
+    if (!solvearg(1)) goto cmderr;
+    if (argt[1] == 1) {
+        upCase(arg[1]);
+        for (register int i = 0; i < extmaxct; ++i) {
+            if (extdata[i].inuse && !strcmp(arg[1], extdata[i].name)) {
+                unloadExt(i);
+                goto noerr;
+            }
+        }
+        cerr = 16;
+        goto cmderr;
+    } else {
+        if (!unloadExt(atoi(arg[1]))) goto cmderr;
+    }
     goto noerr;
 }
 goto cmderr;
@@ -1140,21 +1189,8 @@ if (chkCmd(1, "_TXTATTRIB")) {
     int val = 0;
     if (attrib == 0) {
         if (argct == 2) {cerr = 3; goto cmderr;}
-        txt_bold = false;
-        txt_italic = false;
-        txt_underln = false;
-        txt_underlndbl = false;
-        txt_underlnsqg = false;
-        txt_strike = false;
-        txt_overln = false;
-        txt_dim = false;
-        txt_blink = false;
-        txt_hidden = false;
-        txt_reverse = false;
-        txt_underlncolor = 0;
-        txt_fgc = true;
-        txt_bgc = false;
-        txt_truecolor = false;
+        memset(&txtattrib, 0, sizeof(cb_txt));
+        txtattrib.fgce = true;
         goto cmderr;
     } else if (argct != 2) {
         if (attrib == 12) {cerr = 16; goto cmderr;}
@@ -1179,21 +1215,21 @@ if (chkCmd(1, "_TXTATTRIB")) {
         }
     }
     switch (attrib) {
-        case 1: txt_bold = (bool)val; break;
-        case 2: txt_italic = (bool)val; break;
-        case 3: txt_underln = (bool)val; break;
-        case 4: txt_underlndbl = (bool)val; break;
-        case 5: txt_underlnsqg = (bool)val; break;
-        case 6: txt_strike = (bool)val; break;
-        case 7: txt_overln = (bool)val; break;
-        case 8: txt_dim = (bool)val; break;
-        case 9: txt_blink = (bool)val; break;
-        case 10: txt_hidden = (bool)val; break;
-        case 11: txt_reverse = (bool)val; break;
-        case 12: txt_underlncolor = val; break;
-        case 13: txt_fgc = (bool)val; break;
-        case 14: txt_bgc = (bool)val; break;
-        case 15: txt_truecolor = (bool)val; break;
+        case 1: txtattrib.bold = (bool)val; break;
+        case 2: txtattrib.italic = (bool)val; break;
+        case 3: txtattrib.underln = (bool)val; break;
+        case 4: txtattrib.underlndbl = (bool)val; break;
+        case 5: txtattrib.underlnsqg = (bool)val; break;
+        case 6: txtattrib.strike = (bool)val; break;
+        case 7: txtattrib.overln = (bool)val; break;
+        case 8: txtattrib.dim = (bool)val; break;
+        case 9: txtattrib.blink = (bool)val; break;
+        case 10: txtattrib.hidden = (bool)val; break;
+        case 11: txtattrib.reverse = (bool)val; break;
+        case 12: txtattrib.underlncolor = val; break;
+        case 13: txtattrib.fgce = (bool)val; break;
+        case 14: txtattrib.bgce = (bool)val; break;
+        case 15: txtattrib.truecolor = (bool)val; break;
     }
     updateTxtAttrib();
     goto noerr;

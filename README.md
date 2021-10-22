@@ -79,4 +79,5 @@ To build CLIBASIC with support for VT escape codes, add `vt` before the rest of 
 - If the file `.clibasic_history` is present in the user's home directory CLIBASIC will automatically save history there. Run `_AUTOCMDHIST`, `_SAVECMDHIST` (without any arguments), or create the file `.clibasic_history` in your home/user folder to enable this feature. Remove the file to disable this feature.
 - CLIBASIC will look for `~/.clibasicrc`, `~/autorun.bas`, then `~/.autorun.bas` in this order in the user's home directory and run the first file found.
 - The development scripts are `build.sh` which is for testing if CLIBASIC compiles correctly for Linux and Windows, `package.sh` which creates the zip files for making a CLIBASIC release, `commit.sh` which automates the build and push process, and `release-text.sh` which generates the text for making a CLIBASIC release.
+- Include the `clibasic.h` file when making a clibasic extension.
 

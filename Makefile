@@ -3,7 +3,7 @@ BASE_CFLAGS = --std=c99 -Wall -Wextra -Ofast -lm -lreadline -funsigned-char
 ifndef OS
 
 C = gcc
-CFLAGS = $(BASE_CFLAGS)
+CFLAGS = $(BASE_CFLAGS) -ldl
 ifeq ($(shell uname -s), Darwin)
 ifeq ($(shell [ -d ~/.brew/opt/readline/include ] && echo true), true)
 CFLAGS += -I~/.brew/opt/readline/include

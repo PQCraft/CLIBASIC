@@ -1,3 +1,22 @@
+int extcerr = 255;
+for (int i = extmaxct - 1; i > -1; --i) {
+    if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {
+        if (dldcmd[dlstackp]) break;
+    }
+    if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {
+        if (itdcmd[itstackp]) break;
+    }
+    if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
+        if (fndcmd[fnstackp]) break;
+    }
+    if (extdata[i].inuse && extdata[i].runlogic) {
+        extcerr = extdata[i].runlogic(cmd, (char**)ltmp, i, j);
+        if (extcerr != 255) {
+            cerr = extcerr;
+            return true;
+        }
+    }
+}
 if (chkCmd(1, "REM")) return true;
 if (chkCmd(2, "?", "PRINT") || cmd[i] == '?') {
     if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {

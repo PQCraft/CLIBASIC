@@ -95,6 +95,7 @@
     #include <termios.h>
     #include <sys/ioctl.h>
     #include <sys/wait.h>
+    #include <dlfcn.h>
 #else
     #include <windows.h>
     #include <conio.h>
@@ -115,7 +116,7 @@
 
 // Base defines
 
-char VER[] = "0.26.2";
+char VER[] = "0.27";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -149,6 +150,8 @@ char VER[] = "0.26.2";
 
 // Global vars and functions
 
+#include "clibasic.h"
+
 int progindex = -1;
 char** progbuf = NULL;
 char** progfn = NULL;
@@ -166,27 +169,19 @@ int progLine = 1;
 
 int varmaxct = 0;
 
-typedef struct {
-    bool inuse;
-    char* name;
-    uint8_t type;
-    int32_t size;
-    char** data;
-} cb_var;
-
 cb_var* vardata = NULL;
 
 char gpbuf[CB_BUF_SIZE];
 
-char* cmd;
-int cmdl;
-char** tmpargs;
-char** arg;
-uint8_t* argt;
-int32_t* argl;
+char* cmd = NULL;
+int cmdl = 0;
+char** tmpargs = NULL;
+char** arg = NULL;
+uint8_t* argt = NULL;
+int32_t* argl = NULL;
 int argct = 0;
 
-int cmdpos;
+int cmdpos = 0;
 
 bool didloop = false;
 bool lockpl = false;
@@ -237,10 +232,12 @@ char prompt[CB_BUF_SIZE];
 char pstr[CB_BUF_SIZE];
 char cmpstr[CB_BUF_SIZE];
 
-uint8_t fgc = 15;
-uint8_t bgc = 0;
-uint32_t truefgc = 0xFFFFFF;
-uint32_t truebgc = 0x000000;
+/*
+uint8_t txtattrib.fgc = 15;
+uint8_t txtattrib.bgc = 0;
+uint32_t txtattrib.truefgc = 0xFFFFFF;
+uint32_t txtattrib.truebgc = 0x000000;
+*/
 
 int curx = 0;
 int cury = 0;
@@ -262,21 +259,7 @@ bool sh_silent = false;
 bool sh_clearAttrib = true;
 bool sh_restoreAttrib = true;
 
-bool txt_bold = false;
-bool txt_italic = false;
-bool txt_underln = false;
-bool txt_underlndbl = false;
-bool txt_underlnsqg = false;
-bool txt_strike = false;
-bool txt_overln = false;
-bool txt_dim = false;
-bool txt_blink = false;
-bool txt_hidden = false;
-bool txt_reverse = false;
-int  txt_underlncolor = 0;
-bool txt_fgc = true;
-bool txt_bgc = false;
-bool txt_truecolor = false;
+cb_txt txtattrib;
 
 bool textlock = false;
 bool sneaktextlock = false;
@@ -291,7 +274,7 @@ bool autohist = false;
 int tab_width = 4;
 
 int progargc = 0;
-int * oldprogargc = NULL;
+int* oldprogargc = NULL;
 int newprogargc = 0;
 char** progargs = NULL;
 char*** oldprogargs = NULL;
@@ -320,11 +303,6 @@ cb_goto** proggotodata = NULL;
 int gotomaxct = 0;
 int* proggotomaxct = NULL;
 
-typedef struct {
-    FILE* fptr;
-    int32_t size;
-} cb_file;
-
 cb_file* filedata = NULL;
 int filemaxct = 0;
 int fileerror = 0;
@@ -340,6 +318,21 @@ bool addsub = false;
 int subindex = -1;
 
 char* rl_tmpptr = NULL;
+
+typedef struct {
+    bool inuse;
+    char* name;
+    void* lib;
+    int (*runcmd)(int, char**, char**, uint8_t*, int32_t*);
+    cb_funcret (*runfunc)(int, char**, char**, uint8_t*, int32_t*, char*);
+    int (*runlogic)(char*, char**, int32_t, int32_t);
+    bool (*chkfuncsolve)(char*);
+    void (*clearGlobals)(void);
+    bool (*deinit)(void);
+} cb_ext;
+
+int extmaxct = 0;
+cb_ext* extdata = NULL;
 
 #ifndef _WIN32
 struct termios term, restore;
@@ -422,6 +415,11 @@ static inline void clearGlobals() {
     }
     nfree(gotodata);
     gotomaxct = 0;
+    for (int i = extmaxct - 1; i > -1; --i) {
+        if (extdata[i].inuse && extdata[i].chkfuncsolve) {
+            extdata[i].clearGlobals();
+        }
+    }
 }
 
 #ifdef _WIN32
@@ -485,6 +483,8 @@ void updatechars() {
 #endif
 #ifndef WEXITSTATUS
 #define WEXITSTATUS(x) ((uint8_t)(x))
+#define dlclose FreeLibrary
+#define dlsym GetProcAddress
 #endif
 
 #pragma GCC diagnostic push
@@ -548,6 +548,8 @@ int openFile(char*, char*);
 bool closeFile(int);
 static inline void upCase(char*);
 uint8_t logictest(char*);
+int loadExt(char*);
+bool unloadExt(int);
 
 void cleanExit() {
     txtqunlock();
@@ -643,6 +645,7 @@ void cleanExit() {
     nfree(oldprogargs);
     */
     clearGlobals();
+    unloadExt(-1);
     #ifndef _WIN32
     tcsetattr(0, TCSANOW, &initterm);
     #endif
@@ -979,6 +982,9 @@ int main(int argc, char** argv) {
     skipscargv:;
     getCurPos();
     if (curx != 1) putchar('\n');
+    txtattrib.fgce = true;
+    txtattrib.fgc = 15;
+    txtattrib.truefgc = 0xFFFFFF;
     updateTxtAttrib();
     if (!runfile) {
         if (info) printf("Command Line Interface BASIC version %s (%s %s-bit)\n", VER, OSVER, BVER);
@@ -1034,7 +1040,9 @@ int main(int argc, char** argv) {
     cerr = 0;
     initBaseMem();
     resetTimer();
-    clearGlobals();
+    if (inProg || runc) {
+        clearGlobals();
+    }
     while (!pexit) {
         fchkint:;
         cp = 0;
@@ -1663,51 +1671,51 @@ static inline void seterrstr(char* newstr) {
 void updateTxtAttrib() {
     #ifndef _WIN_NO_VT
     fputs("\e[0m", stdout);
-    if (txt_fgc) {
-        if (txt_truecolor) printf("\e[38;2;%u;%u;%um", (uint8_t)(truefgc >> 16), (uint8_t)(truefgc >> 8), (uint8_t)truefgc);
-        else printf("\e[38;5;%um", fgc);
+    if (txtattrib.fgce) {
+        if (txtattrib.truecolor) printf("\e[38;2;%u;%u;%um", (uint8_t)(txtattrib.truefgc >> 16), (uint8_t)(txtattrib.truefgc >> 8), (uint8_t)txtattrib.truefgc);
+        else printf("\e[38;5;%um", txtattrib.fgc);
     }
-    if (txt_bgc) {
-        if (txt_truecolor) printf("\e[48;2;%u;%u;%um", (uint8_t)(truebgc >> 16), (uint8_t)(truebgc >> 8), (uint8_t)truebgc);
-        else printf("\e[48;5;%um", bgc);
+    if (txtattrib.bgce) {
+        if (txtattrib.truecolor) printf("\e[48;2;%u;%u;%um", (uint8_t)(txtattrib.truebgc >> 16), (uint8_t)(txtattrib.truebgc >> 8), (uint8_t)txtattrib.truebgc);
+        else printf("\e[48;5;%um", txtattrib.bgc);
     }
-    if (txt_bold) fputs("\e[1m", stdout);
-    if (txt_italic) fputs("\e[3m", stdout);
-    if (txt_underln) fputs("\e[4m", stdout);
-    if (txt_underlndbl) fputs("\e[21m", stdout);
-    if (txt_underlnsqg) fputs("\e[4:3m", stdout);
-    if (txt_strike) fputs("\e[9m", stdout);
-    if (txt_overln) fputs("\e[53m", stdout);
-    if (txt_dim) fputs("\e[2m", stdout);
-    if (txt_blink) fputs("\e[5m", stdout);
-    if (txt_hidden) fputs("\e[8m", stdout);
-    if (txt_reverse) fputs("\e[7m", stdout);
-    if (txt_underlncolor) printf("\e[58:5:%um", txt_underlncolor);
+    if (txtattrib.bold) fputs("\e[1m", stdout);
+    if (txtattrib.italic) fputs("\e[3m", stdout);
+    if (txtattrib.underln) fputs("\e[4m", stdout);
+    if (txtattrib.underlndbl) fputs("\e[21m", stdout);
+    if (txtattrib.underlnsqg) fputs("\e[4:3m", stdout);
+    if (txtattrib.strike) fputs("\e[9m", stdout);
+    if (txtattrib.overln) fputs("\e[53m", stdout);
+    if (txtattrib.dim) fputs("\e[2m", stdout);
+    if (txtattrib.blink) fputs("\e[5m", stdout);
+    if (txtattrib.hidden) fputs("\e[8m", stdout);
+    if (txtattrib.reverse) fputs("\e[7m", stdout);
+    if (txtattrib.underlncolor) printf("\e[58:5:%um", txtattrib.underlncolor);
     #else
     uint8_t tmpfgc, tmpbgc;
-    if (txt_truecolor) {
+    if (txtattrib.truecolor) {
         uint8_t a;
-        tmpfgc = (((truefgc >> 23) & 1) << 2) | (((truefgc >> 15) & 1) << 1) | ((truefgc >> 7) & 1);
-        tmpfgc |= ((((truefgc >> 22) & 1) & ((truefgc >> 21) & 1)) << 2)\
-            | ((((truefgc >> 14) & 1) & ((truefgc >> 13) & 1)) << 1)\
-            | (((truefgc >> 6) & 1) & ((truefgc >> 5) & 1));
-        a = ((((truefgc >> 16) & 0xFF) + ((truefgc >> 8) & 0xFF) + (truefgc & 0xFF)) / 3);
+        tmpfgc = (((txtattrib.truefgc >> 23) & 1) << 2) | (((txtattrib.truefgc >> 15) & 1) << 1) | ((txtattrib.truefgc >> 7) & 1);
+        tmpfgc |= ((((txtattrib.truefgc >> 22) & 1) & ((txtattrib.truefgc >> 21) & 1)) << 2)\
+            | ((((txtattrib.truefgc >> 14) & 1) & ((txtattrib.truefgc >> 13) & 1)) << 1)\
+            | (((txtattrib.truefgc >> 6) & 1) & ((txtattrib.truefgc >> 5) & 1));
+        a = ((((txtattrib.truefgc >> 16) & 0xFF) + ((txtattrib.truefgc >> 8) & 0xFF) + (txtattrib.truefgc & 0xFF)) / 3);
         tmpfgc |= (8 * (a > 84));
-        tmpbgc = (((truebgc >> 23) & 1) << 2) | (((truebgc >> 15) & 1) << 1) | ((truebgc >> 7) & 1);
-        tmpbgc |= ((((truebgc >> 22) & 1) & ((truebgc >> 21) & 1)) << 2)\
-            | ((((truebgc >> 14) & 1) & ((truebgc >> 13) & 1)) << 1)\
-            | (((truebgc >> 6) & 1) & ((truebgc >> 5) & 1));
-        a = ((((truebgc >> 16) & 0xFF) + ((truebgc >> 8) & 0xFF) + (truebgc & 0xFF)) / 3);
+        tmpbgc = (((txtattrib.truebgc >> 23) & 1) << 2) | (((txtattrib.truebgc >> 15) & 1) << 1) | ((txtattrib.truebgc >> 7) & 1);
+        tmpbgc |= ((((txtattrib.truebgc >> 22) & 1) & ((txtattrib.truebgc >> 21) & 1)) << 2)\
+            | ((((txtattrib.truebgc >> 14) & 1) & ((txtattrib.truebgc >> 13) & 1)) << 1)\
+            | (((txtattrib.truebgc >> 6) & 1) & ((txtattrib.truebgc >> 5) & 1));
+        a = ((((txtattrib.truebgc >> 16) & 0xFF) + ((txtattrib.truebgc >> 8) & 0xFF) + (txtattrib.truebgc & 0xFF)) / 3);
         tmpbgc |= (8 * (a > 84));
     } else {
         uint8_t b1 = 0, b2 = 0;
-        b1 = fgc & 1; b2 = (fgc >> 2) & 1; tmpfgc = (b1 ^ b2);
-        tmpfgc = (tmpfgc) | (tmpfgc << 2); tmpfgc = fgc ^ tmpfgc;
-        b1 = bgc & 1; b2 = (bgc >> 2) & 1; tmpbgc = (b1 ^ b2);
-        tmpbgc = (tmpbgc) | (tmpbgc << 2); tmpbgc = bgc ^ tmpbgc;
+        b1 = txtattrib.fgc & 1; b2 = (txtattrib.fgc >> 2) & 1; tmpfgc = (b1 ^ b2);
+        tmpfgc = (tmpfgc) | (tmpfgc << 2); tmpfgc = txtattrib.fgc ^ tmpfgc;
+        b1 = txtattrib.bgc & 1; b2 = (txtattrib.bgc >> 2) & 1; tmpbgc = (b1 ^ b2);
+        tmpbgc = (tmpbgc) | (tmpbgc << 2); tmpbgc = txtattrib.bgc ^ tmpbgc;
     }
-    if (txt_dim) {tmpfgc %= 8; tmpbgc %= 8;}
-    if (txt_reverse) swap(tmpfgc, tmpbgc);
+    if (txtattrib.dim) {tmpfgc %= 8; tmpbgc %= 8;}
+    if (txtattrib.reverse) swap(tmpfgc, tmpbgc);
 	SetConsoleTextAttribute(hConsole, (tmpfgc % 16) + ((tmpbgc % 16) << 4));
     #endif
     fflush(stdout);
@@ -1823,7 +1831,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     char** tmpfargs;
     char** farg;
     uint8_t* fargt;
-    int* flen;
+    int32_t* flen;
     int fargct;
     int ftmpct = 0;
     int ftype = 0;
@@ -1837,6 +1845,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
         gftmp[1] = getFunc_gftmp[1];
     }
     ++getFuncIndex;
+    int extsas = -1;
     {
         int32_t i;
         bool invalName = false;
@@ -1847,7 +1856,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
         fargct = getArgCt(gftmp[0]);
         tmpfargs = malloc((fargct + 1) * sizeof(char*));
         farg = malloc((fargct + 1) * sizeof(char*));
-        flen = malloc((fargct + 1) * sizeof(int));
+        flen = malloc((fargct + 1) * sizeof(int32_t));
         fargt = malloc((fargct + 1) * sizeof(uint8_t));
         for (int j = 0; j <= fargct; ++j) {
             farg[j] = NULL;
@@ -1868,8 +1877,14 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
                     outbuf[0] = '0' + ret;
                     outbuf[1] = 0;
                     goto fexit;
-                } else if (farg[0][0] == 'E' && (!strcmp(farg[0] + 1, "XECA") || !strcmp(farg[0] + 1, "XECA$"))) {
+                } else if (!strcmp(farg[0], "EXECA") || !strcmp(farg[0], "EXECA$")) {
                     skipfargsolve = true;
+                } else {
+                    for (int i = extmaxct - 1; i > -1; --i) {
+                        if (extdata[i].inuse && extdata[i].chkfuncsolve) {
+                            if ((skipfargsolve = extdata[i].chkfuncsolve(farg[0]))) {extsas = i; break;}
+                        }
+                    }
                 }
             } else {
                 tmpfargs[j] = malloc(CB_BUF_SIZE);
@@ -2709,6 +2724,7 @@ static inline uint8_t logictestexpr(char* inbuf) {
     ++logictestexpr_index;
     while (inbuf[p] == ' ') {++p;}
     if (p >= (int32_t)strlen(inbuf)) {cerr = 10; goto ltreturn;}
+    bool ltskip = false;
     for (int32_t i = p; inbuf[i]; ++i) {
         if (!inStr) {
             switch (inbuf[i]) {
@@ -2719,7 +2735,7 @@ static inline uint8_t logictestexpr(char* inbuf) {
             }
         }
         if (inbuf[i] == '"') {inStr = !inStr;}
-        if (inbuf[i] == 0) {cerr = 1; goto ltreturn;}
+        if (inbuf[i + 1] == 0) {t2 = 255; copyStr("<>", lttmp[1]); ltskip = true;}
         if ((inbuf[i] == '<' || inbuf[i] == '=' || inbuf[i] == '>') && !inStr && pct == 0 && bct == 0) {p = i; break;}
         if (!inStr && pct == 0 && bct == 0) {
             if (inbuf[i] == ' ' && !sawSpChar) {lookingForSpChar = true;}
@@ -2732,6 +2748,7 @@ static inline uint8_t logictestexpr(char* inbuf) {
         }
     }
     lttmp[0][tmpp] = 0;
+    if (ltskip) goto ltskipget;
     tmpp = 0;
     for (int32_t i = p; true; ++i) {
         if (tmpp > 2) {cerr = 1; goto ltreturn;}
@@ -2768,12 +2785,17 @@ static inline uint8_t logictestexpr(char* inbuf) {
         }
     }
     lttmp[2][tmpp] = 0;
-    t1 = getVal(lttmp[0], lttmp[0]);
-    if (t1 == 0) goto ltreturn;
-    if (t1 == 255) {cerr = 1; goto ltreturn;}
     t2 = getVal(lttmp[2], lttmp[2]);
     if (t2 == 0) goto ltreturn;
     if (t2 == 255) {cerr = 1; goto ltreturn;}
+    ltskipget:;
+    t1 = getVal(lttmp[0], lttmp[0]);
+    if (t1 == 0) goto ltreturn;
+    if (t1 == 255) {cerr = 1; goto ltreturn;}
+    if (t2 == 255) {
+        t2 = t1;
+        if (t2 != 1) copyStr("0", lttmp[2]);
+    }
     if (t1 != t2) {cerr = 2; goto ltreturn;}
     if (!strcmp(lttmp[1], "=")) {
         ret = (uint8_t)(bool)!strcmp(lttmp[0], lttmp[2]);
@@ -3061,7 +3083,7 @@ static inline void printError(int error) {
             fputs("Memory error", stdout);
             break;
         case 27:;
-            printf("Failed to open file '%s' (errno: [%d] %s)", errstr, errno, strerror(errno));
+            printf("Failed to open file: '%s' (errno: [%d] %s)", errstr, errno, strerror(errno));
             break;
         case 28:;
             fputs("Label is already defined", stdout);
@@ -3077,6 +3099,21 @@ static inline void printError(int error) {
             break;
         case 32:;
             fputs("Reached GOSUB limit", stdout);
+            break;
+        case 33:;
+            printf("Failed to open library: '%s'", errstr);
+            #ifndef _WIN32
+            printf(" (%s)", dlerror());
+            #endif
+            break;
+        case 34:;
+            printf("Not a CLIBASIC extension: '%s'", errstr);
+            break;
+        case 35:;
+            printf("Failed to initialize extension: '%s'", errstr);
+            break;
+        case 36:;
+            printf("Extension already loaded: '%s'", errstr);
             break;
         case 125:;
             printf("Function only valid in program: '%s'", errstr);
@@ -3098,6 +3135,103 @@ static inline void printError(int error) {
             break;
     }
     putchar('\n');
+}
+
+int loadExt(char* path) {
+    seterrstr(path);
+    #ifndef _WIN32
+    void* lib = dlopen(path, RTLD_LAZY);
+    #else
+    void* lib = LoadLibrary(path);
+    #endif
+    if (!lib) {cerr = 33; return -1;}
+    char* oextname = (void*)dlsym(lib, "cbext_name");
+    bool (*cbext_init)(cb_extargs) = (void*)dlsym(lib, "cbext_init");
+    if (!oextname | !cbext_init) {cerr = 34; goto loadfail;}
+    if (!oextname[0]) {cerr = 34; goto loadfail;}
+    int e = -1;
+    char* extname = (char*)malloc(strlen(oextname) + 1);
+    copyStr(oextname, extname);
+    upCase(extname);
+    for (register int i = 0; i < extmaxct; ++i) {
+        if (extdata[i].inuse && !strcmp(extname, extdata[i].name)) {
+            seterrstr(extname);
+            cerr = 36;
+            goto loadfail;
+        }
+    }
+    for (register int i = 0; i < extmaxct; ++i) {
+        if (!extdata[i].inuse) {e = i; break;}
+    }
+    cb_extargs extargs = {
+        VER, BVER, OSVER,
+        &varmaxct, vardata,
+        &retval,
+        &filemaxct, filedata, &fileerror,
+        &chkCmdPtr,
+        &txtattrib,
+        &curx, &cury,
+        getCurPos,
+        gethome,
+        seterrstr,
+        basefilename, pathfilename,
+        openFile, closeFile, cbrm,
+        usTime, timer, resetTimer, cb_wait,
+        randNum,
+        chkCmd,
+        isSpChar, isExSpChar, isValidVarChar, isValidHexChar,
+        updateTxtAttrib,
+        getStr, getType,
+        getVar, setVar, delVar,
+        getVal,
+        solvearg,
+        logictest,
+        printError
+    };
+    if (!cbext_init(extargs)) {cerr = 35; goto loadfail;}
+    if (e == -1) {
+        e = extmaxct;
+        ++extmaxct;
+        extdata = (cb_ext*)realloc(extdata, extmaxct * sizeof(cb_ext));
+    }
+    extdata[e].inuse = true;
+    extdata[e].name = extname;
+    extdata[e].lib = lib;
+    extdata[e].runcmd = (void*)dlsym(lib, "cbext_runcmd");
+    extdata[e].runfunc = (void*)dlsym(lib, "cbext_runfunc");
+    extdata[e].runlogic = (void*)dlsym(lib, "cbext_runlogic");
+    extdata[e].chkfuncsolve = (void*)dlsym(lib, "cbext_chkfuncsolve");
+    extdata[e].clearGlobals = (void*)dlsym(lib, "cbext_clearGlobals");
+    extdata[e].deinit = (void*)dlsym(lib, "cbext_deinit");
+    return e;
+    loadfail:;
+    dlclose(lib);
+    return -1;
+}
+
+bool unloadExt(int e) {
+    if (e == -1) {
+        for (int i = extmaxct - 1; i > -1; --i) {
+            if (!extdata[i].inuse) continue;
+            extdata[i].inuse = false;
+            nfree(extdata[i].name);
+            dlclose(extdata[i].lib);
+            if (extdata[i].deinit) extdata[i].deinit();
+        }
+        extmaxct = 0;
+    } else {
+        if (e < -1 || e >= extmaxct || !extdata[e].inuse) {cerr = 16; return false;}
+        extdata[e].inuse = false;
+        nfree(extdata[e].name);
+        dlclose(extdata[e].lib);
+        if (extdata[e].deinit) extdata[e].deinit();
+        for (int i = extmaxct - 1; i > -1; --i) {
+            if (extdata[i].inuse) break;
+            --extmaxct;
+        }
+        extdata = (cb_ext*)realloc(extdata, extmaxct * sizeof(cb_ext));
+     }
+     return true;
 }
 
 void runcmd() {

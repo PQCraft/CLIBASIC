@@ -1,3 +1,25 @@
+cb_funcret extfr = {127, 0};
+for (int i = extmaxct - 1; i > -1; --i) {
+    if (extdata[i].inuse && extdata[i].runfunc) {
+        if (skipfargsolve && extsas != i) {
+            skipfargsolve = false;
+            for (int j = 1; j <= fargct; ++j) {
+                fargt[j] = getVal(tmpfargs[j], gftmp[1]);
+                if (fargt[j] == 0) goto fnoerrscan;
+                if (fargt[j] == 255) fargt[j] = 0;
+                flen[j] = strlen(gftmp[1]);
+                farg[j] = (char*)malloc(flen[j] + 1);
+                copyStr(gftmp[1], farg[j]);
+            }
+        }
+        extfr = extdata[i].runfunc(fargct, tmpfargs, farg, fargt, flen, outbuf);
+        if (extfr.cerr != 127) {
+            cerr = extfr.cerr;
+            ftype = extfr.ftype;
+            goto fexit;
+        }
+    }
+}
 if (chkCmdPtr[0] == '_') goto _func;
 if (chkCmd(1, "CHR$")) {
     cerr = 0;
@@ -649,6 +671,13 @@ if (chkCmd(1, "LEN")) {
     sprintf(outbuf, "%lu", (long unsigned)strlen(farg[1]));
     goto fexit;
 }
+if (chkCmd(1, "TYPEOF")) {
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    cerr = 0;
+    ftype = 2;
+    sprintf(outbuf, "%u", fargt[1]);
+    goto fexit;
+}
 if (chkCmd(1, "SNIP$")) {
     if (fargct < 2 || fargct > 3) {cerr = 3; goto fexit;}
     cerr = 0;
@@ -836,23 +865,23 @@ if (chkCmd(1, "FGC")) {
     cerr = 0;
     ftype = 2;
     if (fargct) {cerr = 3; goto fexit;}
-    if (txt_truecolor) sprintf(outbuf, "%u", truefgc);
-    else sprintf(outbuf, "%u", fgc);
+    if (txtattrib.truecolor) sprintf(outbuf, "%u", txtattrib.truefgc);
+    else sprintf(outbuf, "%u", txtattrib.fgc);
     goto fexit;
 }
 if (chkCmd(1, "BGC")) {
     cerr = 0;
     ftype = 2;
     if (fargct) {cerr = 3; goto fexit;}
-    if (txt_truecolor) sprintf(outbuf, "%u", truebgc);
-    else sprintf(outbuf, "%u", bgc);
+    if (txtattrib.truecolor) sprintf(outbuf, "%u", txtattrib.truebgc);
+    else sprintf(outbuf, "%u", txtattrib.bgc);
     goto fexit;
 }
 if (chkCmd(1, "TRUECOLOR")) {
     cerr = 0;
     ftype = 2;
     if (fargct) {cerr = 3; goto fexit;}
-    sprintf(outbuf, "%d", (int)txt_truecolor);
+    sprintf(outbuf, "%d", (int)txtattrib.truecolor);
     goto fexit;
 }
 if (chkCmd(1, "INPUT$")) {
@@ -1300,6 +1329,100 @@ if (chkCmd(1, "ISFILE")) {
     }
     outbuf[0] = '0' + !(S_ISDIR(pathstat.st_mode));
     outbuf[1] = 0;
+    goto fexit;
+}
+if (chkCmd(1, "LOADEXT")) {
+    ftype = 2;
+    if (fargct < 1) {cerr = 3; goto fexit;}
+    cerr = 0;
+    outbuf[0] = '1';
+    for (int i = 1; i <= fargct; i++) {
+        if (fargt[i] != 1) {cerr = 2; goto fexit;}
+        if (loadExt(farg[i]) < 0) {outbuf[0] = '0'; break;}
+    }
+    outbuf[1] = 0;
+    cerr = 0;
+    goto fexit;
+}
+if (chkCmd(1, "UNLOADEXT")) {
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    cerr = 0;
+    if (fargt[1] == 1) {
+        upCase(farg[1]);
+        for (register int i = 0; i < extmaxct; ++i) {
+            if (extdata[i].inuse && !strcmp(farg[1], extdata[i].name)) {
+                sprintf(outbuf, "%d", (int)unloadExt(i));
+            }
+        }
+    } else {
+        sprintf(outbuf, "%d", (int)unloadExt(atoi(farg[1])));
+    }
+    cerr = 0;
+    goto fexit;
+}
+if (chkCmd(1, "READEXTNAME$")) {
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    cerr = 0;
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    #ifndef _WIN32
+    void* lib = dlopen(farg[1], RTLD_LAZY);
+    #else
+    void* lib = LoadLibrary(farg[1]);
+    #endif
+    if (lib) {
+        char* extname = (void*)dlsym(lib, "cbext_name");
+        if (!extname) {copyStr("", outbuf);}
+        else {copyStr(extname, outbuf); upCase(outbuf);}
+        dlclose(lib);
+    } else {
+        outbuf[0] = 0;
+    }
+    goto fexit;
+}
+if (chkCmd(1, "EXTNAME$")) {
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    cerr = 0;
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    int e = atoi(farg[1]);
+    if (e >= 0 && e < extmaxct && extdata[e].inuse) {
+        copyStr(extdata[e].name, outbuf);
+    } else {
+        outbuf[0] = 0;
+    }
+    goto fexit;
+}
+if (chkCmd(1, "EXTLOADED")) {
+    ftype = 2;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    cerr = 0;
+    if (fargt[1] == 1) {
+        upCase(farg[1]);
+        outbuf[0] = '0';
+        for (register int i = 0; i < extmaxct; ++i) {
+            if (extdata[i].inuse && !strcmp(farg[1], extdata[i].name)) {
+                outbuf[0] = '1';
+            }
+        }
+    } else {
+        int e = atoi(farg[1]);
+        if (e >= 0 && e < extmaxct) {
+            outbuf[0] = '0' + extdata[e].inuse;
+        }
+    }
+    outbuf[1] = 0;
+    goto fexit;
+}
+if (chkCmd(1, "EXTENSIONS$")) {
+    ftype = 1;
+    if (fargct) {cerr = 3; goto fexit;}
+    cerr = 0;
+    for (register int i = 0; i < extmaxct; ++i) {
+        if (i < 0) strApndChar(outbuf, '\n');
+        if (extdata[i].inuse) {copyStrApnd(extdata[i].name, outbuf);}
+    }
     goto fexit;
 }
 goto fexit;
