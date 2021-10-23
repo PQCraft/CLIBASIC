@@ -10,6 +10,11 @@
     #define CB_PROG_LOGIC_MAX 256 // Change the value to change how far logic commands can be nested
 #endif
 
+#ifndef GCP_TIMEOUT // Avoids redefinition error if '-DGCP_TIMEOUT=<number>' is used
+    /* Sets the timeout for getCurPos() before resending the escape code (slower terminals may require a higher value) */
+    #define GCP_TIMEOUT 50000 // Change how long getCurPos() waits in microseconds until resending the cursor position request
+#endif
+
 /* Uses strcpy and strcat in place of copyStr and copyStrApnd */
 #define BUILT_IN_STRING_FUNCS // Comment out this line to use CLIBASIC string functions
 
@@ -116,7 +121,7 @@
 
 // Base defines
 
-char VER[] = "0.27";
+char VER[] = "0.27.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -1055,10 +1060,16 @@ int main(int argc, char** argv) {
             if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
             getCurPos();
             #ifndef _WIN32
-            curx--;
-            int32_t ptr = strlen(pstr);
-            while (curx > 0) {pstr[ptr] = 22; ptr++; curx--;}
-            pstr[ptr] = 0;
+            struct winsize max;
+            ioctl(0, TIOCGWINSZ, &max);
+            if (curx == max.ws_col) {
+                putchar('\n');
+            } else {
+                curx--;
+                int32_t ptr = strlen(pstr);
+                while (curx > 0) {pstr[ptr] = 22; ptr++; curx--;}
+                pstr[ptr] = 0;
+            }
             #else
             if (curx > 1) putchar('\n');
             #endif
@@ -1097,21 +1108,6 @@ int main(int argc, char** argv) {
             if (strcmp(tmpstr, cmpstr)) {add_history(tmpstr); copyStr(tmpstr, cmpstr);}
             copyStr(tmpstr, conbuf);
             nfree(tmpstr);
-            bool inStr = false;
-            bool sawCmd = false;
-            for (int32_t i = 0; conbuf[i]; ++i) {
-                switch (conbuf[i]) {
-                    case 'a' ... 'z':;
-                        if (!inStr) conbuf[i] = conbuf[i] - 32;
-                        break;
-                    case '"':;
-                        inStr = !inStr;
-                        break;
-                    case ' ':;
-                        if (!sawCmd) {sawCmd = true; inStr = false;}
-                        break;
-                }
-            }
             cmdint = false;
         }
         if (runc) runc = false;
@@ -1157,6 +1153,7 @@ int main(int argc, char** argv) {
             } else {
                 if (!inStr && (conbuf[concp] == '\'' || conbuf[concp] == '#')) comment = true;
                 if (!inStr && conbuf[concp] == '\n') comment = false;
+                if (!inStr) {conbuf[concp] = ((conbuf[concp] >= 'a' && conbuf[concp] <= 'z') ? conbuf[concp] - 32 : conbuf[concp]);}
                 if (conbuf[concp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((conbuf[concp] == ':' && !inStr) || conbuf[concp] == 0) {
                     while (conbuf[concp - cmdl] == ' ' && cmdl > 0) {cmdl--;}
@@ -1173,7 +1170,12 @@ int main(int argc, char** argv) {
                     if (chkinProg) goto fchkint;
                 } else
                 {cmdl++;}
-                if (!didloop) {if (comment) {conbuf[concp] = 0;} concp++;} else {didloop = false;}
+                if (!didloop) {
+                    if (comment) {conbuf[concp] = 0;}
+                    //else if (!inStr) {conbuf[concp] = (conbuf[concp] >= 'a' || conbuf[concp] <= 'z') ? conbuf[concp] - 32 : conbuf[concp];}
+                    concp++;
+                }
+                else {didloop = false;}
             }
         }
         brkproccmd:;
@@ -1249,7 +1251,7 @@ static inline void getCurPos() {
         fputs("\e[6n", stdout);
         fflush(stdout);
         uint64_t tmpus = usTime();
-        while (!kbhit()) {if (usTime() - tmpus > 50000) {goto resend;}}
+        while (!kbhit()) {if (usTime() - tmpus > GCP_TIMEOUT) {goto resend;}}
         while (kbhit()) {
             if (kbhit()) {
                 int ret = read(0, &buf[i], 1);
@@ -1451,7 +1453,7 @@ bool loadProg(char* filename) {
     while (j < fsize && !feof(prog)) {
         int tmpc = fgetc(prog);
         if (tmpc == '"') inStr = !inStr;
-        if (!sawCmd && tmpc == ' ') {sawCmd = true; inStr = false;}
+        if (!inStr && !sawCmd && tmpc == ' ') {sawCmd = true; inStr = false;}
         if (!inStr && (tmpc == '\'' || tmpc == '#')) comment = true;
         if (tmpc == '\n') {comment = false; inStr = false;}
         if (tmpc == '\r' || tmpc == '\t') tmpc = ' ';
@@ -1581,6 +1583,7 @@ static inline bool isValidVarChar(char c) {
         case ']':;
         case '_':;
         case '~':;
+        case '.':;
             return true;
             break;
         default:;
@@ -3165,9 +3168,9 @@ int loadExt(char* path) {
     }
     cb_extargs extargs = {
         VER, BVER, OSVER,
+        &cerr, &retval, &fileerror,
         &varmaxct, vardata,
-        &retval,
-        &filemaxct, filedata, &fileerror,
+        &filemaxct, filedata,
         &chkCmdPtr,
         &txtattrib,
         &curx, &cury,
@@ -3213,18 +3216,18 @@ bool unloadExt(int e) {
     if (e == -1) {
         for (int i = extmaxct - 1; i > -1; --i) {
             if (!extdata[i].inuse) continue;
+            if (extdata[i].deinit) extdata[i].deinit();
             extdata[i].inuse = false;
             nfree(extdata[i].name);
             dlclose(extdata[i].lib);
-            if (extdata[i].deinit) extdata[i].deinit();
         }
         extmaxct = 0;
     } else {
         if (e < -1 || e >= extmaxct || !extdata[e].inuse) {cerr = 16; return false;}
+        if (extdata[e].deinit) extdata[e].deinit();
         extdata[e].inuse = false;
         nfree(extdata[e].name);
         dlclose(extdata[e].lib);
-        if (extdata[e].deinit) extdata[e].deinit();
         for (int i = extmaxct - 1; i > -1; --i) {
             if (extdata[i].inuse) break;
             --extmaxct;

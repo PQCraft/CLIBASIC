@@ -105,8 +105,8 @@ if (chkCmd(1, "DO")) {
     dldcmd[dlstackp] = false;
     dlstack[dlstackp].cp = cmdpos;
     dlstack[dlstackp].pl = progLine;
-    dlstack[dlstackp].fnsp = fnstackp;
-    dlstack[dlstackp].itsp = itstackp;
+    //dlstack[dlstackp].fnsp = fnstackp;
+    //dlstack[dlstackp].itsp = itstackp;
     dlstack[dlstackp].brkinfo = brkinfo;
     brkinfo.block = 1;
     #ifdef _WIN32
@@ -133,8 +133,8 @@ if (chkCmd(2, "WHILE", "DOWHILE")) {
     if (testval == 1) {
         dlstack[dlstackp].pl = progLine;
         dlstack[dlstackp].cp = cmdpos;
-        dlstack[dlstackp].fnsp = fnstackp;
-        dlstack[dlstackp].itsp = itstackp;
+        //dlstack[dlstackp].fnsp = fnstackp;
+        //dlstack[dlstackp].itsp = itstackp;
         dlstack[dlstackp].brkinfo = brkinfo;
         brkinfo.block = 1;
         #ifdef _WIN32
@@ -169,8 +169,8 @@ if (chkCmd(1, "LOOP")) {
             concp = dlstack[dlstackp].cp;
         }
         progLine = dlstack[dlstackp].pl;
-        fnstackp = dlstack[dlstackp].fnsp;
-        itstackp = dlstack[dlstackp].itsp;
+        //fnstackp = dlstack[dlstackp].fnsp;
+        //itstackp = dlstack[dlstackp].itsp;
         brkinfo = dlstack[dlstackp].brkinfo;
         lockpl = true;
     }
@@ -208,8 +208,8 @@ if (chkCmd(1, "LOOPWHILE")) {
                 concp = dlstack[dlstackp].cp;
             }
             progLine = dlstack[dlstackp].pl;
-            fnstackp = dlstack[dlstackp].fnsp;
-            itstackp = dlstack[dlstackp].itsp;
+            //fnstackp = dlstack[dlstackp].fnsp;
+            //itstackp = dlstack[dlstackp].itsp;
             brkinfo = dlstack[dlstackp].brkinfo;
             lockpl = true;
         }
@@ -335,8 +335,8 @@ if (chkCmd(1, "FOR")) {
     cerr = 0;
     fnstack[fnstackp].cp = cmdpos;
     fnstack[fnstackp].pl = progLine;
-    fnstack[fnstackp].dlsp = dlstackp;
-    fnstack[fnstackp].itsp = itstackp;
+    //fnstack[fnstackp].dlsp = dlstackp;
+    //fnstack[fnstackp].itsp = itstackp;
     brkinfo.block = 2;
     #ifdef _WIN32
     updatechars();
@@ -365,13 +365,14 @@ if (chkCmd(1, "NEXT")) {
             concp = fnstack[fnstackp].cp;
         }
         progLine = fnstack[fnstackp].pl;
-        dlstackp = fnstack[fnstackp].dlsp;
-        itstackp = fnstack[fnstackp].itsp;
+        //dlstackp = fnstack[fnstackp].dlsp;
+        //itstackp = fnstack[fnstackp].itsp;
         lockpl = true;
         didloop = true;
     } else {
         fnstack[fnstackp].cp = -1;
         brkinfo.type = 0;
+        fndcmd[dlstackp] = false;
     }
     fnstackp--;
     brkinfo = fnstack[fnstackp].brkinfo;

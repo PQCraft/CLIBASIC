@@ -340,13 +340,18 @@ if (chkCmd(1, "LOCATE")) {
     cerr = 0;
     int tmp = 0;
     if (!solvearg(1)) goto cmderr;
-    getCurPos();
     if (argt[1] == 0) {}
     else if (argt[1] != 2) {cerr = 2; goto cmderr;}
     else {
         tmp = atoi(arg[1]);
         if (tmp < 1) {cerr = 16; goto cmderr;}
-        else {curx = tmp;}
+        else {
+            #ifndef _WIN_NO_VT
+            printf("\e[%dG", tmp);
+            #else
+            curx = tmp;
+            #endif
+        }
     }
     if (argct > 1) {
         if (!solvearg(2)) goto cmderr;
@@ -356,13 +361,20 @@ if (chkCmd(1, "LOCATE")) {
         else {
             tmp = atoi(arg[2]);
             if (tmp < 1) {cerr = 16; goto cmderr;}
-            else {cury = tmp;}
+            else {
+                #ifndef _WIN_NO_VT
+                --tmp;
+                fputs("\e[32767A", stdout);
+                if (tmp) printf("\e[%dB", tmp);
+                #else
+                cury = tmp;
+                #endif
+            }
         }
     }
     #ifdef _WIN_NO_VT
     SetConsoleCursorPosition(hConsole, (COORD){curx - 1, cury - 1});
     #else
-    printf("\e[%d;%dH", cury, curx);
     fflush(stdout);
     #endif
     goto noerr;
@@ -372,22 +384,26 @@ if (chkCmd(1, "RLOCATE")) {
     cerr = 0;
     int tmp = 0;
     if (!solvearg(1)) goto cmderr;
+    #ifndef _WIN_NO_VT
     getCurPos();
+    #endif
     if (argt[1] == 0) {}
     else if (argt[1] != 2) {cerr = 2; goto cmderr;}
     else {
         tmp = atoi(arg[1]);
         if (tmp == 0) {}
         else if (tmp < 0) {
-            curx += tmp;
-            if (curx < 0) curx = 0;
             #ifndef _WIN_NO_VT
             printf("\e[%dD", -tmp);
+            #else
+            curx += tmp;
+            if (curx < 0) curx = 0;
             #endif
         } else {
-            curx += tmp;
             #ifndef _WIN_NO_VT
             printf("\e[%dC", tmp);
+            #else
+            curx += tmp;
             #endif
         }
     }
@@ -400,23 +416,26 @@ if (chkCmd(1, "RLOCATE")) {
             tmp = atoi(arg[2]);
             if (tmp == 0) {}
             else if (tmp < 0) {
-                cury += tmp;
-                if (cury < 0) cury = 0;
                 #ifndef _WIN_NO_VT
                 printf("\e[%dA", -tmp);
+                #else
+                cury += tmp;
+                if (cury < 0) cury = 0;
                 #endif
             } else {
-                cury += tmp;
                 #ifndef _WIN_NO_VT
                 printf("\e[%dB", tmp);
+                #else
+                cury += tmp;
                 #endif
             }
         }
     }
     #ifdef _WIN_NO_VT
     SetConsoleCursorPosition(hConsole, (COORD){curx - 1, cury - 1});
-    #endif
+    #else
     fflush(stdout);
+    #endif
     goto noerr;
 }
 if (chkCmd(1, "CLS")) {

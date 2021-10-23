@@ -833,7 +833,7 @@ if (chkCmd(1, "WIDTH")) {
     if (fargct) {cerr = 3; goto fexit;}
     #ifdef __unix__
     struct winsize max;
-    ioctl(0, TIOCGWINSZ , &max);
+    ioctl(0, TIOCGWINSZ, &max);
     sprintf(outbuf, "%d", max.ws_col);
     #else
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -850,7 +850,7 @@ if (chkCmd(1, "HEIGHT")) {
     if (fargct) {cerr = 3; goto fexit;}
     #ifdef __unix__
     struct winsize max;
-    ioctl(0, TIOCGWINSZ , &max);
+    ioctl(0, TIOCGWINSZ, &max);
     sprintf(outbuf, "%d", max.ws_row);
     #else
     CONSOLE_SCREEN_BUFFER_INFO csbi;

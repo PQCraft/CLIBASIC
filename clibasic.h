@@ -99,12 +99,13 @@ typedef struct {
     char* VER;                                      // CLIBASIC version
     char* BVER;                                     // bits ("64"/"32"/"?")
     char* OSVER;                                    // os name ("Linux", "Windows", ...)
+    int* cerr;                                      // pointer to the variable storing the error number
+    int* retval;                                    // pointer to the variable read by the CLIBASIC function _RET()
+    int* fileerror;                                 // pointer to the variable read by the CLIBASIC function _FILEERROR()
     int* varmaxct;                                  // pointer to the amount of variable spots allocated
     cb_var* vardata;                                // pointer to the variable spots
-    int* retval;                                    // pointer to the variable read by the CLIBASIC function _RET()
     int* filemaxct;                                 // pointer to the amount of file spots allocated
     cb_file* filedata;                              // pointer to the file spots
-    int* fileerror;                                 // pointer to the variable read by the CLIBASIC function _FILEERROR()
     char** chkCmdPtr;                               // pointer to a pointer of the char array to be compared by chkCmd()
     cb_txt* txtattrib;                              // pointer to the struct that stores text attributes
     int* curx;                                      // pointer to the text cursor x position
@@ -133,7 +134,7 @@ typedef struct {
     uint8_t (*getVar)(char*, char*);                // puts the value of the variable specified by argument 1 in argument 2 and returns the type (1 = string, 2 = number)
     bool (*setVar)(char*, char*, uint8_t, int32_t); // sets the variable specified by argument 1 to the value specified by argument 2 and sets the type to argument 3 and size to argument 4
     bool (*delVar)(char*);                          // deletes a variable
-    uint8_t (*getVal)(char*, char*);                // gets the value of the raw input supplied by argument and returns the type (1 = string, 2 = number, 255 = blank) or 0 on failure
+    uint8_t (*getVal)(char*, char*);                // solves raw input in argument 1, writes the value into argument 2, and returns the type (1 = string, 2 = number, 255 = blank) or 0 on failure
     bool (*solvearg)(int);                          // solves an argument for commands as some commands may want to read from raw input
     uint8_t (*logictest)(char*);                    // takes raw input, tests it, and returns -1 on failure, 0 if false, and 1 if true
     void (*printError)(int);                        // prints a built-in error string
