@@ -7,7 +7,7 @@ for (int i = extmaxct - 1; i > -1; --i) {
         if (itdcmd[itstackp]) break;
     }
     if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
-        if (fndcmd[fnstackp]) break;
+        if (fndcmd[fnstackp] || !fninfor[fnstackp]) break;
     }
     if (extdata[i].inuse && extdata[i].runlogic) {
         extcerr = extdata[i].runlogic(cmd, (char**)ltmp, i, j);
@@ -26,7 +26,7 @@ if (chkCmd(2, "?", "PRINT") || cmd[i] == '?') {
         if (itdcmd[itstackp]) return true;
     }
     if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {
-        if (fndcmd[fnstackp]) return true;
+        if (fndcmd[fnstackp] || !fninfor[fnstackp]) return true;
     }
     if (cmd[i] == '?') {j = i + 1;}
     {
@@ -105,8 +105,6 @@ if (chkCmd(1, "DO")) {
     dldcmd[dlstackp] = false;
     dlstack[dlstackp].cp = cmdpos;
     dlstack[dlstackp].pl = progLine;
-    //dlstack[dlstackp].fnsp = fnstackp;
-    //dlstack[dlstackp].itsp = itstackp;
     dlstack[dlstackp].brkinfo = brkinfo;
     brkinfo.block = 1;
     #ifdef _WIN32
@@ -133,8 +131,6 @@ if (chkCmd(2, "WHILE", "DOWHILE")) {
     if (testval == 1) {
         dlstack[dlstackp].pl = progLine;
         dlstack[dlstackp].cp = cmdpos;
-        //dlstack[dlstackp].fnsp = fnstackp;
-        //dlstack[dlstackp].itsp = itstackp;
         dlstack[dlstackp].brkinfo = brkinfo;
         brkinfo.block = 1;
         #ifdef _WIN32
@@ -169,8 +165,6 @@ if (chkCmd(1, "LOOP")) {
             concp = dlstack[dlstackp].cp;
         }
         progLine = dlstack[dlstackp].pl;
-        //fnstackp = dlstack[dlstackp].fnsp;
-        //itstackp = dlstack[dlstackp].itsp;
         brkinfo = dlstack[dlstackp].brkinfo;
         lockpl = true;
     }
@@ -208,8 +202,6 @@ if (chkCmd(1, "LOOPWHILE")) {
                 concp = dlstack[dlstackp].cp;
             }
             progLine = dlstack[dlstackp].pl;
-            //fnstackp = dlstack[dlstackp].fnsp;
-            //itstackp = dlstack[dlstackp].itsp;
             brkinfo = dlstack[dlstackp].brkinfo;
             lockpl = true;
         }
@@ -309,17 +301,18 @@ if (chkCmd(1, "FOR")) {
     copyStrSnip(cmd, j + 1, strlen(cmd), ltmp[1]);
     if (getArgCt(ltmp[1]) != 4) {cerr = 3; return true;}
     cerr = 2;
-    if (getArg(0, ltmp[1], fnvar) == -1) return true;
+    int32_t tmpptr = 0;
+    if ((tmpptr = getArgO(0, ltmp[1], fnvar, 0)) == -1) return true;
     if (getVar(fnvar, forbuf[0]) != 2) return true;
-    if (getArg(1, ltmp[1], forbuf[1]) == -1) return true;
+    if ((tmpptr = getArgO(1, ltmp[1], forbuf[1], tmpptr)) == -1) return true;
     if (getVal(forbuf[1], forbuf[1]) != 2) return true;
-    if (getArg(3, ltmp[1], forbuf[3]) == -1) return true;
+    if ((tmpptr = getArgO(2, ltmp[1], forbuf[2], tmpptr)) == -1) return true;
+    if ((tmpptr = getArgO(3, ltmp[1], forbuf[3], tmpptr)) == -1) return true;
     if (getVal(forbuf[3], forbuf[3]) != 2) return true;
     setVar(fnvar, forbuf[1], 2, -1);
     if (fnstack[fnstackp].cp == -1) {
         copyStr(forbuf[1], forbuf[0]);
     }
-    if (getArg(2, ltmp[1], forbuf[2]) == -1) return true;
     if (fninfor[fnstackp]) {
         sprintf(forbuf[0], "%lf", atof(forbuf[0]) + atof(forbuf[3]));
         setVar(fnvar, forbuf[0], 2, -1);
@@ -335,8 +328,6 @@ if (chkCmd(1, "FOR")) {
     cerr = 0;
     fnstack[fnstackp].cp = cmdpos;
     fnstack[fnstackp].pl = progLine;
-    //fnstack[fnstackp].dlsp = dlstackp;
-    //fnstack[fnstackp].itsp = itstackp;
     brkinfo.block = 2;
     #ifdef _WIN32
     updatechars();
@@ -346,7 +337,7 @@ if (chkCmd(1, "FOR")) {
 if (chkCmd(1, "NEXT")) {
     if (fnstackp <= -1) {cerr = 9; return true;}
     if (brkinfo.block == 2) {
-        if (brkinfo.type >= 1) {fndcmd[dlstackp] = false;}
+        if (brkinfo.type > 0) {fndcmd[dlstackp] = false;}
         if (brkinfo.type == 2) {fninfor[fnstackp] = false;}
     }
     fnstackp--;
@@ -365,8 +356,6 @@ if (chkCmd(1, "NEXT")) {
             concp = fnstack[fnstackp].cp;
         }
         progLine = fnstack[fnstackp].pl;
-        //dlstackp = fnstack[fnstackp].dlsp;
-        //itstackp = fnstack[fnstackp].itsp;
         lockpl = true;
         didloop = true;
     } else {

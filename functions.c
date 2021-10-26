@@ -4,15 +4,14 @@ for (int i = extmaxct - 1; i > -1; --i) {
         if (skipfargsolve && extsas != i) {
             skipfargsolve = false;
             for (int j = 1; j <= fargct; ++j) {
-                fargt[j] = getVal(tmpfargs[j], gftmp[1]);
+                fargt[j] = getVal(farg[j], farg[j]);
                 if (fargt[j] == 0) goto fnoerrscan;
                 if (fargt[j] == 255) fargt[j] = 0;
-                flen[j] = strlen(gftmp[1]);
-                farg[j] = (char*)malloc(flen[j] + 1);
-                copyStr(gftmp[1], farg[j]);
+                flen[j] = strlen(farg[j]);
+                farg[j] = realloc(farg[j], flen[j] + 1);
             }
         }
-        extfr = extdata[i].runfunc(fargct, tmpfargs, farg, fargt, flen, outbuf);
+        extfr = extdata[i].runfunc(fargct, farg, fargt, flen, outbuf);
         if (extfr.cerr != 127) {
             cerr = extfr.cerr;
             ftype = extfr.ftype;
@@ -124,7 +123,7 @@ if (chkCmd(1, "SH")) {
     if (fargct != 1) {cerr = 3; goto fexit;} 
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     #ifndef _WIN_NO_VT
-    if (sh_clearAttrib) fputs("\e[0m", stdout);
+    if (esc && sh_clearAttrib) fputs("\e[0m", stdout);
     #else
     if (sh_clearAttrib) SetConsoleTextAttribute(hConsole, ocAttrib);
     #endif
@@ -155,9 +154,9 @@ if (chkCmd(2, "EXEC", "EXECA")) {
         execa = true;
         int v = -1;
         for (register int i = 0; i < varmaxct; ++i) {
-            if (vardata[i].inuse && !strcmp(tmpfargs[1], vardata[i].name)) {v = i; break;}
+            if (vardata[i].inuse && !strcmp(arg[1], vardata[i].name)) {v = i; break;}
         }
-        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpfargs[1]); goto fexit;}
+        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(farg[1]); goto fexit;}
         if (vardata[v].type != 1) {cerr = 2; goto fexit;}
         tmpfarg = farg;
         tmpfargct = fargct;
@@ -167,7 +166,7 @@ if (chkCmd(2, "EXEC", "EXECA")) {
         if (fargt[1] != 1) {cerr = 2; goto fexit;}
     }
     #ifndef _WIN_NO_VT
-    if (sh_clearAttrib) fputs("\e[0m", stdout);
+    if (esc && sh_clearAttrib) fputs("\e[0m", stdout);
     #else
     if (sh_clearAttrib) SetConsoleTextAttribute(hConsole, ocAttrib);
     #endif
@@ -271,9 +270,9 @@ if (chkCmd(2, "EXEC$", "EXECA$")) {
         execa = true;
         int v = -1;
         for (register int i = 0; i < varmaxct; ++i) {
-            if (vardata[i].inuse && !strcmp(tmpfargs[1], vardata[i].name)) {v = i; break;}
+            if (vardata[i].inuse && !strcmp(farg[1], vardata[i].name)) {v = i; break;}
         }
-        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpfargs[1]); goto fexit;}
+        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(farg[1]); goto fexit;}
         if (vardata[v].type != 1) {cerr = 2; goto fexit;}
         tmpfarg = farg;
         tmpfargct = fargct;
@@ -1483,6 +1482,25 @@ if (chkCmd(1, "_PROMPT$")) {
     if (fargct) {cerr = 3; goto fexit;}
     int tmpt = getVal(prompt, outbuf);
     if (tmpt != 1) strcpy(outbuf, "CLIBASIC> ");
+    goto fexit;
+}
+if (chkCmd(1, "_ISATTY")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2) {cerr = 2; goto fexit;}
+    int n = atoi(farg[1]);
+    if (n == 0) {
+        n = isatty(STDIN_FILENO);
+    } else if (n == 1) {
+        n = isatty(STDOUT_FILENO);
+    } else if (n == 2) {
+        n = isatty(STDERR_FILENO);
+    } else {
+        cerr = 16;
+        goto fexit;
+    }
+    sprintf(outbuf, "%d", n);
     goto fexit;
 }
 if (chkCmd(1, "_TXTLOCK")) {

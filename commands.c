@@ -1,7 +1,7 @@
 int extcerr = 255;
 for (int i = extmaxct - 1; i > -1; --i) {
     if (extdata[i].inuse && extdata[i].runcmd) {
-        extcerr = extdata[i].runcmd(argct, tmpargs, arg, argt, argl);
+        extcerr = extdata[i].runcmd(argct, arg, argt, argl);
         if (extcerr != 255) {
             cerr = extcerr;
             if (!extcerr) goto noerr;
@@ -41,8 +41,8 @@ if (chkCmd(2, "SET", "LET")) {
     if (argct != 2) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (!solvearg(2)) goto cmderr;
-    if (!tmpargs[1][0] || !argt[2]) {cerr = 1; goto cmderr;}
-    if (!setVar(tmpargs[1], arg[2], argt[2], -1)) goto cmderr;
+    if (!arg[1][0] || !argt[2]) {cerr = 1; goto cmderr;}
+    if (!setVar(arg[1], arg[2], argt[2], -1)) goto cmderr;
     goto noerr;
 }
 if (chkCmd(1, "DIM")) {
@@ -53,11 +53,20 @@ if (chkCmd(1, "DIM")) {
     if (argt[2] != 2) {cerr = 2; goto cmderr;}
     int32_t asize = atoi(arg[2]);
     if (asize < 0) {cerr = 16; goto cmderr;}
-    if (!tmpargs[1][0]) {cerr = 4; seterrstr(""); goto cmderr;}
-    if (!setVar(tmpargs[1],\
-    ((argct == 3) ? arg[3] : ((tmpargs[1][argl[1] - 1] == '$') ? "" : "0")),\
-    ((argct == 3) ? argt[3] : 2 - (tmpargs[1][argl[1] - 1] == '$')),\
-    asize)) goto cmderr;
+    if (!arg[1][0]) {cerr = 4; seterrstr(""); goto cmderr;}
+    char* val = NULL; uint8_t type = 0;
+    if (argct == 3) {
+        puts("THREE");
+        val = arg[3];
+        type = argt[3];
+    } else {
+        puts("TWO");
+        val = ((arg[1][argl[1] - 1] == '$') ? "" : "0");
+        type = 2 - (arg[1][argl[1] - 1] == '$');
+    }
+    puts("OK");
+    printf("arg[1]: {%s}\n", arg[1]);
+    if (!setVar(arg[1], val, type, asize)) goto cmderr;
     goto noerr;
 }
 if (chkCmd(1, "REDIM")) {
@@ -67,9 +76,9 @@ if (chkCmd(1, "REDIM")) {
     if (argt[2] != 2) {cerr = 2; goto cmderr;}
     int v = -1;
     for (register int i = 0; i < varmaxct; ++i) {
-        if (vardata[i].inuse && !strcmp(tmpargs[1], vardata[i].name)) {v = i; break;}
+        if (vardata[i].inuse && !strcmp(arg[1], vardata[i].name)) {v = i; break;}
     }
-    if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpargs[1]); goto cmderr;}
+    if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(arg[1]); goto cmderr;}
     int32_t s = atoi(arg[2]);
     if (s == vardata[v].size) {goto noerr;}
     int32_t os = vardata[v].size;
@@ -98,18 +107,18 @@ if (chkCmd(1, "REDIM")) {
 }
 if (chkCmd(1, "FILL")) {
     if (argct < 1 || argct > 2) {cerr = 3; goto cmderr;}
-    if (getType(tmpargs[1]) != 255) {cerr = 4; seterrstr(tmpargs[1]); goto cmderr;}
-    upCase(tmpargs[1]);
+    if (getType(arg[1]) != 255) {cerr = 4; seterrstr(arg[1]); goto cmderr;}
+    upCase(arg[1]);
     int v = -1;
     for (register int i = 0; i < varmaxct; ++i) {
-        if (vardata[i].inuse && !strcmp(tmpargs[1], vardata[i].name)) {v = i; break;}
+        if (vardata[i].inuse && !strcmp(arg[1], vardata[i].name)) {v = i; break;}
     }
-    if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpargs[1]); goto cmderr;}
+    if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(arg[1]); goto cmderr;}
     for (int i = 0; i <= vardata[v].size; ++i) {
         if (argct > 1) {
             uint8_t t = 0;
             char* tmpbuf = malloc(CB_BUF_SIZE);
-            if (!(t = getVal(tmpargs[2], tmpbuf))) {free(tmpbuf); goto cmderr;}
+            if (!(t = getVal(arg[2], tmpbuf))) {free(tmpbuf); goto cmderr;}
             if (t != vardata[v].type) {free(tmpbuf); cerr = 2; goto cmderr;}
             tmpbuf = realloc(tmpbuf, strlen(tmpbuf) + 1);
             swap(tmpbuf, vardata[v].data[i]);
@@ -125,14 +134,14 @@ if (chkCmd(1, "SWAP")) {
     cerr = 0;
     int v1 = -1;
     for (register int i = 0; i < varmaxct; ++i) {
-        if (vardata[i].inuse && !strcmp(tmpargs[1], vardata[i].name)) {v1 = i; break;}
+        if (vardata[i].inuse && !strcmp(arg[1], vardata[i].name)) {v1 = i; break;}
     }
-    if (v1 == -1 || vardata[v1].size == -1) {cerr = 23; seterrstr(tmpargs[1]); goto cmderr;}
+    if (v1 == -1 || vardata[v1].size == -1) {cerr = 23; seterrstr(arg[1]); goto cmderr;}
     int v2 = -1;
     for (register int i = 0; i < varmaxct; ++i) {
-        if (vardata[i].inuse && !strcmp(tmpargs[2], vardata[i].name)) {v2 = i; break;}
+        if (vardata[i].inuse && !strcmp(arg[2], vardata[i].name)) {v2 = i; break;}
     }
-    if (v2 == -1 || vardata[v2].size == -1) {cerr = 23; seterrstr(tmpargs[2]); goto cmderr;}
+    if (v2 == -1 || vardata[v2].size == -1) {cerr = 23; seterrstr(arg[2]); goto cmderr;}
     swap(vardata[v1].name, vardata[v2].name);
     goto noerr;
 }   
@@ -140,7 +149,7 @@ if (chkCmd(1, "DEL")) {
     cerr = 0;
     if (argct < 1) {cerr = 3; goto cmderr;}
     for (int i = 1; i <= argct; ++i) {
-        if (!delVar(tmpargs[i])) goto cmderr;
+        if (!delVar(arg[i])) goto cmderr;
     }
     goto noerr;
 }
@@ -158,11 +167,11 @@ if (chkCmd(1, "DEFRAG")) {
 if (chkCmd(3, "@", "LABEL", "LBL")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
     cerr = 0;
-    upCase(tmpargs[1]);
+    upCase(arg[1]);
     int i = -1;
     for (int j = 0; j < gotomaxct; ++j) {
         if (!gotodata[j].used) {i = j; break;}
-        else if (!strcmp(gotodata[j].name, tmpargs[1])) {
+        else if (!strcmp(gotodata[j].name, arg[1])) {
             if (gotodata[j].cp == cmdpos) {goto noerr;}
             cerr = 28; goto cmderr;
         }
@@ -172,8 +181,8 @@ if (chkCmd(3, "@", "LABEL", "LBL")) {
         ++gotomaxct;
         gotodata = realloc(gotodata, gotomaxct * sizeof(cb_goto));
     }
-    gotodata[i].name = malloc(strlen(tmpargs[1]) + 1);
-    copyStr(tmpargs[1], gotodata[i].name);
+    gotodata[i].name = malloc(strlen(arg[1]) + 1);
+    copyStr(arg[1], gotodata[i].name);
     gotodata[i].cp = cmdpos;
     gotodata[i].pl = progLine;
     gotodata[i].used = true;
@@ -188,11 +197,11 @@ if (chkCmd(3, "@", "LABEL", "LBL")) {
 if (chkCmd(3, "%", "GOTO", "GO")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
     cerr = 0;
-    upCase(tmpargs[1]);
+    upCase(arg[1]);
     int i = -1;
     for (int j = 0; j < gotomaxct; ++j) {
         if (gotodata[j].used) {
-            if (!strcmp(gotodata[j].name, tmpargs[1])) {i = j;}
+            if (!strcmp(gotodata[j].name, arg[1])) {i = j;}
         }
     }
     if (i == -1) {cerr = 29; goto cmderr;}
@@ -203,9 +212,6 @@ if (chkCmd(3, "%", "GOTO", "GO")) {
         concp = gotodata[i].cp;
     }
     progLine = gotodata[i].pl;
-    //dlstackp = gotodata[i].dlsp;
-    //fnstackp = gotodata[i].fnsp;
-    //itstackp = gotodata[i].itsp;
     gotodata[i].used = false;
     bool r = false;
     while (gotomaxct > 0 && !gotodata[gotomaxct - 1].used) {--gotomaxct; r = true;}
@@ -218,11 +224,11 @@ if (chkCmd(1, "GOSUB")) {
     if (argct != 1) {cerr = 3; goto cmderr;}
     cerr = 0;
     if (gsstackp >= CB_PROG_LOGIC_MAX - 1) {cerr = 32; goto cmderr;}
-    upCase(tmpargs[1]);
+    upCase(arg[1]);
     int i = -1;
     for (int j = 0; j < gotomaxct; ++j) {
         if (gotodata[j].used) {
-            if (!strcmp(gotodata[j].name, tmpargs[1])) {i = j;}
+            if (!strcmp(gotodata[j].name, arg[1])) {i = j;}
         }
     }
     if (i == -1) {cerr = 29; goto cmderr;}
@@ -240,9 +246,6 @@ if (chkCmd(1, "GOSUB")) {
         concp = gotodata[i].cp;
     }
     progLine = gotodata[i].pl;
-    //dlstackp = gotodata[i].dlsp;
-    //fnstackp = gotodata[i].fnsp;
-    //itstackp = gotodata[i].itsp;
     gotodata[i].used = false;
     bool r = false;
     while (gotomaxct > 0 && !gotodata[gotomaxct - 1].used) {--gotomaxct; r = true;}
@@ -301,7 +304,7 @@ if (chkCmd(1, "COLOR")) {
             txtattrib.fgc = (uint8_t)tmp;
         }
         #ifndef _WIN_NO_VT
-        if (txtattrib.fgce) {
+        if (esc && txtattrib.fgce) {
             if (txtattrib.truecolor) printf("\e[38;2;%u;%u;%um", (uint8_t)(txtattrib.truefgc >> 16), (uint8_t)(txtattrib.truefgc >> 8), (uint8_t)txtattrib.truefgc);
             else printf("\e[38;5;%um", txtattrib.fgc);
         }
@@ -323,7 +326,7 @@ if (chkCmd(1, "COLOR")) {
                 txtattrib.bgc = (uint8_t)tmp;
             }
             #ifndef _WIN_NO_VT
-            if (txtattrib.bgce) {
+            if (esc && txtattrib.bgce) {
                 if (txtattrib.truecolor) printf("\e[48;2;%u;%u;%um", (uint8_t)(txtattrib.truebgc >> 16), (uint8_t)(txtattrib.truebgc >> 8), (uint8_t)txtattrib.truebgc);
                 else printf("\e[48;5;%um", txtattrib.bgc);
             }
@@ -347,7 +350,7 @@ if (chkCmd(1, "LOCATE")) {
         if (tmp < 1) {cerr = 16; goto cmderr;}
         else {
             #ifndef _WIN_NO_VT
-            printf("\e[%dG", tmp);
+            if (esc) printf("\e[%dG", tmp);
             #else
             curx = tmp;
             #endif
@@ -363,9 +366,11 @@ if (chkCmd(1, "LOCATE")) {
             if (tmp < 1) {cerr = 16; goto cmderr;}
             else {
                 #ifndef _WIN_NO_VT
-                --tmp;
-                fputs("\e[32767A", stdout);
-                if (tmp) printf("\e[%dB", tmp);
+                if (esc) {
+                    --tmp;
+                    fputs("\e[32767A", stdout);
+                    if (tmp) printf("\e[%dB", tmp);
+                }
                 #else
                 cury = tmp;
                 #endif
@@ -394,14 +399,14 @@ if (chkCmd(1, "RLOCATE")) {
         if (tmp == 0) {}
         else if (tmp < 0) {
             #ifndef _WIN_NO_VT
-            printf("\e[%dD", -tmp);
+            if (esc) printf("\e[%dD", -tmp);
             #else
             curx += tmp;
             if (curx < 0) curx = 0;
             #endif
         } else {
             #ifndef _WIN_NO_VT
-            printf("\e[%dC", tmp);
+            if (esc) printf("\e[%dC", tmp);
             #else
             curx += tmp;
             #endif
@@ -417,14 +422,14 @@ if (chkCmd(1, "RLOCATE")) {
             if (tmp == 0) {}
             else if (tmp < 0) {
                 #ifndef _WIN_NO_VT
-                printf("\e[%dA", -tmp);
+                if (esc) printf("\e[%dA", -tmp);
                 #else
                 cury += tmp;
                 if (cury < 0) cury = 0;
                 #endif
             } else {
                 #ifndef _WIN_NO_VT
-                printf("\e[%dB", tmp);
+                if (esc) printf("\e[%dB", tmp);
                 #else
                 cury += tmp;
                 #endif
@@ -459,11 +464,11 @@ if (chkCmd(1, "CLS")) {
         #endif
     }
     #ifndef _WIN_NO_VT
-    if (argct) {
+    if (esc && argct) {
         if (txtattrib.truecolor) printf("\e[48;2;%u;%u;%um", (uint8_t)(ttbgc >> 16), (uint8_t)(ttbgc >> 8), (uint8_t)ttbgc);
         else printf("\e[48;5;%um", tbgc);
     }
-    fputs("\e[H\e[2J\e[3J", stdout);
+    if (esc) fputs("\e[H\e[2J\e[3J", stdout);
     updateTxtAttrib();
     fflush(stdout);
     #else
@@ -533,9 +538,9 @@ if (chkCmd(2, "CALL", "CALLA")) {
         execa = true;
         int v = -1;
         for (register int i = 0; i < varmaxct; ++i) {
-            if (vardata[i].inuse && !strcmp(tmpargs[1], vardata[i].name)) {v = i; break;}
+            if (vardata[i].inuse && !strcmp(arg[1], vardata[i].name)) {v = i; break;}
         }
-        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpargs[1]); goto cmderr;}
+        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(arg[1]); goto cmderr;}
         if (vardata[v].type != 1) {cerr = 2; goto cmderr;}
         tmparg = arg;
         tmpargct = argct;
@@ -583,9 +588,9 @@ if (chkCmd(2, "RUN", "RUNA")) {
         execa = true;
         int v = -1;
         for (register int i = 0; i < varmaxct; ++i) {
-            if (vardata[i].inuse && !strcmp(tmpargs[1], vardata[i].name)) {v = i; break;}
+            if (vardata[i].inuse && !strcmp(arg[1], vardata[i].name)) {v = i; break;}
         }
-        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpargs[1]); goto cmderr;}
+        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(arg[1]); goto cmderr;}
         if (vardata[v].type != 1) {cerr = 2; goto cmderr;}
         tmparg = arg;
         tmpargct = argct;
@@ -598,7 +603,7 @@ if (chkCmd(2, "RUN", "RUNA")) {
     #ifndef _WIN32
     char** runargs = (char**)malloc((argct + 3) * sizeof(char*));
     runargs[0] = startcmd;
-    runargs[1] = "-x";
+    runargs[1] = roptstr;
     runargs[2] = arg[1];
     argct += 2;
     int argno = 3;
@@ -652,7 +657,7 @@ if (chkCmd(2, "$", "SH")) {
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     #ifndef _WIN_NO_VT
-    if (sh_clearAttrib) fputs("\e[0m", stdout);
+    if (esc && sh_clearAttrib) fputs("\e[0m", stdout);
     #else
     if (sh_clearAttrib) SetConsoleTextAttribute(hConsole, ocAttrib);
     #endif
@@ -685,9 +690,9 @@ if (chkCmd(2, "EXEC", "EXECA")) {
         execa = true;
         int v = -1;
         for (register int i = 0; i < varmaxct; ++i) {
-            if (vardata[i].inuse && !strcmp(tmpargs[1], vardata[i].name)) {v = i; break;}
+            if (vardata[i].inuse && !strcmp(arg[1], vardata[i].name)) {v = i; break;}
         }
-        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(tmpargs[1]); goto cmderr;}
+        if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(arg[1]); goto cmderr;}
         if (vardata[v].type != 1) {cerr = 2; goto cmderr;}
         tmparg = arg;
         tmpargct = argct;
@@ -698,7 +703,7 @@ if (chkCmd(2, "EXEC", "EXECA")) {
         if (argt[1] != 1) {cerr = 2; goto cmderr;}
     }
     #ifndef _WIN_NO_VT
-    if (sh_clearAttrib) fputs("\e[0m", stdout);
+    if (esc && sh_clearAttrib) fputs("\e[0m", stdout);
     #else
     if (sh_clearAttrib) SetConsoleTextAttribute(hConsole, ocAttrib);
     #endif
@@ -1014,12 +1019,14 @@ if (chkCmd(1, "_RESETTITLE")) {
     if (argct) {cerr = 3; goto cmderr;}
     cerr = 0;
     #ifndef _WIN_NO_VT
-    if (!changedtitle) {
-        if (changedtitlecmd) fputs("\e[23;0t", stdout);
-        goto noerr;
+    if (esc) {
+        if (!changedtitle) {
+            if (changedtitlecmd) fputs("\e[23;0t", stdout);
+            goto noerr;
+        }
+        printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
+        fflush(stdout);
     }
-    printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
-    fflush(stdout);
     #else
     char* tmpstr = malloc(CB_BUF_SIZE);
     sprintf(tmpstr, "CLIBASIC %s (%s-bit)", VER, BVER);
@@ -1034,13 +1041,15 @@ if (chkCmd(1, "_TITLE")) {
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
     #ifndef _WIN_NO_VT
-    if (!changedtitle) {
-        fputs("\e[22;0t", stdout);
-        fflush(stdout);
-        changedtitle = true;
+    if (esc) {
+        if (!changedtitle) {
+            fputs("\e[22;0t", stdout);
+            fflush(stdout);
+            changedtitle = true;
+        }
+        changedtitlecmd = true;
+        printf("\e]2;%s%c", arg[1], 7);
     }
-    changedtitlecmd = true;
-    printf("\e]2;%s%c", arg[1], 7);
     #else
     SetConsoleTitleA(arg[1]);
     #endif
@@ -1075,9 +1084,9 @@ if (chkCmd(1, "_PROMPT")) {
     if (inProg && !autorun) {cerr = 254; goto cmderr;}
     if (argct != 1) {cerr = 3; goto cmderr;}
     cerr = 0;
+    copyStr(arg[1], prompt);
     if (!solvearg(1)) goto cmderr;
     if (argt[1] != 1) {cerr = 2; goto cmderr;}
-    copyStr(tmpargs[1], prompt);
     goto noerr;
 }
 if (chkCmd(1, "_PROMPTTAB")) {

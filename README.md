@@ -1,9 +1,15 @@
 <!----> <br>
-[![image](https://github.com/PQCraft/clibasic-docs/raw/master/clibasic-banner.png)](#?)
 ### <p align="center"><ins>C</ins>ommand <ins>L</ins>ine <ins>I</ins>nterface <ins>B</ins>eginners <ins>A</ins>ll-purpose <ins>S</ins>ymbolic <ins>I</ins>nstruction <ins>C</ins>ode<br></p>
 <p align="center">CLIBASIC is a version of BASIC designed to run in the command line or terminal</p>
 
 <!----> <br>
+---
+### Links <br>
+Examples: https://github.com/PQCraft/clibasic-examples <br>
+Documentation: https://github.com/PQCraft/clibasic-docs <br>
+Extensions: https://github.com/PQCraft/clibasic-extensions <br>
+Windows Readline: https://github.com/PQCraft/clibasic-winrllib <br>
+
 ---
 ### Required Packages/Programs <br>
 #### Linux <br>
@@ -73,7 +79,6 @@ To build CLIBASIC with support for VT escape codes, add `vt` before the rest of 
 ---
 ### Notes <br>
 - On Arch Linux, you can install CLIBASIC by installing either the [`clibasic`](https://aur.archlinux.org/packages/clibasic/) or [`clibasic-bin`](https://aur.archlinux.org/packages/clibasic-bin/) AUR package.
-- On unix-like OSs, if CLIBASIC is not run in a terminal it will attempt to open in XTerm unless GUI_CHECK is undefined.
 - Due to Windows not having proper fork() and exec\*() functions, EXEC, EXEC(), and EXEC$() are passed through system() under Windows and one issue out of the many with this is a space parsing issue where running `EXEC "test prog"` will attempt to execute `EXEC "test", "prog"` if `test prog` cannot be found in the current directory or %PATH%.
 - On Windows, pressing CTRL+C will not display a new prompt line due to the Windows version of readline catching and ignoring the CTRL+C.
 - Most terminals cannot handle input while processing a cursor position request and INKEY$() will not reflect keys that were pressed during that time. The effect is more noticeable on terminals that are slow to respond such as Alacritty, Gnome Terminal, and Termux. A terminal that is fast to respond such as Konsole is recommended.

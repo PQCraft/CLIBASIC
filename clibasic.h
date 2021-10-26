@@ -11,19 +11,20 @@
 //     Initialize pointers to internal CLIBASIC functions, set up the extension for use, and
 //     return true if successful, otherwise, return false
 // 
+// 
 // Optional:
 // 
-//   int cbext_runcmd(int, char**, char**, uint8_t*, int32_t*)
-//     Run a command utilizing the arguments (argument count, raw arguments, solved arguments (a
-//     call to solvearg([n]) is needed), argument types, argument lengths) and return 255 if no
+//   int cbext_runcmd(int, char**, uint8_t*, int32_t*)
+//     Run a command utilizing the arguments (argument count, arguments (a call to solvearg([n])
+//     is needed to solve an argument), argument types, argument lengths) and return 255 if no
 //     match is found, an error code if an error is encountered, or 0 if execution succeeds
 // 
-//   cb_funcret cbext_runfunc(int, char**, char**, uint8_t*, int32_t*, char*);
-//     Run a function utilizing the arguments (argument count, raw arguments (will be pre-solved
-//     if cbext_chkfuncsolve does not exist or returns false when passed the function name)
-//     , solved arguments, argument types, argument lengths, output buffer) and return {255, 0}
-//     if no match is found, {error code, *} if an error is encountered, or {0, function type}
-//     if execution succeeds
+//   cb_funcret cbext_runfunc(int, char**, uint8_t*, int32_t*, char*);
+//     Run a function utilizing the arguments (argument count, arguments (will be pre-solved if
+//     cbext_chkfuncsolve does not exist or returns false when passed the function name),
+//     argument types, argument lengths, output buffer) and return {255, 0} if no match is
+//     found, {error code, *} if an error is encountered, or {0, function type} if execution
+//     succeeds
 // 
 //   int cbext_runlogic(char*, char**, int32_t, int32_t)
 //     Run a logic command utilizing the arguments (raw input, split raw input ([0]) and empty
@@ -36,20 +37,24 @@
 //     Return true if a function requires raw arguments, false otherwise
 // 
 //   void cbext_clearGlobals()
-//     Reset internal variables before displaying the prompt
+//     Reset internal variables usually before displaying the prompt
+// 
+//   void cbext_promptReady()
+//     Prepare internal variables before displaying the prompt (guaranteed to only run before the
+//     prompt is displayed)
 // 
 //   bool cbext_deinit()
 //     Clean up extension before exiting
+// 
 // 
 // Notes:
 //   - It is a good idea to make all commands and functions adhere to '[Extension].[Cmd/Func]'
 //     (unless overriding internal CLIBASIC commands or functions) to avoid naming conflicts.
 //     This can be done with defining a macro as a string and passing 'MACRO".CMD/FUNC"' to
 //     chkCmd as so:
-//       #define EXTNAME "TEST"
-//       char cbext_name[] = EXTNAME;
+//       #define P "TEST." // 'P' for 'Prefix'
 //       ...
-//       chkCmd(1, EXTNAME".TEST")...
+//       if (chkCmd(1, P"TEST")) {...
 
 #include <stdbool.h>
 #include <inttypes.h>
@@ -122,13 +127,16 @@ typedef struct {
     uint64_t (*timer)(void);                        // returns the timer ticks in nanoseconds
     void (*resetTimer)(void);                       // resets the timer
     void (*cb_wait)(uint64_t);                      // waits for a certain amount of nanoseconds
+    void (*updateTxtAttrib)(void);                  // reads the text attribute struct and applies the changes
     double (*randNum)(double, double);              // returns a random double from within a range
     bool (*chkCmd)(int, ...);                       // compares chkCmdPtr to strings supplied after the string count and returns true if a match is found, false otherwise
     bool (*isSpChar)(char);                         // checks if a char is a special character ('+', '-', '*', '\', & '^')
     bool (*isExSpChar)(char);                       // checks if a char is a special character but with more chars ('=', '>', '<', & ',')
     bool (*isValidVarChar)(char);                   // checks if a char is valid in a variable name
     bool (*isValidHexChar)(char);                   // checks if a char is valid in a hexadecimal number (0-F)
-    void (*updateTxtAttrib)(void);                  // reads the text attribute struct and applies the changes
+    int (*getArgCt)(char*);                         // returns the argument count of raw input
+    int (*getArg)(int, char*, char*);               // writes the argument number in argument 1 of raw input from argument 2 into argument 3 and returns the length
+    int (*getArgO)(int, char*, char*, int32_t);     // writes the argument number in argument 1 of raw input from argument 2 into argument 3 and returns the end, pass this to argument 4 on next call
     void (*getStr)(char*, char*);                   // returns a string after evaluating any backslash escape codes
     uint8_t (*getType)(char*);                      // gets the type of raw input ("\"test\"" returns 1 (string), "0" returns 2 (number), and "TEST" returns 255 (variable))
     uint8_t (*getVar)(char*, char*);                // puts the value of the variable specified by argument 1 in argument 2 and returns the type (1 = string, 2 = number)

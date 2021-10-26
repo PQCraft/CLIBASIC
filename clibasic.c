@@ -2,7 +2,7 @@
 
 #ifndef CB_BUF_SIZE // Avoids redefinition error if '-DCB_BUF_SIZE=<number>' is used
     /* Sets the size of text buffers */
-    #define CB_BUF_SIZE 262144 // Change the value to change the size of text buffers
+    #define CB_BUF_SIZE 32768 // Change the value to change the size of text buffers
 #endif
 
 #ifndef CB_PROG_LOGIC_MAX // Avoids redefinition error if '-DCB_PROG_LOGIC_MAX=<number>' is used
@@ -26,9 +26,6 @@
 
 /* Changes the terminal title to display the CLIBASIC version and bits */
 #define CHANGE_TITLE // Comment out this line to disable changing the terminal/console title
-
-/* Opens in XTerm if CLIBASIC is not started in a terminal */
-#define GUI_CHECK // Comment out this line if you do not have a tty command or your tty command is missing the -s option
 
 #ifdef _WIN32 // Avoids defining _WIN_NO_VT on a non-Windows operating system
     /* Disables ANSI/VT escape codes */
@@ -121,7 +118,7 @@
 
 // Base defines
 
-char VER[] = "0.27.1";
+char VER[] = "0.28";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -180,11 +177,11 @@ char gpbuf[CB_BUF_SIZE];
 
 char* cmd = NULL;
 int cmdl = 0;
-char** tmpargs = NULL;
+//char** tmpargs = NULL;
 char** arg = NULL;
 uint8_t* argt = NULL;
 int32_t* argl = NULL;
-int argct = 0;
+int argct = -1;
 
 int cmdpos = 0;
 
@@ -202,9 +199,6 @@ cb_brkinfo* oldbrkinfo = NULL;
 typedef struct {
     int pl;
     int32_t cp;
-    int dlsp;
-    int fnsp;
-    int itsp;
     cb_brkinfo brkinfo;
 } cb_jump;
 
@@ -227,7 +221,16 @@ int* minfnstackp = NULL;
 char fnvar[CB_BUF_SIZE];
 char forbuf[4][CB_BUF_SIZE];
 
-cb_jump gsstack[CB_PROG_LOGIC_MAX];
+typedef struct {
+    int pl;
+    int32_t cp;
+    int dlsp;
+    int fnsp;
+    int itsp;
+    cb_brkinfo brkinfo;
+} cb_gosub;
+
+cb_gosub gsstack[CB_PROG_LOGIC_MAX];
 int gsstackp = -1;
 
 char* errstr = NULL;
@@ -236,13 +239,6 @@ char conbuf[CB_BUF_SIZE];
 char prompt[CB_BUF_SIZE];
 char pstr[CB_BUF_SIZE];
 char cmpstr[CB_BUF_SIZE];
-
-/*
-uint8_t txtattrib.fgc = 15;
-uint8_t txtattrib.bgc = 0;
-uint32_t txtattrib.truefgc = 0xFFFFFF;
-uint32_t txtattrib.truebgc = 0x000000;
-*/
 
 int curx = 0;
 int cury = 0;
@@ -259,6 +255,8 @@ bool autorun = false;
 
 bool redirection = false;
 bool checknl = false;
+bool esc = true;
+bool cpos = true;
 
 bool sh_silent = false;
 bool sh_clearAttrib = true;
@@ -328,11 +326,12 @@ typedef struct {
     bool inuse;
     char* name;
     void* lib;
-    int (*runcmd)(int, char**, char**, uint8_t*, int32_t*);
-    cb_funcret (*runfunc)(int, char**, char**, uint8_t*, int32_t*, char*);
+    int (*runcmd)(int, char**, uint8_t*, int32_t*);
+    cb_funcret (*runfunc)(int, char**, uint8_t*, int32_t*, char*);
     int (*runlogic)(char*, char**, int32_t, int32_t);
     bool (*chkfuncsolve)(char*);
     void (*clearGlobals)(void);
+    void (*promptReady)(void);
     bool (*deinit)(void);
 } cb_ext;
 
@@ -416,13 +415,21 @@ static inline void clearGlobals() {
         memset(&gsstack[i], 0, sizeof(cb_jump));
     }
     for (int i = 0; i < gotomaxct; ++i) {
-        nfree(gotodata[i].name);
+        if (gotodata[i].used) nfree(gotodata[i].name);
     }
     nfree(gotodata);
     gotomaxct = 0;
     for (int i = extmaxct - 1; i > -1; --i) {
-        if (extdata[i].inuse && extdata[i].chkfuncsolve) {
+        if (extdata[i].inuse && extdata[i].clearGlobals) {
             extdata[i].clearGlobals();
+        }
+    }
+}
+
+static inline void promptReady() {
+    for (int i = extmaxct - 1; i > -1; --i) {
+        if (extdata[i].inuse && extdata[i].promptReady) {
+            extdata[i].promptReady();
         }
     }
 }
@@ -589,10 +596,10 @@ void cleanExit() {
     rl_clear_history();
     clear_history();
     #if defined(CHANGE_TITLE) && !defined(_WIN_NO_VT)
-    if (changedtitle) fputs("\e[23;0t", stdout);
+    if (esc && changedtitle) fputs("\e[23;0t", stdout);
     #endif
     #ifndef _WIN_NO_VT
-    if (!keep) fputs("\e[0m", stdout);
+    if (esc && !keep) fputs("\e[0m", stdout);
     #else
     if (!keep) SetConsoleTextAttribute(hConsole, ocAttrib);
     #endif
@@ -616,9 +623,13 @@ void cleanExit() {
             nfree(vardata[i].name);
         }
     }
+    for (int i = 0; i < gotomaxct; ++i) {
+        if (gotodata[i].used) {
+            nfree(gotodata[i].name);
+        }
+    }
     for (int i = 0; i < argct; ++i) {
-        nfree(tmpargs[i]);
-        if (i > 0) nfree(arg[i]);
+        nfree(arg[i]);
     }
     nfree(startcmd);
     nfree(rl_tmpptr);
@@ -626,7 +637,6 @@ void cleanExit() {
     nfree(arg);
     nfree(argt);
     nfree(argl);
-    nfree(tmpargs);
     nfree(errstr);
     nfree(vardata);
     if (progindex > -1) {
@@ -638,9 +648,6 @@ void cleanExit() {
     nfree(progcp);
     nfree(progcmdl);
     nfree(proglinebuf);
-    /*
-    nfree(olddidelse);
-    nfree(olddidelseif);
     nfree(minfnstackp);
     nfree(mindlstackp);
     nfree(minitstackp);
@@ -648,7 +655,6 @@ void cleanExit() {
     nfree(proggotomaxct);
     nfree(oldprogargc);
     nfree(oldprogargs);
-    */
     clearGlobals();
     unloadExt(-1);
     #ifndef _WIN32
@@ -677,7 +683,7 @@ uint8_t getVal(char*, char*);
 static inline void resetTimer();
 bool loadProg(char*);
 void unloadProg();
-void updateTxtAttrib();
+static inline void updateTxtAttrib();
 static inline int isFile();
 static inline uint64_t usTime();
 
@@ -740,31 +746,21 @@ static inline void readyTerm() {
     tcsetattr(0, TCSANOW, &kbhterm2);
     sigemptyset(&intmask);
     sigaddset(&intmask, SIGINT);
+    #else
+    #ifndef _WIN_NO_VT
+    enablevt();
+    #endif
     #endif
 }
+
+uint8_t roptptr = 1;
+char roptstr[16] = "-";
 
 #define RARG() {fprintf(stderr, "Short option '%c' requires argument(s) and must be last.\n", argv[i][shortopti]);}
 #define IACT() {fputs("Incorrect number of arguments passed.\n", stderr);}
 #define IOCT() {fputs("Incorrect number of options passed.\n", stderr);}
 
 int main(int argc, char** argv) {
-    #if defined(GUI_CHECK) && defined(__unix__)
-    if (!isatty(STDERR_FILENO) && !isatty(STDIN_FILENO) && !isatty(STDOUT_FILENO)) {
-        char* command = malloc(CB_BUF_SIZE);
-        copyStr("xterm -T CLIBASIC -b 0 -bg black -bcn 200 -bcf 200 -e $'clear;", command);
-        for (int i = 0; i < argc; ++i) {
-            copyStrApnd(" $\\'", command);
-            gpbuf[0] = 0;
-            copyStrApndNoEsc(argv[i], gpbuf);
-            copyStrApndNoEsc(gpbuf, command);
-            copyStrApnd("\\'", command);
-        }
-        strApndChar(command, '\'');
-        int ret = system(command);
-        nfree(command);
-        exit(ret);
-    }
-    #endif
     bool pexit = false;
     bool skip = false;
     bool info = false;
@@ -813,6 +809,8 @@ int main(int argc, char** argv) {
                 puts("    -i, --info                  Displays an info string when starting in shell mode.");
                 puts("    -r, --redirection           Allows for redirection (this may cause issues).");
                 puts("    -n, --newline               Ensures the cursor is placed on a new line when exiting.");
+                puts("    -e, --no-escapes            Disables escape codes.");
+                puts("    -p, --no-curpos             Stops CLIBASIC from getting the cursor position.");
                 pexit = true;
             } else if (!strcmp(argv[i], "--exec") || (shortopt && argv[i][shortopti] == 'x')) {
                 if (shortopt && argv[i][shortopti + 1]) {RARG(); exit(1);}
@@ -834,22 +832,37 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--keep") || (shortopt && argv[i][shortopti] == 'k')) {
                 if (keep) {IOCT(); exit(1);}
                 keep = true;
+                roptstr[roptptr++] = 'k';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--skip") || (shortopt && argv[i][shortopti] == 's')) {
                 if (skip) {IOCT(); exit(1);}
                 skip = true;
+                roptstr[roptptr++] = 's';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--info") || (shortopt && argv[i][shortopti] == 'i')) {
                 if (info) {IOCT(); exit(1);}
                 info = true;
+                roptstr[roptptr++] = 'i';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--redirection") || (shortopt && argv[i][shortopti] == 'r')) {
                 if (redirection) {IOCT(); exit(1);}
                 redirection = true;
+                roptstr[roptptr++] = 'r';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--newline") || (shortopt && argv[i][shortopti] == 'n')) {
                 if (checknl) {IOCT(); exit(1);}
                 checknl = true;
+                roptstr[roptptr++] = 'n';
+                if (shortopt) goto chkshortopt;
+            } else if (!strcmp(argv[i], "--no-escapes") || (shortopt && argv[i][shortopti] == 'e')) {
+                if (!esc) {IOCT(); exit(1);}
+                esc = false;
+                roptstr[roptptr++] = 'e';
+                if (shortopt) goto chkshortopt;
+            } else if (!strcmp(argv[i], "--no-curpos") || (shortopt && argv[i][shortopti] == 'p')) {
+                if (!cpos) {IOCT(); exit(1);}
+                cpos = false;
+                roptstr[roptptr++] = 'p';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--command") || (shortopt && argv[i][shortopti] == 'c')) {
                 if (shortopt && argv[i][shortopti + 1]) {RARG(); exit(1);}
@@ -901,6 +914,7 @@ int main(int argc, char** argv) {
         }
     }
     if (pexit) exit(0);
+    roptstr[roptptr++] = 'x';
     readyTerm();
     rl_readline_name = "CLIBASIC";
     rl_tmpptr = calloc(1, 1);
@@ -996,9 +1010,9 @@ int main(int argc, char** argv) {
         strcpy(prompt, "\"CLIBASIC> \"");
         #ifdef CHANGE_TITLE
         #ifndef _WIN32
-        fputs("\e[22;0t", stdout);
+        if (esc) fputs("\e[22;0t", stdout);
         changedtitle = true;
-        printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
+        if (esc) printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
         fflush(stdout);
         #else
         char* tmpstr = (char*)malloc(CB_BUF_SIZE);
@@ -1055,6 +1069,7 @@ int main(int argc, char** argv) {
         if (!inProg && !runc) {
             if (runfile) cleanExit();
             clearGlobals();
+            promptReady();
             char* tmpstr = NULL;
             int tmpt = getVal(prompt, pstr);
             if (tmpt != 1) strcpy(pstr, "CLIBASIC> ");
@@ -1170,12 +1185,7 @@ int main(int argc, char** argv) {
                     if (chkinProg) goto fchkint;
                 } else
                 {cmdl++;}
-                if (!didloop) {
-                    if (comment) {conbuf[concp] = 0;}
-                    //else if (!inStr) {conbuf[concp] = (conbuf[concp] >= 'a' || conbuf[concp] <= 'z') ? conbuf[concp] - 32 : conbuf[concp];}
-                    concp++;
-                }
-                else {didloop = false;}
+                if (!didloop) {if (comment) {conbuf[concp] = 0;} concp++;} else {didloop = false;}
             }
         }
         brkproccmd:;
@@ -1230,6 +1240,7 @@ static inline void getCurPos() {
     fflush(stdout);
     cury = 0; curx = 0;
     #ifndef _WIN32
+    if (!cpos || !esc) {curx = 1; cury = 0; return;}
     if (gcp_sig) sigprocmask(SIG_SETMASK, &intmask, &oldmask);
     static char buf[16];
     for (int i = 0; i < 16; ++i) {buf[i] = 0;}
@@ -1297,6 +1308,9 @@ void unloadProg() {
     nfree(progfn[progindex]);
     progfn = (char**)realloc(progfn, progindex * sizeof(char*));
     progbuf = (char**)realloc(progbuf, progindex * sizeof(char*));
+    for (int i = 0; i < gotomaxct; ++i) {
+        if (gotodata[i].used) nfree(gotodata[i].name);
+    }
     nfree(gotodata);
     gotodata = proggotodata[progindex];
     gotomaxct = proggotomaxct[progindex];
@@ -1332,48 +1346,20 @@ bool loadProg(char* filename) {
     enablevt();
     #endif
     retval = 0;
-    fputs("Loading...", stdout);
-    fflush(stdout);
     seterrstr(filename);
     cerr = 27;
     FILE* prog = fopen(filename, "r");
     if (!prog) {
-        #ifndef _WIN_NO_VT
-        fputs("\e[2K", stdout);
-        #else
-        CONSOLE_SCREEN_BUFFER_INFO csbi;
-        int ret = GetConsoleScreenBufferInfo(hConsole, &csbi);
-        getCurPos();
-        DWORD ret2;
-        ret = FillConsoleOutputCharacter(hConsole, ' ', csbi.dwSize.X, (COORD){0, cury - 1}, &ret2);
-        (void)ret;
-        (void)ret2;
-        #endif
-        putchar('\r');
         if (errno == ENOENT) cerr = 15;
         return false;
     }
     if (!isFile(filename)) {
         fclose(prog);
         cerr = 18;
-        #ifndef _WIN_NO_VT
-        fputs("\e[2K", stdout);
-        #else
-        CONSOLE_SCREEN_BUFFER_INFO csbi;
-        int ret = GetConsoleScreenBufferInfo(hConsole, &csbi);
-        getCurPos();
-        DWORD ret2;
-        ret = FillConsoleOutputCharacter(hConsole, ' ', csbi.dwSize.X, (COORD){0, cury - 1}, &ret2);
-        (void)ret;
-        (void)ret2;
-        #endif
-        putchar('\r');
         return false;
     }
     ++progindex;
     fseek(prog, 0, SEEK_END);
-    fputs("\b\b\b   \b\b", stdout);
-    fflush(stdout);
     progfn = (char**)realloc(progfn, (progindex + 1) * sizeof(char*));
     #ifdef _WIN32
     progfn[progindex] = _fullpath(NULL, filename, CB_BUF_SIZE);
@@ -1419,36 +1405,12 @@ bool loadProg(char* filename) {
         progargs = newprogargs;
         newprogargs = NULL;
     }
-    #ifdef _WIN_NO_VT
-    getCurPos();
-    int tmpx = curx, tmpy = cury;
-    #else
-    fputs("\e[s", stdout);
-    fflush(stdout);
-    #endif
     int32_t fsize = (uint32_t)ftell(prog);
-    uint64_t time2 = usTime();
     fseek(prog, 0, SEEK_SET);
-    #ifndef _WIN_NO_VT
-    fputs("\e[u\e[s", stdout);
-    fflush(stdout);
-    #else
-    SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
-    #endif
-    printf("(%llu bytes)...", (long long unsigned)fsize);
-    fflush(stdout);
     progbuf[progindex] = (char*)malloc(fsize + 1);
     int32_t j = 0;
     bool comment = false;
     bool inStr = false;
-    #ifndef _WIN_NO_VT
-    fputs("\e[u\e[s", stdout);
-    fflush(stdout);
-    #else
-    SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
-    #endif
-    printf("(0/%llu bytes)...", (long long unsigned)fsize);
-    fflush(stdout);
     bool sawCmd = false;
     while (j < fsize && !feof(prog)) {
         int tmpc = fgetc(prog);
@@ -1459,39 +1421,7 @@ bool loadProg(char* filename) {
         if (tmpc == '\r' || tmpc == '\t') tmpc = ' ';
         if (tmpc < 0) tmpc = 0;
         if (!comment) {progbuf[progindex][j] = (char)((inStr) ? tmpc : ((tmpc >= 'a' && tmpc <= 'z') ? tmpc -= 32 : tmpc)); j++;}
-        if (usTime() - time2 >= 250000) {
-            time2 = usTime();
-            #ifndef _WIN_NO_VT
-            fputs("\e[u\e[s", stdout);
-            fflush(stdout);
-            #else
-            SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
-            #endif
-            printf("(%lld/%lld bytes)...", (long long unsigned)ftell(prog), (long long unsigned)fsize);
-            fflush(stdout);
-        }
     }
-    #ifndef _WIN_NO_VT
-    fputs("\e[u\e[s", stdout);
-    fflush(stdout);
-    #else
-    SetConsoleCursorPosition(hConsole, (COORD){tmpx - 1, tmpy - 1});
-    #endif
-    printf("(%lld/%lld bytes)...", (long long unsigned)ftell(prog), (long long unsigned)fsize);
-    #ifndef _WIN_NO_VT
-    fputs("\e[2K", stdout);
-    fflush(stdout);
-    #else
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    int ret = GetConsoleScreenBufferInfo(hConsole, &csbi);
-    getCurPos();
-    DWORD ret2;
-    ret = FillConsoleOutputCharacter(hConsole, ' ', csbi.dwSize.X, (COORD){0, cury - 1}, &ret2);
-    (void)ret;
-    (void)ret2;
-    #endif
-    putchar('\r');
-    fflush(stdout);
     progbuf[progindex][j] = 0;
     fclose(prog);
     return true;
@@ -1619,6 +1549,13 @@ static inline void copyStrApnd(char* str1, char* str2) {
 }
 #endif
 
+static inline void copyStrApndQ(char* str1, char* str2) {
+    while (*str2) {++str2;}
+    *str2++ = '"';
+    for (; *str1; ++str1, ++str2) {*str2 = *str1;}
+    *str2++ = '"';
+    *str2 = 0;
+}
 static inline void copyStrApndNoEsc(char* str1, char* str2) {
     while (*str2) {++str2;}
     for (; *str1; ++str1, ++str2) {
@@ -1667,12 +1604,13 @@ static inline void lowCase(char* str) {
 
 static inline void seterrstr(char* newstr) {
     size_t nslen = strlen(newstr);
-    if (!errstr || strlen(errstr) != nslen) errstr = (char*)realloc(errstr, nslen + 1);
+    errstr = (char*)realloc(errstr, nslen + 1);
     copyStr(newstr, errstr);
 }
 
-void updateTxtAttrib() {
+static inline void updateTxtAttrib() {
     #ifndef _WIN_NO_VT
+    if (!esc) return;
     fputs("\e[0m", stdout);
     if (txtattrib.fgce) {
         if (txtattrib.truecolor) printf("\e[38;2;%u;%u;%um", (uint8_t)(txtattrib.truefgc >> 16), (uint8_t)(txtattrib.truefgc >> 8), (uint8_t)txtattrib.truefgc);
@@ -1825,13 +1763,13 @@ bool cbrm(char* path) {
 }
 
 static inline int getArg(int, char*, char*);
+static inline int getArgO(int, char*, char*, int32_t);
 static inline int getArgCt(char*);
 
 uint16_t getFuncIndex = 0;
 char* getFunc_gftmp[2] = {NULL, NULL};
 
 uint8_t getFunc(char* inbuf, char* outbuf) {
-    char** tmpfargs;
     char** farg;
     uint8_t* fargt;
     int32_t* flen;
@@ -1857,24 +1795,23 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
         int32_t j = strlen(inbuf) - 1;
         copyStrSnip(inbuf, i + 1, j, gftmp[0]);
         fargct = getArgCt(gftmp[0]);
-        tmpfargs = malloc((fargct + 1) * sizeof(char*));
         farg = malloc((fargct + 1) * sizeof(char*));
         flen = malloc((fargct + 1) * sizeof(int32_t));
         fargt = malloc((fargct + 1) * sizeof(uint8_t));
         for (int j = 0; j <= fargct; ++j) {
             farg[j] = NULL;
         }
+        int32_t gptr = 0;
         for (int j = 0; j <= fargct; ++j) {
             if (j == 0) {
                 flen[0] = i;
                 farg[0] = (char*)malloc(flen[0] + 1);
                 copyStrTo(inbuf, i, farg[0]);
-                tmpfargs[0] = farg[0];
                 if (!strcmp(farg[0], "~") || !strcmp(farg[0], "_TEST")) {
                     ftype = 2;
                     if (fargct != 1) {cerr = 3; goto fexit;}
                     cerr = 0;
-                    if (getArg(0, gftmp[0], gftmp[1]) == -1) {outbuf[0] = 0; goto fexit;}
+                    if (getArgO(0, gftmp[0], gftmp[1], 0) == -1) {outbuf[0] = 0; goto fexit;}
                     int ret = logictest(gftmp[1]);
                     if (ret == -1) {outbuf[0] = 0; goto fexit;}
                     outbuf[0] = '0' + ret;
@@ -1890,19 +1827,20 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
                     }
                 }
             } else {
-                tmpfargs[j] = malloc(CB_BUF_SIZE);
-                int32_t tmpsize;
-                if ((tmpsize = getArg(j - 1, gftmp[0], tmpfargs[j])) == -1) {outbuf[0] = 0; goto fexit;}
-                tmpfargs[j] = realloc(tmpfargs[j], tmpsize + 1);
+                farg[j] = malloc(CB_BUF_SIZE);
+                int32_t ngptr = getArgO(j - 1, gftmp[0], farg[j], gptr);
+                if (ngptr == -1) {outbuf[0] = 0; goto fexit;}
+                int32_t tmpsize = ngptr - gptr;
+                gptr = ngptr;
                 if (skipfargsolve) {
                     flen[j] = tmpsize;
+                    farg[j] = realloc(farg[j], tmpsize + 1);
                 } else {
-                    fargt[j] = getVal(tmpfargs[j], gftmp[1]);
+                    fargt[j] = getVal(farg[j], farg[j]);
                     if (fargt[j] == 0) goto fnoerrscan;
                     if (fargt[j] == 255) fargt[j] = 0;
-                    flen[j] = strlen(gftmp[1]);
-                    farg[j] = (char*)malloc(flen[j] + 1);
-                    copyStr(gftmp[1], farg[j]);
+                    flen[j] = strlen(farg[j]);
+                    farg[j] = realloc(farg[j], flen[j] + 1);
                 }
                 ftmpct++;
             }
@@ -1915,19 +1853,10 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     fexit:;
     if (cerr > 124 && cerr < 128) seterrstr(farg[0]);
     fnoerrscan:;
-    nfree(farg[0]);
-    if (skipfargsolve) {
-        for (int j = 1; j <= ftmpct; ++j) {
-            nfree(tmpfargs[j]);
-        }
-    } else {
-        for (int j = 1; j <= ftmpct; ++j) {
-            nfree(farg[j]);
-            nfree(tmpfargs[j]);
-        }
+    for (int j = 0; j <= ftmpct; ++j) {
+        nfree(farg[j]);
     }
     nfree(farg);
-    nfree(tmpfargs);
     nfree(flen);
     nfree(fargt);
     --getFuncIndex;
@@ -1942,7 +1871,6 @@ uint16_t getVarIndex = 0;
 char* getVarBuf = NULL;
 
 uint8_t getVar(char* vn, char* varout) {
-    //printf("getVar: {%s}\n", vn);
     char* lgetVarBuf = (getVarIndex) ? malloc(CB_BUF_SIZE) : getVarBuf;
     ++getVarIndex;
     uint8_t ret = 0;
@@ -2266,7 +2194,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     bool* seenStr = NULL;
     if ((isSpChar(inbuf[0]) && inbuf[0] != '-') || isSpChar(inbuf[strlen(inbuf) - 1])) {cerr = 1; dt = 0; goto gvreturn;}
     int pct = 0, bct = 0;
-    tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = '"'; tmp[3][1] = 0;
+    tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
     seenStr = malloc(sizeof(bool));
     seenStr[0] = false;
     for (register int32_t i = 0; inbuf[i]; ++i) {
@@ -2300,7 +2228,6 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             case ')':;
                 if (inStr) break;
                 pct--;
-                seenStr = (bool*)realloc(seenStr, (pct + 1) * sizeof(bool));
                 if (pct == 0 && (ip == 0 || isSpChar(inbuf[ip - 1]))) {
                     int32_t tmplen[2];
                     tmplen[0] = strlen(inbuf);
@@ -2311,11 +2238,10 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                     if (dt == 0) dt = t;
                     if (t == 255) {t = 1; dt = 1;}
                     if (t != dt) {cerr = 2; dt = 0; goto gvreturn;}
-                    copyStrSnip(inbuf, jp + 1, strlen(inbuf), tmp[1]);
+                    copyStrFrom(inbuf, jp + 1, tmp[1]);
                     inbuf[ip] = 0;
-                    if (t == 1) copyStrApnd(tmp[3], inbuf);
-                    copyStrApnd(tmp[0], inbuf);
-                    if (t == 1) copyStrApnd(tmp[3], inbuf);
+                    if (t == 1) copyStrApndQ(tmp[0], inbuf);
+                    else copyStrApnd(tmp[0], inbuf);
                     copyStrApnd(tmp[1], inbuf);
                     tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
                     tmplen[1] = strlen(inbuf);
@@ -2347,7 +2273,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                     case '[': bct++; break;
                     case ']': bct--; break;
                     default:;
-                        if (isSpChar(inbuf[jp]) && !pct && !bct) goto gvwhileexit1;
+                        if (inbuf[jp] != '-' && isSpChar(inbuf[jp]) && !pct && !bct) goto gvwhileexit1;
                         break;
                 }
             }
@@ -2362,13 +2288,9 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             t = getVar(tmp[0], tmp[0]);
             if (t == 0) {dt = 0; dt = 0; goto gvreturn;}
             if (t == 1) {
-                copyStr(tmp[0], tmp[3]);
-                tmp[0][0] = '"';
-                int32_t i = 1;
-                for (char* ptr = tmp[3]; *ptr; ++ptr) {
-                    tmp[0][i++] = *ptr;
-                }
-                tmp[0][i++] = '"'; tmp[0][i] = 0;
+                tmp[3][0] = 0;
+                copyStrApndQ(tmp[0], tmp[3]);
+                swap(tmp[0], tmp[3]);
             }
         }
         if (t && dt == 0) {dt = t;} else
@@ -2377,7 +2299,8 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         if ((dt == 1 && inbuf[jp] != '+') && inbuf[jp]) {cerr = 1; dt = 0; goto gvreturn;}
         if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[2]); copyStrApnd(tmp[2], tmp[1]);} else
         if (t == 2) {
-            copyStrSnip(inbuf, jp, strlen(inbuf), tmp[1]);
+            if (inbuf[jp - 1]) copyStrFrom(inbuf, jp, tmp[1]);
+            else tmp[1][0] = 0;
             copyStrApnd(tmp[1], tmp[0]);
             register int32_t p1, p2, p3;
             bool inStr = false;
@@ -2532,7 +2455,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                 if (!tmp[1][i] || tmp[1][i] == '.') {--i;}
                 if (dp) tmp[1][--i] = '-';
                 copyStrSnip(tmp[1], i, j + 1, tmp[2]);
-                copyStrSnip(tmp[0], p3, strlen(tmp[0]), tmp[3]);
+                copyStrFrom(tmp[0], p3, tmp[3]);
                 if (p1) copyStrTo(tmp[0], p1, tmp[1]);
                 else {tmp[1][0] = 0;}
                 copyStrApnd(tmp[2], tmp[1]);
@@ -2555,6 +2478,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         while (tmp[1][i] == '0') {++i;}
         if (!tmp[1][i] || tmp[1][i] == '.') {--i;}
         if (dp) tmp[1][--i] = '-';
+        if (i < 0) i = 0;
         copyStrSnip(tmp[1], i, j + 1, outbuf);
         if (outbuf[0] == '-' && outbuf[1] == '0' && outbuf[2] == 0) {outbuf[0] = '0'; outbuf[1] = 0;}
     } else {
@@ -2568,23 +2492,18 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     return dt;
 }
 
-char satmpbuf[CB_BUF_SIZE];
-
 static inline bool solvearg(int i) {
     if (i == 0) {
         argt[0] = 0;
-        arg[0] = tmpargs[0];
         argl[0] = strlen(arg[0]);
         return true;
     }
     argt[i] = 0;
-    satmpbuf[0] = 0;
-    argt[i] = getVal(tmpargs[i], satmpbuf);
-    arg[i] = (char*)realloc(arg[i], strlen(satmpbuf) + 1);
-    copyStr(satmpbuf, arg[i]);
-    argl[i] = strlen(arg[i]);
+    arg[i] = realloc(arg[i], CB_BUF_SIZE);
+    argt[i] = getVal(arg[i], arg[i]);
     if (argt[i] == 0) return false;
     if (argt[i] == 255) {argt[i] = 0;}
+    argl[i] = strlen(arg[i]);
     return true;
 }
 
@@ -2644,9 +2563,44 @@ static inline int getArg(int num, char* inbuf, char* outbuf) {
     return len;
 }
 
+static inline int getArgO(int num, char* inbuf, char* outbuf, int32_t i) {
+    bool inStr = false;
+    bool lookingForSpChar = false;
+    bool sawSpChar = false;
+    int pct = 0, bct = 0;
+    int ct = num;
+    int32_t len = 0;
+    for (; inbuf[i] && ct <= num; ++i) {
+        if (!inStr) {
+            switch (inbuf[i]) {
+                case '(': ++pct; break;
+                case ')': --pct; break;
+                case '[': ++bct; break;
+                case ']': --bct; break;
+            }
+        }
+        if (inbuf[i] == '"') inStr = !inStr;
+        if (!inStr && pct == 0 && bct == 0 && inbuf[i] == ',') {++ct;}
+        else if (ct == num) {
+            if (!inStr) {
+                if (inbuf[i] == ' ' && !sawSpChar && len > 0) {lookingForSpChar = true;}
+                if (isExSpChar(inbuf[i])) {lookingForSpChar = false; sawSpChar = true;}
+            }
+            if (inStr || inbuf[i] != ' ') {
+                if (!isExSpChar(inbuf[i])) sawSpChar = false;
+                if (lookingForSpChar) {outbuf[0] = 0; cerr = 1; return -1;}
+                outbuf[len] = inbuf[i];
+                ++len;
+            }
+        }
+    }
+    outbuf[len] = 0;
+    return i;
+}
+
 char tmpbuf[2][CB_BUF_SIZE];
 
-void mkargs() {
+static inline void mkargs() {
     int32_t j = 0;
     while (cmd[j] == ' ') {++j;}
     int32_t h = j;
@@ -2659,7 +2613,7 @@ void mkargs() {
     if (!sccmd) {
         while (cmd[h] != ' ' && cmd[h] != '=' && cmd[h]) {++h;}
     }
-    copyStrSnip(cmd, h + 1, strlen(cmd), tmpbuf[0]);
+    copyStrFrom(cmd, (cmd[h]) ? h + 1 : h, tmpbuf[0]);
     if (!sccmd) {
         int32_t tmph = h;
         while (cmd[tmph] == ' ' && cmd[tmph]) {++tmph;}
@@ -2675,30 +2629,29 @@ void mkargs() {
             j = 0;
         }
     }
+    for (int i = 0; i <= argct; ++i) {
+        nfree(arg[i]);
+    }
     argct = getArgCt(tmpbuf[0]);
-    tmpargs = (char**)realloc(tmpargs, (argct + 1) * sizeof(char*));
+    arg = (char**)realloc(arg, (argct + 1) * sizeof(char*));
+    argt = (uint8_t*)realloc(argt, (argct + 1) * sizeof(uint8_t));
     argl = (int32_t*)realloc(argl, (argct + 1) * sizeof(int32_t));
-    for (int i = 0; i <= argct; ++i) {
-        tmpargs[i] = NULL;
+    int32_t gptr = 0;
+    copyStrSnip(cmd, j, ((sccmd) ? h + 1 : h), tmpbuf[0]);
+    argl[0] = strlen(tmpbuf[0]);
+    arg[0] = malloc(argl[0] + 1);
+    copyStr(tmpbuf[0], arg[0]);
+    copyStrFrom(cmd, (h >= argl[0]) ? argl[0] : h + 1, tmpbuf[0]);
+    for (int i = 1; i <= argct; ++i) {
+        int32_t ngptr = getArgO(i - 1, tmpbuf[0], tmpbuf[1], gptr);
+        if (ngptr == -1) return;
+        argl[i] = ngptr - gptr;
+        gptr = ngptr;
+        arg[i] = malloc(argl[i] + 1);
+        copyStr(tmpbuf[1], arg[i]);
+        arg[i][argl[i]] = 0;
     }
-    for (int i = 0; i <= argct; ++i) {
-        argl[i] = 0;
-        if (i == 0) {
-            copyStrSnip(cmd, j, ((sccmd) ? h + 1 : h), tmpbuf[0]);
-            argl[0] = strlen(tmpbuf[0]);
-            nfree(tmpargs[0]);
-            tmpargs[0] = malloc(argl[0] + 1);
-            copyStr(tmpbuf[0], tmpargs[0]);
-            copyStrSnip(cmd, h + 1, strlen(cmd), tmpbuf[0]);
-        } else {
-            if ((argl[i] = getArg(i - 1, tmpbuf[0], tmpbuf[1])) == -1) {cerr = 1; return;}
-            tmpargs[i] = malloc(argl[i] + 1);
-            copyStr(tmpbuf[1], tmpargs[i]);
-        }
-        tmpargs[i][argl[i]] = 0;
-    }
-    if (argct == 1 && tmpargs[1][0] == 0) {argct = 0;}
-    for (int i = 0; i <= argct; ++i) {tmpargs[i][argl[i]] = 0;}
+    if (argct == 1 && arg[1][0] == 0) {argct = 0;}
 }
 
 char* lttmp_tmp[3];
@@ -2726,7 +2679,7 @@ static inline uint8_t logictestexpr(char* inbuf) {
     }
     ++logictestexpr_index;
     while (inbuf[p] == ' ') {++p;}
-    if (p >= (int32_t)strlen(inbuf)) {cerr = 10; goto ltreturn;}
+    if (!inbuf[p]) {cerr = 10; goto ltreturn;}
     bool ltskip = false;
     for (int32_t i = p; inbuf[i]; ++i) {
         if (!inStr) {
@@ -3180,10 +3133,11 @@ int loadExt(char* path) {
         basefilename, pathfilename,
         openFile, closeFile, cbrm,
         usTime, timer, resetTimer, cb_wait,
+        updateTxtAttrib,
         randNum,
         chkCmd,
         isSpChar, isExSpChar, isValidVarChar, isValidHexChar,
-        updateTxtAttrib,
+        getArgCt, getArg, getArgO,
         getStr, getType,
         getVar, setVar, delVar,
         getVal,
@@ -3205,6 +3159,7 @@ int loadExt(char* path) {
     extdata[e].runlogic = (void*)dlsym(lib, "cbext_runlogic");
     extdata[e].chkfuncsolve = (void*)dlsym(lib, "cbext_chkfuncsolve");
     extdata[e].clearGlobals = (void*)dlsym(lib, "cbext_clearGlobals");
+    extdata[e].promptReady = (void*)dlsym(lib, "cbext_promptReady");
     extdata[e].deinit = (void*)dlsym(lib, "cbext_deinit");
     return e;
     loadfail:;
@@ -3221,6 +3176,7 @@ bool unloadExt(int e) {
             nfree(extdata[i].name);
             dlclose(extdata[i].lib);
         }
+        free(extdata);
         extmaxct = 0;
     } else {
         if (e < -1 || e >= extmaxct || !extdata[e].inuse) {cerr = 16; return false;}
@@ -3255,13 +3211,8 @@ void runcmd() {
         if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {if (fndcmd[fnstackp]) return;}
     }
     if (tmpi > -1) cmd[tmpi] = ' ';
-    bool madeargs = false;
     mkargs();
     if (cerr) goto cmderr;
-    madeargs = true;
-    argt = (uint8_t*)realloc(argt, argct + 1);
-    arg = (char**)realloc(arg, (argct + 1) * sizeof(char*));
-    for (int i = 1; i <= argct; ++i) {arg[i] = NULL;}
     solvearg(0);
     cerr = 255;
     chkCmdPtr = arg[0];
@@ -3278,12 +3229,7 @@ void runcmd() {
     noerr:;
     if (lgc) return;
     for (int i = 0; i <= argct; ++i) {
-        nfree(tmpargs[i]);
-    }
-    if (madeargs) {
-        for (int i = 1; i <= argct; ++i) {
-            nfree(arg[i]);
-        }
+        nfree(arg[i]);
     }
     argct = 0;
     return;
