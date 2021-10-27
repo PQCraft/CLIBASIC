@@ -118,7 +118,7 @@
 
 // Base defines
 
-char VER[] = "0.28";
+char VER[] = "0.28.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -257,6 +257,7 @@ bool redirection = false;
 bool checknl = false;
 bool esc = true;
 bool cpos = true;
+bool skip = false;
 
 bool sh_silent = false;
 bool sh_clearAttrib = true;
@@ -751,6 +752,27 @@ static inline void readyTerm() {
     enablevt();
     #endif
     #endif
+    if (!gethome()) {
+        #ifndef _WIN32
+        fputs("Could not find home folder! Please set the 'HOME' environment variable.\n", stderr);
+        #else
+        fputs("Could not find home folder!\n", stderr);
+        #endif
+    } else if (!skip) {
+        char* tmpcwd = getcwd(NULL, 0);
+        int ret = chdir(homepath);
+        bool tmp_inProg = inProg;
+        inProg = true;
+        autorun = true;
+        argslater = false;
+        if (!loadProg(".clibasicrc"))
+            if (!loadProg("autorun.bas"))
+                if (!loadProg(".autorun.bas"))
+                    {autorun = false; inProg = tmp_inProg;}
+        ret = chdir(tmpcwd);
+        nfree(tmpcwd);
+        (void)ret;
+    }
 }
 
 uint8_t roptptr = 1;
@@ -762,7 +784,6 @@ char roptstr[16] = "-";
 
 int main(int argc, char** argv) {
     bool pexit = false;
-    bool skip = false;
     bool info = false;
     #ifndef _WIN32
     tcgetattr(0, &initterm);
@@ -818,7 +839,6 @@ int main(int argc, char** argv) {
                 if (runfile) {unloadProg(); IOCT(); exit(1);}
                 ++i;
                 if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
-                readyTerm();
                 argslater = true;
                 if (!loadProg(argv[i])) {printError(cerr); exit(1);}
                 inProg = true;
@@ -867,28 +887,12 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--command") || (shortopt && argv[i][shortopti] == 'c')) {
                 if (shortopt && argv[i][shortopti + 1]) {RARG(); exit(1);}
                 if (runfile) {fputs("Cannot run file and command.\n", stderr); exit(1);}
-                readyTerm();
                 if (runc) {IOCT(); exit(1);}
                 i++;
                 if (!argv[i]) {fputs( "No command provided.\n", stderr); exit(1);}
                 runc = true;
                 runfile = true;
                 copyStr(argv[i], conbuf);
-                bool inStr = false;
-                bool sawCmd = false;
-                for (int32_t i = 0; conbuf[i]; ++i) {
-                    switch (conbuf[i]) {
-                        case 'a' ... 'z':;
-                            if (!inStr) conbuf[i] = conbuf[i] - 32;
-                            break;
-                        case '"':;
-                            inStr = !inStr;
-                            break;
-                        case ' ':;
-                            if (!sawCmd) {sawCmd = true; inStr = false;}
-                            break;
-                    }
-                }
             } else {
                 if (shortopt) {
                     fprintf(stderr, "Invalid short option '%c'.\n", argv[i][shortopti]); exit(1);
@@ -900,7 +904,6 @@ int main(int argc, char** argv) {
             if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
             if (runfile) {unloadProg(); IOCT(); exit(1);}
             if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
-            readyTerm();
             argslater = true;
             if (!loadProg(argv[i])) {printError(cerr); exit(1);}
             inProg = true;
@@ -999,8 +1002,6 @@ int main(int argc, char** argv) {
         startcmd = argv[0];
     }
     skipscargv:;
-    getCurPos();
-    if (curx != 1) putchar('\n');
     txtattrib.fgce = true;
     txtattrib.fgc = 15;
     txtattrib.truefgc = 0xFFFFFF;
@@ -1027,34 +1028,19 @@ int main(int argc, char** argv) {
     arg = NULL;
     srand(usTime());
     if (!runfile) {
-        if (!gethome()) {
-            #ifndef _WIN32
-            fputs("Could not find home folder! Please set the 'HOME' environment variable.\n", stderr);
-            #else
-            fputs("Could not find home folder!\n", stderr);
-            #endif
-        } else if (!skip) {
-            char* tmpcwd = getcwd(NULL, 0);
-            int ret = chdir(homepath);
-            FILE* tmpfile = fopen(HIST_FILE, "r");
-            if ((autohist = (tmpfile != NULL))) {
-                fclose(tmpfile);
-                read_history(HIST_FILE);
-                history_set_pos(history_length);
-                HIST_ENTRY* tmphist = history_get(where_history());
-                if (tmphist) copyStr(tmphist->line, cmpstr);
-            }
-            inProg = true;
-            autorun = true;
-            argslater = true;
-            if (!loadProg(".clibasicrc"))
-                if (!loadProg("autorun.bas"))
-                    if (!loadProg(".autorun.bas"))
-                        {autorun = false; inProg = false; argslater = false;}
-            ret = chdir(tmpcwd);
-            nfree(tmpcwd);
-            (void)ret;
+        char* tmpcwd = getcwd(NULL, 0);
+        int ret = chdir(homepath);
+        FILE* tmpfile = fopen(HIST_FILE, "r");
+        if ((autohist = (tmpfile != NULL))) {
+            fclose(tmpfile);
+            read_history(HIST_FILE);
+            history_set_pos(history_length);
+            HIST_ENTRY* tmphist = history_get(where_history());
+            if (tmphist) copyStr(tmphist->line, cmpstr);
         }
+        ret = chdir(tmpcwd);
+        free(tmpcwd);
+        (void)ret;
     }
     cerr = 0;
     initBaseMem();
@@ -1807,23 +1793,24 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
                 flen[0] = i;
                 farg[0] = (char*)malloc(flen[0] + 1);
                 copyStrTo(inbuf, i, farg[0]);
-                if (!strcmp(farg[0], "~") || !strcmp(farg[0], "_TEST")) {
-                    ftype = 2;
-                    if (fargct != 1) {cerr = 3; goto fexit;}
-                    cerr = 0;
-                    if (getArgO(0, gftmp[0], gftmp[1], 0) == -1) {outbuf[0] = 0; goto fexit;}
-                    int ret = logictest(gftmp[1]);
-                    if (ret == -1) {outbuf[0] = 0; goto fexit;}
-                    outbuf[0] = '0' + ret;
-                    outbuf[1] = 0;
-                    goto fexit;
-                } else if (!strcmp(farg[0], "EXECA") || !strcmp(farg[0], "EXECA$")) {
-                    skipfargsolve = true;
-                } else {
-                    for (int i = extmaxct - 1; i > -1; --i) {
-                        if (extdata[i].inuse && extdata[i].chkfuncsolve) {
-                            if ((skipfargsolve = extdata[i].chkfuncsolve(farg[0]))) {extsas = i; break;}
-                        }
+                for (int i = extmaxct - 1; i > -1; --i) {
+                    if (extdata[i].inuse && extdata[i].chkfuncsolve) {
+                        if ((skipfargsolve = extdata[i].chkfuncsolve(farg[0]))) {extsas = i; break;}
+                    }
+                }
+                if (extsas == -1) {
+                    if (!strcmp(farg[0], "~") || !strcmp(farg[0], "_TEST")) {
+                        ftype = 2;
+                        if (fargct != 1) {cerr = 3; goto fexit;}
+                        cerr = 0;
+                        if (getArgO(0, gftmp[0], gftmp[1], 0) == -1) {outbuf[0] = 0; goto fexit;}
+                        int ret = logictest(gftmp[1]);
+                        if (ret == -1) {outbuf[0] = 0; goto fexit;}
+                        outbuf[0] = '0' + ret;
+                        outbuf[1] = 0;
+                        goto fexit;
+                    } else if (!strcmp(farg[0], "EXECA") || !strcmp(farg[0], "EXECA$")) {
+                        skipfargsolve = true;
                     }
                 }
             } else {
@@ -2273,7 +2260,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
                     case '[': bct++; break;
                     case ']': bct--; break;
                     default:;
-                        if (inbuf[jp] != '-' && isSpChar(inbuf[jp]) && !pct && !bct) goto gvwhileexit1;
+                        if ((inbuf[jp] != '-' || jp > 0) && isSpChar(inbuf[jp]) && !pct && !bct) goto gvwhileexit1;
                         break;
                 }
             }

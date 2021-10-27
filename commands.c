@@ -212,6 +212,9 @@ if (chkCmd(3, "%", "GOTO", "GO")) {
         concp = gotodata[i].cp;
     }
     progLine = gotodata[i].pl;
+    dlstackp = gotodata[i].dlsp;
+    fnstackp = gotodata[i].fnsp;
+    itstackp = gotodata[i].itsp;
     gotodata[i].used = false;
     bool r = false;
     while (gotomaxct > 0 && !gotodata[gotomaxct - 1].used) {--gotomaxct; r = true;}

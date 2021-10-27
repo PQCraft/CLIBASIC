@@ -42,7 +42,7 @@ To build, use `make build`. <br>
 To run, use `make run` or `./clibasic`. <br>
 To build then run, use `make` (same as `make all`). <br>
 #### Windows <br>
-Make sure you have downloaded the readline lib folder from [here](https://github.com/PQCraft/clibasic-winrllib)
+Make sure you have downloaded the readline lib folder from [here](https://github.com/PQCraft/clibasic-winrllib).
 1. Download the ZIP
 2. Go into the .zip file you downloaded
 3. Copy the `lib` folder in `clibasic-winrllib-master`
