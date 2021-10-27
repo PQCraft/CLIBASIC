@@ -118,7 +118,7 @@
 
 // Base defines
 
-char VER[] = "0.28.1.1";
+char VER[] = "0.28.1.2";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -1027,7 +1027,7 @@ int main(int argc, char** argv) {
     argt = NULL;
     arg = NULL;
     srand(usTime());
-    if (!runfile) {
+    if (!runfile && gethome()) {
         char* tmpcwd = getcwd(NULL, 0);
         int ret = chdir(homepath);
         FILE* tmpfile = fopen(HIST_FILE, "r");
@@ -1137,7 +1137,7 @@ int main(int argc, char** argv) {
                     cmdl = 0;
                     runcmd();
                     if (cmdint) {inProg = false; unloadAllProg(); cmdint = false; goto brkproccmd;}
-                    if (cp == -1) {err = 0; inProg = false; unloadAllProg(); goto brkproccmd;}
+                    if (cp == -1) {inProg = false; unloadAllProg(); goto brkproccmd;}
                     if (cp > -1 && progbuf[progindex][cp] == 0) {
                         unloadProg();
                         err = 0;

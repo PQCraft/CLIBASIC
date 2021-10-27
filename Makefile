@@ -27,7 +27,7 @@ else
 ifeq ($(shell uname -o), Android)
 CFLAGS += -s
 else
-CFLAGS += -g -no-pie
+CFLAGS += -s -no-pie
 endif
 endif
 
