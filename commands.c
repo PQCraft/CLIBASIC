@@ -57,15 +57,12 @@ if (chkCmd(1, "DIM")) {
     if (!arg[1][0]) {cerr = 4; seterrstr(""); goto cmderr;}
     char* val = NULL; uint8_t type = 0;
     if (argct == 3) {
-        puts("THREE");
         val = arg[3];
         type = argt[3];
     } else {
-        puts("TWO");
         val = ((arg[1][argl[1] - 1] == '$') ? "" : "0");
         type = 2 - (arg[1][argl[1] - 1] == '$');
     }
-    puts("OK");
     printf("arg[1]: {%s}\n", arg[1]);
     if (!setVar(arg[1], val, type, asize)) goto cmderr;
     goto noerr;
