@@ -63,7 +63,6 @@ if (chkCmd(1, "DIM")) {
         val = ((arg[1][argl[1] - 1] == '$') ? "" : "0");
         type = 2 - (arg[1][argl[1] - 1] == '$');
     }
-    printf("arg[1]: {%s}\n", arg[1]);
     if (!setVar(arg[1], val, type, asize)) goto cmderr;
     goto noerr;
 }
