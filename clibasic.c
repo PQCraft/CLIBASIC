@@ -118,7 +118,7 @@
 
 // Base defines
 
-char VER[] = "0.28.1";
+char VER[] = "0.28.1.1";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -1136,12 +1136,12 @@ int main(int argc, char** argv) {
                     copyStrSnip(progbuf[progindex], cp - cmdl, cp, cmd);
                     cmdl = 0;
                     runcmd();
-                    if (cmdint) {err = 0; inProg = false; unloadAllProg(); cmdint = false; goto brkproccmd;}
+                    if (cmdint) {inProg = false; unloadAllProg(); cmdint = false; goto brkproccmd;}
                     if (cp == -1) {err = 0; inProg = false; unloadAllProg(); goto brkproccmd;}
                     if (cp > -1 && progbuf[progindex][cp] == 0) {
                         unloadProg();
+                        err = 0;
                         if (progindex < 0) {
-                            err = 0;
                             inProg = false;
                             goto rechk;
                         } else {

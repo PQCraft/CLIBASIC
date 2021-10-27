@@ -16,11 +16,12 @@ if (chkCmd(2, "EXIT", "QUIT")) {
     err = 0;
     if (argct == 1) {
         if (!solvearg(1)) goto cmderr;
+        err = atoi(arg[1]);
         if (runfile) {
-            err = retval = atoi(arg[1]);
-        } else {
-            err = atoi(arg[1]);
+            retval = err;
         }
+    } else {
+        err = 0;
     }
     if (inProg) {
         if (progindex > 0) unloadProg();
