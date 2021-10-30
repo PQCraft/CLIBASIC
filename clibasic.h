@@ -103,7 +103,7 @@ typedef struct {
 typedef struct {
     char* VER;                                      // CLIBASIC version
     char* BVER;                                     // bits ("64"/"32"/"?")
-    char* OSVER;                                    // os name ("Linux", "Windows", ...)
+    char* OSVER;                                    // OS name ("Linux", "Windows", ...)
     int* cerr;                                      // pointer to the variable storing the error number
     int* retval;                                    // pointer to the variable read by the CLIBASIC function _RET()
     int* fileerror;                                 // pointer to the variable read by the CLIBASIC function _FILEERROR()
@@ -115,6 +115,8 @@ typedef struct {
     cb_txt* txtattrib;                              // pointer to the struct that stores text attributes
     int* curx;                                      // pointer to the text cursor x position
     int* cury;                                      // pointer to the text cursor y position
+    char* startcmd;                                 // full path to the executable that was used to start CLIBASIC
+    char* roptstr;                                  // option string to pass when starting a new CLIBASIC executable
     void (*getCurPos)(void);                        // update the text cursor position
     char* (*gethome)(void);                         // get the user's home directory
     void (*seterrstr)(char*);                       // set the error string some errors require

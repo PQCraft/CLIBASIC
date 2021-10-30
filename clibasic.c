@@ -118,7 +118,7 @@
 
 // Base defines
 
-char VER[] = "0.28.1.3";
+char VER[] = "0.28.1.4";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -3114,6 +3114,7 @@ int loadExt(char* path) {
         &chkCmdPtr,
         &txtattrib,
         &curx, &cury,
+        startcmd, roptstr,
         getCurPos,
         gethome,
         seterrstr,
