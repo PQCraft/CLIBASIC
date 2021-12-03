@@ -1,5 +1,5 @@
 #!/bin/bash
-rev="Beta"
+rev="Release"
 #-----
 
 shopt -s extglob
