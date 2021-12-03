@@ -107,9 +107,6 @@ if (chkCmd(1, "DO")) {
     dlstack[dlstackp].pl = progLine;
     dlstack[dlstackp].brkinfo = brkinfo;
     brkinfo.block = 1;
-    #ifdef _WIN32
-    updatechars();
-    #endif
     return true;
 }
 if (chkCmd(2, "WHILE", "DOWHILE")) {
@@ -133,9 +130,6 @@ if (chkCmd(2, "WHILE", "DOWHILE")) {
         dlstack[dlstackp].cp = cmdpos;
         dlstack[dlstackp].brkinfo = brkinfo;
         brkinfo.block = 1;
-        #ifdef _WIN32
-        updatechars();
-        #endif
     }
     dldcmd[dlstackp] = !testval;
     return true;
@@ -329,9 +323,6 @@ if (chkCmd(1, "FOR")) {
     fnstack[fnstackp].cp = cmdpos;
     fnstack[fnstackp].pl = progLine;
     brkinfo.block = 2;
-    #ifdef _WIN32
-    updatechars();
-    #endif
     return true;
 }
 if (chkCmd(1, "NEXT")) {

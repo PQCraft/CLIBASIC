@@ -1,8 +1,11 @@
+ifndef CC
+CC = gcc
+endif
+
 BASE_CFLAGS = --std=c99 -Wall -Wextra -Ofast -lm -lreadline -funsigned-char
 
 ifndef OS
 
-C = gcc
 CFLAGS = $(BASE_CFLAGS) -ldl
 ifeq ($(shell uname -s), Darwin)
 ifeq ($(shell [ -d ~/.brew/opt/readline/include ] && echo true), true)
@@ -27,18 +30,18 @@ else
 ifeq ($(shell uname -o), Android)
 CFLAGS += -s
 else
-CFLAGS += -s -no-pie
+CFLAGS += -g -no-pie
 endif
 endif
 
 CBITS = $(shell getconf LONG_BIT)
 
 BUILD_TO = clibasic
-BUILD32 = $(C) clibasic.c -m32 $(CFLAGS) -DB32 -o $(BUILD_TO) && chmod +x $(BUILD_TO)
+BUILD32 = $(CC) clibasic.c -m32 $(CFLAGS) -DB32 -o $(BUILD_TO) && chmod +x $(BUILD_TO)
 ifeq (,$(CBITS))
 BUILD__ = $(BUILD32)
 else
-BUILD__ = $(C) clibasic.c $(CFLAGS) -DB$(CBITS) -o $(BUILD_TO) && chmod +x $(BUILD_TO)
+BUILD__ = $(CC) clibasic.c $(CFLAGS) -DB$(CBITS) -o $(BUILD_TO) && chmod +x $(BUILD_TO)
 endif
 
 MAN_PATH = docs/clibasic.man
@@ -103,7 +106,7 @@ cross:
 ifeq ($(MAKECMDGOALS), cross)
 	@$(MAKE) cross all
 else
-	@$(eval C = x86_64-w64-mingw32-gcc)
+	@$(eval CC = x86_64-w64-mingw32-gcc)
 	@$(eval C32 = i686-w64-mingw32-gcc)
 	@$(eval CFLAGS = $(BASE_CFLAGS) -s -Ilib)
 	@$(eval BUILD_TO = clibasic.exe)
@@ -113,7 +116,7 @@ else
 ifeq (,$(CBITS))
 	@$(eval BUILD__ = $(BUILD32))
 else
-	@$(eval BUILD__ = cp -f lib/win64/*.dll . && $(C) clibasic.c $(CFLAGS) -Llib/win64 -DB$(CBITS) -o $(BUILD_TO) && chmod -x $(BUILD_TO))
+	@$(eval BUILD__ = cp -f lib/win64/*.dll . && $(CC) clibasic.c $(CFLAGS) -Llib/win64 -DB$(CBITS) -o $(BUILD_TO) && chmod -x $(BUILD_TO))
 endif
 	@$(eval RUN = wineconsole .\\$(BUILD_TO))
 	@$(eval CLEAN = rm -f clibasic.exe *.dll)
@@ -126,19 +129,17 @@ vt:
 ifeq (,$(CBITS))
 	@$(eval BUILD__ = $(BUILD32))
 else
-	@$(eval BUILD__ = cp -f lib/win64/*.dll . && $(C) clibasic.c $(CFLAGS) -Llib/win64 -DB$(CBITS) -o $(BUILD_TO) && chmod -x $(BUILD_TO))
+	@$(eval BUILD__ = cp -f lib/win64/*.dll . && $(CC) clibasic.c $(CFLAGS) -Llib/win64 -DB$(CBITS) -o $(BUILD_TO) && chmod -x $(BUILD_TO))
 endif
 	@true
 
 else
 
-C = gcc
-
-CFLAGS = $(BASE_CFLAGS) -Ilib -s -D_CRT_NONSTDC_NO_WARNINGS
+CFLAGS = $(BASE_CFLAGS) -lpthread -Ilib -s -D_CRT_NONSTDC_NO_WARNINGS
 
 BUILD_TO = clibasic.exe
-BUILD64 = xcopy lib\win64\*.dll . /Y && $(C) clibasic.c -m64 $(CFLAGS) -Llib\win64 -DB64 -o $(BUILD_TO)
-BUILD32 = xcopy lib\win32\*.dll . /Y && $(C) clibasic.c -m32 $(CFLAGS) -Llib\win32 -DB32 -o $(BUILD_TO)
+BUILD64 = xcopy lib\win64\*.dll . /Y && $(CC) clibasic.c -m64 $(CFLAGS) -Llib\win64 -DB64 -o $(BUILD_TO)
+BUILD32 = xcopy lib\win32\*.dll . /Y && $(CC) clibasic.c -m32 $(CFLAGS) -Llib\win32 -DB32 -o $(BUILD_TO)
 
 INSTALL_TO = C:\windows\system32
 INSTALL = xcopy *.dll $(INSTALL_TO) /Y && xcopy $(BUILD_TO) $(INSTALL_TO) /Y

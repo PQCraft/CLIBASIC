@@ -78,6 +78,10 @@ To build then run, use `make` (same as `make all`). <br>
 To build CLIBASIC with support for VT escape codes, add `vt` before the rest of the rules. <br>
 
 ---
+### Demo <br>
+[![asciicast](https://asciinema.org/a/447773.png)](https://asciinema.org/a/447773)
+
+---
 ### Notes <br>
 - On Arch Linux, you can install CLIBASIC by installing either the [`clibasic`](https://aur.archlinux.org/packages/clibasic/) or [`clibasic-bin`](https://aur.archlinux.org/packages/clibasic-bin/) AUR package.
 - Due to Windows not having proper fork() and exec\*() functions, EXEC, EXEC(), and EXEC$() are passed through system() under Windows and one issue out of the many with this is a space parsing issue where running `EXEC "test prog"` will attempt to execute `EXEC "test", "prog"` if `test prog` cannot be found in the current directory or %PATH%.
@@ -87,4 +91,3 @@ To build CLIBASIC with support for VT escape codes, add `vt` before the rest of 
 - CLIBASIC will look for `~/.clibasicrc`, `~/autorun.bas`, then `~/.autorun.bas` in this order in the user's home directory and run the first file found.
 - The development scripts are `build.sh` which is for testing if CLIBASIC compiles correctly for Linux and Windows, `package.sh` which creates the zip files for making a CLIBASIC release, `commit.sh` which automates the build and push process, and `release-text.sh` which generates the text for making a CLIBASIC release.
 - Include the `clibasic.h` file when making a clibasic extension.
-

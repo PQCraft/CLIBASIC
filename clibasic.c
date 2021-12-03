@@ -39,6 +39,8 @@
 /* Fix implicit declaration issues */
 #define _POSIX_C_SOURCE 999999L
 #define _XOPEN_SOURCE 999999L
+#define _DEFAULT_SOURCE
+#define _GNU_SOURCE
 
 /* Check if the buffer size is usable */
 #if (CB_BUF_SIZE < 0)
@@ -94,14 +96,16 @@
 // OS-specific includes and definitions
 
 #ifndef _WIN32
-    #include <termios.h>
-    #include <sys/ioctl.h>
-    #include <sys/wait.h>
     #include <dlfcn.h>
+    #include <termios.h>
+    #include <sys/wait.h>
+    #include <sys/auxv.h>
+    #include <sys/ioctl.h>
 #else
     #include <windows.h>
     #include <conio.h>
     #include <fileapi.h>
+    #include <pthread.h>
 #endif
 
 #ifdef __APPLE__
@@ -118,7 +122,7 @@
 
 // Base defines
 
-char VER[] = "0.28.1.4";
+char VER[] = "1.0";
 
 #if defined(__linux__)
     char OSVER[] = "Linux";
@@ -154,6 +158,9 @@ char VER[] = "0.28.1.4";
 
 #include "clibasic.h"
 
+char* defaultstr = "";
+char* defaultnum = "0";
+
 int progindex = -1;
 char** progbuf = NULL;
 char** progfn = NULL;
@@ -177,11 +184,6 @@ char gpbuf[CB_BUF_SIZE];
 
 char* cmd = NULL;
 int cmdl = 0;
-//char** tmpargs = NULL;
-char** arg = NULL;
-uint8_t* argt = NULL;
-int32_t* argl = NULL;
-int argct = -1;
 
 int cmdpos = 0;
 
@@ -191,7 +193,7 @@ bool lockpl = false;
 typedef struct {
     uint8_t type;
     uint8_t block;
-} cb_brkinfo;
+} __attribute__((aligned(sizeof(void*)))) cb_brkinfo;
 
 cb_brkinfo brkinfo;
 cb_brkinfo* oldbrkinfo = NULL;
@@ -200,7 +202,7 @@ typedef struct {
     int pl;
     int32_t cp;
     cb_brkinfo brkinfo;
-} cb_jump;
+} __attribute__((aligned(sizeof(void*)))) cb_jump;
 
 cb_jump dlstack[CB_PROG_LOGIC_MAX];
 bool dldcmd[CB_PROG_LOGIC_MAX];
@@ -228,7 +230,7 @@ typedef struct {
     int fnsp;
     int itsp;
     cb_brkinfo brkinfo;
-} cb_gosub;
+} __attribute__((aligned(sizeof(void*)))) cb_gosub;
 
 cb_gosub gsstack[CB_PROG_LOGIC_MAX];
 int gsstackp = -1;
@@ -246,12 +248,14 @@ int cury = 0;
 int concp = 0;
 int32_t cp = 0;
 
-bool cmdint = false;
-bool inprompt = false;
+sig_atomic_t cmdint = false;
+sig_atomic_t inprompt = false;
+bool dprompt = false;
 
 bool runfile = false;
 bool runc = false;
 bool autorun = false;
+bool* autorunstack = NULL;
 
 bool redirection = false;
 bool checknl = false;
@@ -265,10 +269,16 @@ bool sh_restoreAttrib = true;
 
 cb_txt txtattrib;
 
+#ifdef _WIN32
+static __volatile__ bool textlock = false;
+#else
 bool textlock = false;
+#endif
 bool sneaktextlock = false;
+bool hidecursor = false;
 
 bool keep = false;
+bool keepall = false;
 
 char* homepath = NULL;
 char* cwd = NULL;
@@ -291,16 +301,18 @@ bool changedtitlecmd = false;
 
 int retval = 0;
 
+bool hideerror = false;
+
 typedef struct {
+    bool inuse;
     int pl;
     int32_t cp;
-    bool used;
     char* name;
     int dlsp;
     int fnsp;
     int itsp;
     cb_brkinfo brkinfo;
-} cb_goto;
+} __attribute__((aligned(sizeof(void*)))) cb_goto;
 
 cb_goto* gotodata = NULL;
 cb_goto** proggotodata = NULL;
@@ -312,14 +324,23 @@ int filemaxct = 0;
 int fileerror = 0;
 
 typedef struct {
+    bool inuse;
     char* name;
     char* data;
-} cb_sub;
+    uint8_t type;
+} __attribute__((aligned(sizeof(void*)))) cb_sub;
+
+typedef struct {
+    bool insub;
+    uint8_t type;
+} __attribute__((aligned(sizeof(void*)))) cb_subinfo;
 
 cb_sub* subdata = NULL;
 int submaxct = 0;
-bool addsub = false;
-int subindex = -1;
+int addsub = -1;
+cb_subinfo subinfo;
+cb_subinfo* oldsubinfo = NULL;
+char* funcret = NULL;
 
 char* rl_tmpptr = NULL;
 
@@ -334,7 +355,7 @@ typedef struct {
     void (*clearGlobals)(void);
     void (*promptReady)(void);
     bool (*deinit)(void);
-} cb_ext;
+} __attribute__((aligned(sizeof(void*)))) cb_ext;
 
 int extmaxct = 0;
 cb_ext* extdata = NULL;
@@ -344,9 +365,9 @@ struct termios term, restore;
 struct termios kbhterm, kbhterm2;
 struct termios initterm;
 
-void txtqunlock() {if (textlock || sneaktextlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}}
+static inline void txtqunlock() {if (textlock || sneaktextlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}}
 
-int kbhit() {
+static inline int kbhit() {
     int inchar;
     ioctl(0, FIONREAD, &inchar);
     return inchar;
@@ -416,7 +437,7 @@ static inline void clearGlobals() {
         memset(&gsstack[i], 0, sizeof(cb_jump));
     }
     for (int i = 0; i < gotomaxct; ++i) {
-        if (gotodata[i].used) nfree(gotodata[i].name);
+        if (gotodata[i].inuse) nfree(gotodata[i].name);
     }
     nfree(gotodata);
     gotomaxct = 0;
@@ -425,6 +446,8 @@ static inline void clearGlobals() {
             extdata[i].clearGlobals();
         }
     }
+    subinfo.insub = false;
+    subinfo.type = false;
 }
 
 static inline void promptReady() {
@@ -552,7 +575,7 @@ static inline void getCurPos();
 static inline char* gethome();
 static inline void initBaseMem();
 static inline void freeBaseMem();
-static inline void printError(int);
+static inline void printError(int, char*, char*);
 static inline void seterrstr(char*);
 void unloadAllProg();
 static inline char* basefilename(char*);
@@ -566,26 +589,12 @@ bool unloadExt(int);
 
 void cleanExit() {
     txtqunlock();
-    int ret;
-    if (inprompt) {
-        int i = kbhit();
-        if (i) {ret = read(0, &gpbuf, i);}
-        getCurPos();
-        unloadAllProg();
-        cmdint = true;
-        putchar('\n');
-        history_set_pos(history_length);
-        rl_on_new_line();
-        rl_replace_line("", 0);
-        rl_pending_input = false;
-        rl_redisplay();
-        return;
-    }
     setsig(SIGINT, forceExit);
     setsig(SIGTERM, forceExit);
     fflush(stdout);
     unloadAllProg();
     closeFile(-1);
+    int ret;
     ret = chdir(gethome());
     (void)ret;
     if (autohist && !runfile) {
@@ -599,11 +608,27 @@ void cleanExit() {
     #if defined(CHANGE_TITLE) && !defined(_WIN_NO_VT)
     if (esc && changedtitle) fputs("\e[23;0t", stdout);
     #endif
-    #ifndef _WIN_NO_VT
-    if (esc && !keep) fputs("\e[0m", stdout);
-    #else
-    if (!keep) SetConsoleTextAttribute(hConsole, ocAttrib);
-    #endif
+    if (!keep) {
+        #ifndef _WIN_NO_VT
+        if (esc) fputs("\e[0m", stdout);
+        #else
+        SetConsoleTextAttribute(hConsole, ocAttrib);
+        #endif
+    }
+    if (!keepall && hidecursor) {
+        #ifndef _WIN_NO_VT
+        if (esc) {
+            fputs("\e[?25h", stdout);
+            fflush(stdout);
+        }
+        #else
+        CONSOLE_CURSOR_INFO curinfo;
+        GetConsoleCursorInfo(hConsole, &curinfo);
+        curinfo.bVisible = true;
+        SetConsoleCursorInfo(hConsole, &curinfo);
+        #endif
+        hidecursor = false;
+    }
     #ifndef _WIN32
     int i = kbhit();
     while (i > 0) {getchar(); i--;}
@@ -624,22 +649,31 @@ void cleanExit() {
             nfree(vardata[i].name);
         }
     }
+    for (int i = 0; i < submaxct; ++i) {
+        if (subdata[i].inuse) {
+            nfree(subdata[i].data);
+            nfree(subdata[i].name);
+        }
+    }
     for (int i = 0; i < gotomaxct; ++i) {
-        if (gotodata[i].used) {
+        if (gotodata[i].inuse) {
             nfree(gotodata[i].name);
         }
     }
-    for (int i = 0; i < argct; ++i) {
-        nfree(arg[i]);
+    for (int i = 1; i < progargc; ++i) {
+        nfree(progargs[i]);
     }
+    free(progargs);
+    for (int i = 1; i < newprogargc; ++i) {
+        nfree(newprogargs[i]);
+    }
+    free(newprogargs);
     nfree(startcmd);
     nfree(rl_tmpptr);
     nfree(cmd);
-    nfree(arg);
-    nfree(argt);
-    nfree(argl);
     nfree(errstr);
     nfree(vardata);
+    nfree(subdata);
     if (progindex > -1) {
         nfree(progbuf[0]);
         nfree(progfn[0]);
@@ -659,17 +693,32 @@ void cleanExit() {
     clearGlobals();
     unloadExt(-1);
     #ifndef _WIN32
-    tcsetattr(0, TCSANOW, &initterm);
+    if (!keepall) tcsetattr(0, TCSANOW, &initterm);
     #endif
     exit(err);
 }
 
 void cmdIntHndl() {
-    if (cmdint) setsig(SIGINT, cleanExit);
+    if (inprompt) {
+        int i = kbhit();
+        int ret;
+        if (i) {ret = read(0, &gpbuf, i);}
+        (void)ret;
+        getCurPos();
+        unloadAllProg();
+        putchar('\n');
+        history_set_pos(history_length);
+        rl_on_new_line();
+        rl_replace_line("", 0);
+        rl_pending_input = false;
+        rl_redisplay();
+        return;
+    }
+    if (cmdint) {setsig(SIGINT, cleanExit);}
     cmdint = true;
 }
 
-void runcmd();
+int runcmd();
 #ifdef BUILT_IN_STRING_FUNCS
     #define copyStr(b, a) strcpy(a, b)
     #define copyStrApnd(b, a) strcat(a, b)
@@ -677,9 +726,9 @@ void runcmd();
     static inline void copyStr(char*, char*);
     static inline void copyStrApnd(char*, char*);
 #endif
-static inline void copyStrApndNoEsc(char*, char*);
 static inline void copyStrTo(char*, int32_t, char*);
 static inline void copyStrSnip(char*, int32_t, int32_t, char*);
+static inline char* copyStrApndO(char* str1, char* str2);
 uint8_t getVal(char*, char*);
 static inline void resetTimer();
 bool loadProg(char*);
@@ -687,6 +736,7 @@ void unloadProg();
 static inline void updateTxtAttrib();
 static inline int isFile();
 static inline uint64_t usTime();
+static inline void cb_wait(uint64_t);
 
 static inline char* gethome() {
     if (!homepath) {
@@ -738,6 +788,78 @@ static inline void ttycheck() {
     if (!isatty(STDOUT_FILENO)) {fputs("CLIBASIC does not support STDOUT redirection.\n", stderr); exit(1);}
 }
 
+#ifdef _WIN32
+pthread_t uctHandle;
+pthread_mutex_t uctMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutexattr_t uctMutexA;
+bool uctStatus[2];
+bool uctReady = false;
+void* ucThread(void* data) {
+    bool* status = data;
+    while (1) {
+        pthread_mutex_lock(&uctMutex);
+        status[1] = true;
+        status[0] = false;
+        pthread_mutex_unlock(&uctMutex);
+        bool l1 = true;
+        while (l1) {
+            updatechars();
+            pthread_mutex_lock(&uctMutex);
+            if (status[0]) l1 = false;
+            pthread_mutex_unlock(&uctMutex);
+            //if (l1) cb_wait(5000);
+        }
+        pthread_mutex_lock(&uctMutex);
+        status[1] = false;
+        status[0] = false;
+        pthread_mutex_unlock(&uctMutex);
+        bool l2 = true;
+        while (l2) {
+            //cb_wait(500);
+            pthread_mutex_lock(&uctMutex);
+            if (status[0]) l2 = false;
+            pthread_mutex_unlock(&uctMutex);
+        }
+    }
+}
+void uctStart() {
+    if (!uctReady) return;
+    pthread_mutex_lock(&uctMutex);
+    if (uctStatus[1]) return;
+    uctStatus[0] = true;
+    pthread_mutex_unlock(&uctMutex);
+    bool l = true;
+    while (l) {
+        pthread_mutex_lock(&uctMutex);
+        if (uctStatus[1]) l = false;
+        pthread_mutex_unlock(&uctMutex);
+        //if (l) cb_wait(50);
+    }
+}
+void uctStop() {
+    if (!uctReady) return;
+    pthread_mutex_lock(&uctMutex);
+    if (!uctStatus[1]) return;
+    uctStatus[0] = true;
+    pthread_mutex_unlock(&uctMutex);
+    bool l = true;
+    while (l) {
+        pthread_mutex_lock(&uctMutex);
+        if (!uctStatus[1]) l = false;
+        pthread_mutex_unlock(&uctMutex);
+        //if (l) cb_wait(50);
+    }
+}
+void uctInit() {
+    pthread_mutex_init(&uctMutex, NULL);
+    pthread_mutex_init(&uctMutex, &uctMutexA);
+    pthread_mutex_lock(&uctMutex);
+    pthread_mutex_unlock(&uctMutex);
+    pthread_create(&uctHandle, NULL, ucThread, &uctStatus);
+    uctReady = true;
+}
+#endif
+
 static inline void readyTerm() {
     ttycheck();
     #ifndef _WIN32
@@ -751,6 +873,7 @@ static inline void readyTerm() {
     #ifndef _WIN_NO_VT
     enablevt();
     #endif
+    uctInit();
     #endif
     if (!gethome()) {
         #ifndef _WIN32
@@ -773,6 +896,8 @@ static inline void readyTerm() {
         nfree(tmpcwd);
         (void)ret;
     }
+    #ifdef _WIN32
+    #endif
 }
 
 uint8_t roptptr = 1;
@@ -781,6 +906,9 @@ char roptstr[16] = "-";
 #define RARG() {fprintf(stderr, "Short option '%c' requires argument(s) and must be last.\n", argv[i][shortopti]);}
 #define IACT() {fputs("Incorrect number of arguments passed.\n", stderr);}
 #define IOCT() {fputs("Incorrect number of options passed.\n", stderr);}
+#define OHBP() {fprintf(stderr, "Option '%c' has already been passed.\n", argv[i][shortopti]);}
+
+char elfsnip[6];
 
 int main(int argc, char** argv) {
     bool pexit = false;
@@ -804,14 +932,12 @@ int main(int argc, char** argv) {
                 fputs("No long option following dash.\n", stderr); exit(1);
             } else if (!strcmp(argv[i], "--version")) {
                 if (argc > 2) {IOCT(); exit(1);}
-                printf("Command Line Interface BASIC version %s (%s %s-bit) using ", VER, OSVER, BVER);
+                printf("Command Line Interface BASIC version %s (%s %s-bit)", VER, OSVER, BVER);
                 #ifdef _WIN32
-                    fputs("Windows API calls", stdout);
+                    fputs(" using Windows API calls", stdout);
                     #ifndef _WIN_NO_VT
                         fputs(" and VT escape codes", stdout);
                     #endif
-                #else
-                    fputs("VT escape codes", stdout);
                 #endif
                 putchar('\n');
                 puts("Copyright (C) 2021 PQCraft");
@@ -819,13 +945,14 @@ int main(int argc, char** argv) {
                 pexit = true;
             } else if (!strcmp(argv[i], "--help")) {
                 if (argc > 2) {IOCT(); exit(1);}
-                printf("Usage: %s [[-x] FILE [ARG]...]\n", argv[0]);
+                printf("Usage: %s [OPTIONS]... [[-x] FILE [ARG]...]\n", argv[0]);
                 puts("Options:");
                 puts("    --help                      Displays the usage and option information.");
                 puts("    --version                   Displays the version and license information.");
                 puts("    -x, --exec FILE [ARG]...    Runs FILE and passes ARGs to FILE.");
                 puts("    -c, --command COMMAND       Runs COMMAND as if in shell mode.");
-                puts("    -k, --keep                  Stops CLIBASIC from resetting text attributes when exiting.");
+                puts("    -k, --keep                  Stops the text attributes from being reset.");
+                puts("    -K, --keep-all              Stops the text attributes and terminal state from being reset.");
                 puts("    -s, --skip                  Skips searching for autorun programs.");
                 puts("    -i, --info                  Displays an info string when starting in shell mode.");
                 puts("    -r, --redirection           Allows for redirection (this may cause issues).");
@@ -836,60 +963,64 @@ int main(int argc, char** argv) {
             } else if (!strcmp(argv[i], "--exec") || (shortopt && argv[i][shortopti] == 'x')) {
                 if (shortopt && argv[i][shortopti + 1]) {RARG(); exit(1);}
                 if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
-                if (runfile) {unloadProg(); IOCT(); exit(1);}
-                ++i;
-                if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
+                if (runfile) {unloadProg(); OHBP(); exit(1);}
+                if (!argv[++i]) {IACT(); exit(1);}
                 argslater = true;
-                if (!loadProg(argv[i])) {printError(cerr); exit(1);}
+                if (!loadProg(argv[i])) {printError(cerr, NULL, NULL); exit(1);}
                 inProg = true;
                 runfile = true;
                 progargs = (char**)malloc((argc - i) * sizeof(char*));
                 for (progargc = 1; progargc < argc - i; ++progargc) {	
-                    progargs[progargc] = malloc(strlen(argv[i + progargc]) + 1);
-                    copyStr(argv[i + progargc], progargs[progargc]);
+                    progargs[progargc] = strdup(argv[i + progargc]);
                 }
                 i = argc;
             } else if (!strcmp(argv[i], "--keep") || (shortopt && argv[i][shortopti] == 'k')) {
-                if (keep) {IOCT(); exit(1);}
+                if (keep) {OHBP(); exit(1);}
                 keep = true;
                 roptstr[roptptr++] = 'k';
                 if (shortopt) goto chkshortopt;
+            } else if (!strcmp(argv[i], "--keep-all") || (shortopt && argv[i][shortopti] == 'K')) {
+                if (keepall) {OHBP(); exit(1);}
+                keep = true;
+                keepall = true;
+                roptstr[roptptr++] = 'K';
+                if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--skip") || (shortopt && argv[i][shortopti] == 's')) {
-                if (skip) {IOCT(); exit(1);}
+                if (skip) {OHBP(); exit(1);}
                 skip = true;
                 roptstr[roptptr++] = 's';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--info") || (shortopt && argv[i][shortopti] == 'i')) {
-                if (info) {IOCT(); exit(1);}
+                if (info) {OHBP(); exit(1);}
                 info = true;
                 roptstr[roptptr++] = 'i';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--redirection") || (shortopt && argv[i][shortopti] == 'r')) {
-                if (redirection) {IOCT(); exit(1);}
+                if (redirection) {OHBP(); exit(1);}
                 redirection = true;
                 roptstr[roptptr++] = 'r';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--newline") || (shortopt && argv[i][shortopti] == 'n')) {
-                if (checknl) {IOCT(); exit(1);}
+                if (checknl) {OHBP(); exit(1);}
                 checknl = true;
                 roptstr[roptptr++] = 'n';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--no-escapes") || (shortopt && argv[i][shortopti] == 'e')) {
-                if (!esc) {IOCT(); exit(1);}
+                if (!esc) {OHBP(); exit(1);}
                 esc = false;
                 roptstr[roptptr++] = 'e';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--no-curpos") || (shortopt && argv[i][shortopti] == 'p')) {
-                if (!cpos) {IOCT(); exit(1);}
+                if (!cpos) {OHBP(); exit(1);}
                 cpos = false;
                 roptstr[roptptr++] = 'p';
                 if (shortopt) goto chkshortopt;
             } else if (!strcmp(argv[i], "--command") || (shortopt && argv[i][shortopti] == 'c')) {
                 if (shortopt && argv[i][shortopti + 1]) {RARG(); exit(1);}
                 if (runfile) {fputs("Cannot run file and command.\n", stderr); exit(1);}
-                if (runc) {IOCT(); exit(1);}
+                if (runc) {OHBP(); exit(1);}
                 i++;
-                if (!argv[i]) {fputs( "No command provided.\n", stderr); exit(1);}
+                if (!argv[i]) {IACT(); exit(1);}
                 runc = true;
                 runfile = true;
                 copyStr(argv[i], conbuf);
@@ -902,16 +1033,15 @@ int main(int argc, char** argv) {
             }
         } else {
             if (runc) {fputs("Cannot run command and file.\n", stderr); exit(1);}
-            if (runfile) {unloadProg(); IOCT(); exit(1);}
-            if (!argv[i]) {fputs("No filename provided.\n", stderr); exit(1);}
+            if (runfile) {unloadProg(); OHBP(); exit(1);}
+            if (!argv[i]) {IACT(); exit(1);}
             argslater = true;
-            if (!loadProg(argv[i])) {printError(cerr); exit(1);}
+            if (!loadProg(argv[i])) {printError(cerr, NULL, NULL); exit(1);}
             inProg = true;
             runfile = true;
             progargs = (char**)malloc((argc - i) * sizeof(char*));
             for (progargc = 1; progargc < argc - i; ++progargc) {	
-                progargs[progargc] = malloc(strlen(argv[i + progargc]) + 1);
-                copyStr(argv[i + progargc], progargs[progargc]);
+                progargs[progargc] = strdup(argv[i + progargc]);
             }
             i = argc;
         }
@@ -1023,10 +1153,8 @@ int main(int argc, char** argv) {
         #endif
         #endif
     }
-    cmd = NULL;
-    argt = NULL;
-    arg = NULL;
-    srand(usTime());
+    cmd = (char*)malloc(CB_BUF_SIZE);
+    srand(usTime() + clock());
     if (!runfile && gethome()) {
         char* tmpcwd = getcwd(NULL, 0);
         int ret = chdir(homepath);
@@ -1053,6 +1181,7 @@ int main(int argc, char** argv) {
         cp = 0;
         if (chkinProg) {inProg = true; chkinProg = false;}
         if (!inProg && !runc) {
+            cmdint = false;
             if (runfile) cleanExit();
             clearGlobals();
             promptReady();
@@ -1075,19 +1204,22 @@ int main(int argc, char** argv) {
             if (curx > 1) putchar('\n');
             #endif
             updateTxtAttrib();
-            inprompt = true;
             #ifdef _WIN32
             setsig(SIGINT, rl_sigh);
             #endif
             conbuf[0] = 0;
-            #ifndef _WIN32
-            setsig(SIGINT, cleanExit);
-            #endif
             txtqunlock();
+            #ifdef _WIN32
+            uctStop();
+            #endif
+            inprompt = true;
             tmpstr = readline(pstr);
+            inprompt = false;
+            #ifdef _WIN32
+            uctStart();
+            #endif
             updateTxtAttrib();
             concp = 0;
-            inprompt = false;
             if (!tmpstr) {err = 0; cleanExit();}
             int32_t tmpptr;
             if (tmpstr[0] == 0) {nfree(tmpstr); goto brkproccmd;}
@@ -1109,7 +1241,6 @@ int main(int argc, char** argv) {
             if (strcmp(tmpstr, cmpstr)) {add_history(tmpstr); copyStr(tmpstr, cmpstr);}
             copyStr(tmpstr, conbuf);
             nfree(tmpstr);
-            cmdint = false;
         }
         if (runc) runc = false;
         cmdl = 0;
@@ -1131,12 +1262,11 @@ int main(int argc, char** argv) {
                     }
                     if (lockpl) lockpl = false;
                     while (progbuf[progindex][cp - cmdl] == ' ' && cmdl > 0) {cmdl--;}
-                    cmd = (char*)realloc(cmd, cmdl + 1);
                     cmdpos = cp - cmdl;
                     copyStrSnip(progbuf[progindex], cp - cmdl, cp, cmd);
                     cmdl = 0;
-                    runcmd();
-                    if (cmdint) {inProg = false; unloadAllProg(); cmdint = false; goto brkproccmd;}
+                    if (cmdint) {inProg = false; unloadAllProg(); txtqunlock(); goto brkproccmd;}
+                    if (runcmd(cmd)) {cp = -1; concp = -1; chkinProg = inProg = false;}
                     if (cp == -1) {inProg = false; unloadAllProg(); goto brkproccmd;}
                     if (cp > -1 && progbuf[progindex][cp] == 0) {
                         unloadProg();
@@ -1158,12 +1288,11 @@ int main(int argc, char** argv) {
                 if (conbuf[concp] == '"') {inStr = !inStr; cmdl++;} else
                 if ((conbuf[concp] == ':' && !inStr) || conbuf[concp] == 0) {
                     while (conbuf[concp - cmdl] == ' ' && cmdl > 0) {cmdl--;}
-                    cmd = (char*)realloc(cmd, cmdl + 1);
                     cmdpos = concp - cmdl;
                     copyStrSnip(conbuf, concp - cmdl, concp, cmd);
                     cmdl = 0;
-                    runcmd();
-                    if (cmdint) {txtqunlock(); cmdint = false; goto brkproccmd;}
+                    if (cmdint) {runc = false; unloadAllProg(); txtqunlock(); goto brkproccmd;}
+                    if (runcmd(cmd)) {cp = -1; concp = -1; chkinProg = inProg = false;}
                     if (concp == -1) goto brkproccmd;
                     if (concp > -1 && conbuf[concp] == 0) {
                         goto brkproccmd;
@@ -1175,9 +1304,6 @@ int main(int argc, char** argv) {
             }
         }
         brkproccmd:;
-        #ifndef _WIN32
-        setsig(SIGINT, cleanExit);
-        #endif
         txtqunlock();
     }
     txtqunlock();
@@ -1206,9 +1332,7 @@ static inline void cb_wait(uint64_t d) {
     nanosleep(&dts, NULL);
     #else
     uint64_t t = d + usTime();
-    while (t > usTime() && !cmdint) {
-        if (!(usTime() % 5000))updatechars();
-    }
+    while (t > usTime() && !cmdint) {}
     #endif
 }
 
@@ -1295,15 +1419,17 @@ void unloadProg() {
     progfn = (char**)realloc(progfn, progindex * sizeof(char*));
     progbuf = (char**)realloc(progbuf, progindex * sizeof(char*));
     for (int i = 0; i < gotomaxct; ++i) {
-        if (gotodata[i].used) nfree(gotodata[i].name);
+        if (gotodata[i].inuse) nfree(gotodata[i].name);
     }
     nfree(gotodata);
     gotodata = proggotodata[progindex];
     gotomaxct = proggotomaxct[progindex];
+    if (!subinfo.insub && autorun) autorun = false;
     cp = progcp[progindex];
     cmdl = progcmdl[progindex];
     progLine = proglinebuf[progindex];
     brkinfo = oldbrkinfo[progindex];
+    subinfo = oldsubinfo[progindex];
     dlstackp = mindlstackp[progindex];
     itstackp = minitstackp[progindex];
     fnstackp = minfnstackp[progindex];
@@ -1314,17 +1440,87 @@ void unloadProg() {
     minitstackp = (int*)realloc(minitstackp, progindex * sizeof(int));
     minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
     oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(cb_brkinfo));
+    oldsubinfo = (cb_subinfo*)realloc(oldsubinfo, progindex * sizeof(cb_subinfo));
     proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
     proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
     progindex--;
     if (progindex < 0) inProg = false;
-    if (autorun) autorun = false;
 }
 
 void unloadAllProg() {
     for (int i = 0; i <= progindex; ++i) {
         unloadProg();
     }
+    inProg = false;
+}
+
+void prepProgData() {
+    ++progindex;
+    progbuf = (char**)realloc(progbuf, progindex * sizeof(char*));
+    progcp = (int32_t*)realloc(progcp, progindex * sizeof(int32_t));
+    progcmdl = (int*)realloc(progcmdl, progindex * sizeof(int));
+    proglinebuf = (int*)realloc(proglinebuf, progindex * sizeof(int));
+    mindlstackp = (int*)realloc(mindlstackp, progindex * sizeof(int));
+    minitstackp = (int*)realloc(minitstackp, progindex * sizeof(int));
+    oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(cb_brkinfo));
+    oldsubinfo = (cb_subinfo*)realloc(oldsubinfo, progindex * sizeof(cb_subinfo));
+    minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
+    proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
+    proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
+    oldprogargc = (int*)realloc(oldprogargc, progindex * sizeof(int));
+    oldprogargs = (char***)realloc(oldprogargs, progindex * sizeof(char**));
+    --progindex;
+    progcp[progindex] = cp;
+    progcmdl[progindex] = cmdl;
+    proglinebuf[progindex] = progLine;
+    mindlstackp[progindex] = dlstackp;
+    minitstackp[progindex] = itstackp;
+    oldbrkinfo[progindex] = brkinfo;
+    oldsubinfo[progindex] = subinfo;
+    minfnstackp[progindex] = fnstackp;
+    proggotodata[progindex] = gotodata;
+    proggotomaxct[progindex] = gotomaxct;
+    oldprogargc[progindex] = progargc;
+    oldprogargs[progindex] = progargs;
+    gotodata = NULL;
+    gotomaxct = 0;
+    cp = 0;
+    cmdl = 0;
+    progLine = 1;
+    memset(&brkinfo, 0, sizeof(brkinfo));
+    memset(&subinfo, 0, sizeof(subinfo));
+}
+
+bool loadSub(char* name, bool func, uint8_t* type) {
+    upCase(name);
+    seterrstr(name);
+    int s = -1;
+    for (int i = 0; i < submaxct; ++i) {
+        if (subdata[i].inuse && !strcmp(subdata[i].name, name)) {s = i; break;}
+    }
+    if (s == -1) {cerr = 37; return false;}
+    uint8_t ntype = 0;
+    if (func) {
+        if (!subdata[s].type) {cerr = 2; return false;}
+        ntype = subdata[s].type;
+    } else {
+        if (subdata[s].type) {cerr = 2; return false;}
+    }
+    ++progindex;
+    prepProgData();
+    if (func) *type = ntype;
+    progfn = (char**)realloc(progfn, (progindex + 1) * sizeof(char*));
+    progfn[progindex] = strdup(name);
+    progbuf[progindex] = strdup(subdata[s].data);
+    if (argslater) {
+        argslater = false;
+    } else {
+        progargc = newprogargc;
+        newprogargc = 0;
+        progargs = newprogargs;
+        newprogargs = NULL;
+    }
+    return true;
 }
 
 bool loadProg(char* filename) {
@@ -1344,6 +1540,7 @@ bool loadProg(char* filename) {
         cerr = 18;
         return false;
     }
+    cerr = 0;
     ++progindex;
     fseek(prog, 0, SEEK_END);
     progfn = (char**)realloc(progfn, (progindex + 1) * sizeof(char*));
@@ -1352,37 +1549,7 @@ bool loadProg(char* filename) {
     #else
     progfn[progindex] = realpath(filename, NULL);
     #endif
-    ++progindex;
-    progbuf = (char**)realloc(progbuf, progindex * sizeof(char*));
-    progcp = (int32_t*)realloc(progcp, progindex * sizeof(int32_t));
-    progcmdl = (int*)realloc(progcmdl, progindex * sizeof(int));
-    proglinebuf = (int*)realloc(proglinebuf, progindex * sizeof(int));
-    mindlstackp = (int*)realloc(mindlstackp, progindex * sizeof(int));
-    minitstackp = (int*)realloc(minitstackp, progindex * sizeof(int));
-    oldbrkinfo = (cb_brkinfo*)realloc(oldbrkinfo, progindex * sizeof(cb_brkinfo));
-    minfnstackp = (int*)realloc(minfnstackp, progindex * sizeof(int));
-    proggotodata = (cb_goto**)realloc(proggotodata, progindex * sizeof(cb_goto*));
-    proggotomaxct = (int*)realloc(proggotomaxct, progindex * sizeof(int));
-    oldprogargc = (int*)realloc(oldprogargc, progindex * sizeof(int));
-    oldprogargs = (char***)realloc(oldprogargs, progindex * sizeof(char**));
-    --progindex;
-    progcp[progindex] = cp;
-    progcmdl[progindex] = cmdl;
-    proglinebuf[progindex] = progLine;
-    mindlstackp[progindex] = dlstackp;
-    minitstackp[progindex] = itstackp;
-    oldbrkinfo[progindex] = brkinfo;
-    minfnstackp[progindex] = fnstackp;
-    proggotodata[progindex] = gotodata;
-    proggotomaxct[progindex] = gotomaxct;
-    oldprogargc[progindex] = progargc;
-    oldprogargs[progindex] = progargs;
-    gotodata = NULL;
-    gotomaxct = 0;
-    cp = 0;
-    cmdl = 0;
-    progLine = 1;
-    memset(&brkinfo, 0, sizeof(brkinfo));
+    prepProgData();
     if (argslater) {
         argslater = false;
     } else {
@@ -1413,9 +1580,9 @@ bool loadProg(char* filename) {
     return true;
 }
 
-static inline double randNum(double num1, double num2) {
-    double range = num2 - num1;
-    double div = RAND_MAX / range;
+static inline long double randNum(long double num1, long double num2) {
+    long double range = num2 - num1;
+    long double div = RAND_MAX / range;
     return num1 + (rand() / div);
 }
 
@@ -1535,20 +1702,23 @@ static inline void copyStrApnd(char* str1, char* str2) {
 }
 #endif
 
-static inline void copyStrApndQ(char* str1, char* str2) {
+#ifdef _WIN32
+static inline void copyStrWinApnd(char* str1, char* str2) {
+    bool spc = (*str2);
     while (*str2) {++str2;}
+    if (spc) *str2++ = ' ';
     *str2++ = '"';
-    for (; *str1; ++str1, ++str2) {*str2 = *str1;}
+    for (; *str1; ++str1, ++str2) {if (*str1 == '\\' || *str1 == '"') {*str2++ = '\\';} *str2 = *str1;}
     *str2++ = '"';
     *str2 = 0;
 }
-static inline void copyStrApndNoEsc(char* str1, char* str2) {
+#endif
+
+static inline char* copyStrApndO(char* str1, char* str2) {
     while (*str2) {++str2;}
-    for (; *str1; ++str1, ++str2) {
-        if ((*str2 = *str1) == '\\') {*str2 = '\\';}
-        if (*str1 == '\'') {*str2 = '\\'; *++str2 = '\'';}
-    }
+    for (; *str1; ++str1, ++str2) {*str2 = *str1;}
     *str2 = 0;
+    return str2;
 }
 
 static inline void copyStrSnip(char* str1, int32_t i, int32_t j, char* str2) {
@@ -1594,6 +1764,67 @@ static inline void seterrstr(char* newstr) {
     copyStr(newstr, errstr);
 }
 
+#ifndef _WIN32
+typedef pid_t cb_exec_async_t;
+#else
+typedef HANDLE cb_exec_async_t;
+char* cb_exec_async_buf = NULL;
+#endif
+
+static inline cb_exec_async_t cb_exec_async(char** args) {
+    #ifndef _WIN32
+    static bool exec_failed = false;
+    exec_failed = false;
+    pid_t pid = vfork();
+    if (pid == 0) {
+        execvp(args[0], args);
+        exec_failed = true;
+        exit(127);
+    } else if (pid > 0) {
+        if (!exec_failed) return pid;
+    }
+    return 0;
+    #else
+    if (!cb_exec_async_buf) cb_exec_async_buf = malloc(CB_BUF_SIZE);
+    *cb_exec_async_buf = 0;
+    for (; *args; ++args) {
+        copyStrWinApnd(*args, cb_exec_async_buf);
+    }
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    memset(&pi, 0, sizeof(pi));
+    if (!CreateProcess(NULL, cb_exec_async_buf, NULL, NULL, false, 0, NULL, NULL, &si, &pi)) return NULL;
+    else return pi.hProcess;
+    #endif
+}
+
+static inline int16_t cb_exec(char** args) {
+    #ifndef _WIN32
+    pid_t pid = 0;
+    if ((pid = cb_exec_async(args))) {
+        int ecode = 0;
+        while (wait(&ecode) != pid) {}
+        return WEXITSTATUS(ecode);
+    }
+    return -1;
+    #else
+    HANDLE pid = NULL;
+    uctStop();
+    if ((pid = cb_exec_async(args))) {
+        WaitForSingleObject(pid, INFINITE);
+        DWORD tmpret;
+        int ret = GetExitCodeProcess(pid, (LPDWORD)&tmpret);
+        (void)ret;
+        uctStart();
+        return tmpret & 0xFF;
+    }
+    uctStart();
+    return -1;
+    #endif
+}
+
 static inline void updateTxtAttrib() {
     #ifndef _WIN_NO_VT
     if (!esc) return;
@@ -1621,19 +1852,10 @@ static inline void updateTxtAttrib() {
     #else
     uint8_t tmpfgc, tmpbgc;
     if (txtattrib.truecolor) {
-        uint8_t a;
-        tmpfgc = (((txtattrib.truefgc >> 23) & 1) << 2) | (((txtattrib.truefgc >> 15) & 1) << 1) | ((txtattrib.truefgc >> 7) & 1);
-        tmpfgc |= ((((txtattrib.truefgc >> 22) & 1) & ((txtattrib.truefgc >> 21) & 1)) << 2)\
-            | ((((txtattrib.truefgc >> 14) & 1) & ((txtattrib.truefgc >> 13) & 1)) << 1)\
-            | (((txtattrib.truefgc >> 6) & 1) & ((txtattrib.truefgc >> 5) & 1));
-        a = ((((txtattrib.truefgc >> 16) & 0xFF) + ((txtattrib.truefgc >> 8) & 0xFF) + (txtattrib.truefgc & 0xFF)) / 3);
-        tmpfgc |= (8 * (a > 84));
-        tmpbgc = (((txtattrib.truebgc >> 23) & 1) << 2) | (((txtattrib.truebgc >> 15) & 1) << 1) | ((txtattrib.truebgc >> 7) & 1);
-        tmpbgc |= ((((txtattrib.truebgc >> 22) & 1) & ((txtattrib.truebgc >> 21) & 1)) << 2)\
-            | ((((txtattrib.truebgc >> 14) & 1) & ((txtattrib.truebgc >> 13) & 1)) << 1)\
-            | (((txtattrib.truebgc >> 6) & 1) & ((txtattrib.truebgc >> 5) & 1));
-        a = ((((txtattrib.truebgc >> 16) & 0xFF) + ((txtattrib.truebgc >> 8) & 0xFF) + (txtattrib.truebgc & 0xFF)) / 3);
-        tmpbgc |= (8 * (a > 84));
+        tmpfgc = ((((txtattrib.truefgc >> 16) & 0xFF) > 85) << 2 | (((txtattrib.truefgc >> 8) & 0xFF) > 85) << 1 | ((txtattrib.truefgc & 0xFF) > 85))\
+        | (((txtattrib.truefgc >> 16) & 0xFF) > 170 || ((txtattrib.truefgc >> 8) & 0xFF) > 170 || (txtattrib.truefgc & 0xFF) > 170) << 3;
+        tmpbgc = ((((txtattrib.truebgc >> 16) & 0xFF) > 85) << 2 | (((txtattrib.truebgc >> 8) & 0xFF) > 85) << 1 | ((txtattrib.truebgc & 0xFF) > 85))\
+        | (((txtattrib.truebgc >> 16) & 0xFF) > 170 || ((txtattrib.truebgc >> 8) & 0xFF) > 170 || (txtattrib.truebgc & 0xFF) > 170) << 3;
     } else {
         uint8_t b1 = 0, b2 = 0;
         b1 = txtattrib.fgc & 1; b2 = (txtattrib.fgc >> 2) & 1; tmpfgc = (b1 ^ b2);
@@ -1641,9 +1863,11 @@ static inline void updateTxtAttrib() {
         b1 = txtattrib.bgc & 1; b2 = (txtattrib.bgc >> 2) & 1; tmpbgc = (b1 ^ b2);
         tmpbgc = (tmpbgc) | (tmpbgc << 2); tmpbgc = txtattrib.bgc ^ tmpbgc;
     }
-    if (txtattrib.dim) {tmpfgc %= 8; tmpbgc %= 8;}
+    if (!txtattrib.truecolor && txtattrib.dim) {tmpfgc %= 8; tmpbgc %= 8;}
     if (txtattrib.reverse) swap(tmpfgc, tmpbgc);
-	SetConsoleTextAttribute(hConsole, (tmpfgc % 16) + ((tmpbgc % 16) << 4));
+    if (!txtattrib.fgce) tmpfgc = (ocAttrib & 0b11110000);
+    if (!txtattrib.bgce) tmpbgc = (ocAttrib & 0b00001111) >> 4;
+	SetConsoleTextAttribute(hConsole, (tmpfgc % 16) | ((tmpbgc % 16) << 4));
     #endif
     fflush(stdout);
 }
@@ -1809,7 +2033,7 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
                         outbuf[0] = '0' + ret;
                         outbuf[1] = 0;
                         goto fexit;
-                    } else if (!strcmp(farg[0], "EXECA") || !strcmp(farg[0], "EXECA$")) {
+                    } else if (!strcmp(farg[0], "EXECA") || !strcmp(farg[0], "EXECA$") || !strcmp(farg[0], "CALLFUNC")) {
                         skipfargsolve = true;
                     }
                 }
@@ -2013,8 +2237,7 @@ bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
         if (s == -1) s = 0;
         vardata[v].data = (char**)malloc((s + 1) * sizeof(char*));
         for (int32_t i = 0; i <= s; ++i) {
-            vardata[v].data[i] = (char*)malloc(strlen(val) + 1);
-            copyStr(val, vardata[v].data[i]);
+            vardata[v].data[i] = strdup(val);
         }
     } else {
         if (s != -1) {cerr = 25; return false;}
@@ -2066,7 +2289,7 @@ bool delVar(char* vn) {
         }
         nfree(vardata[v].data);
         if (v == varmaxct - 1) {
-            while (!vardata[v].inuse && v >= 0) {varmaxct--; v--;}
+            while (v >= 0 && !vardata[v].inuse) {varmaxct--; v--;}
             vardata = (cb_var*)realloc(vardata, varmaxct * sizeof(cb_var));
         }
     }
@@ -2135,327 +2358,195 @@ bool closeFile(int num) {
     return true;
 }
 
-static inline bool gvchkchar(char* tmp, int32_t i) {
-    if (isSpChar(tmp[i + 1])) {
-        if (tmp[i + 1] == '-') {
-            if (isSpChar(tmp[i + 2])) {
-                cerr = 1; return false;
-            }
-        } else {
-            cerr = 1; return false;
-        }
-    } else {
-        if (i > 0 && isSpChar(tmp[i - 1])) {
-            cerr = 1; return false;
-        }
-    }
-    return true;
-}
-
 uint16_t getValIndex = 0;
-char* getVal_tmp[4] = {NULL, NULL, NULL, NULL};
+char* getVal_tmp[4] = {NULL, NULL};
+
+typedef struct {
+    char act;
+    bool neg;
+    char* data;
+    long double ndata;
+} __attribute__((aligned(sizeof(void*)))) cb_gvtoken;
+
+cb_gvtoken token[256];
 
 uint8_t getVal(char* inbuf, char* outbuf) {
     if (inbuf[0] == 0) {return 255;}
-    char* tmp[4];
+    //printf("getVal[%d]: in: {%s}\n", getValIndex, inbuf); uint64_t starttime = usTime();
+    char* tmp[2];
     if (getValIndex) {
         tmp[0] = malloc(CB_BUF_SIZE);
         tmp[1] = malloc(CB_BUF_SIZE);
-        tmp[2] = malloc(CB_BUF_SIZE);
-        tmp[3] = malloc(CB_BUF_SIZE);
     } else {
         tmp[0] = getVal_tmp[0];
         tmp[1] = getVal_tmp[1];
-        tmp[2] = getVal_tmp[2];
-        tmp[3] = getVal_tmp[3];
     }
     getValIndex++;
-    int32_t ip = 0, jp = 0;
-    uint8_t t = 0;
-    uint8_t dt = 0;
-    bool inStr = false;
-    register double num1 = 0;
-    register double num2 = 0;
-    register double num3 = 0;
-    int numAct;
-    bool* seenStr = NULL;
-    if ((isSpChar(inbuf[0]) && inbuf[0] != '-') || isSpChar(inbuf[strlen(inbuf) - 1])) {cerr = 1; dt = 0; goto gvreturn;}
+    char* ip = NULL, * jp = NULL;
     int pct = 0, bct = 0;
-    tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
+    uint8_t t = 0, dt = 0;
+    bool* seenStr = NULL;
+    bool inStr = false;
     seenStr = malloc(sizeof(bool));
     seenStr[0] = false;
-    for (register int32_t i = 0; inbuf[i]; ++i) {
-        switch (inbuf[i]) {
-            default:;
-                if (inStr) break;
-                if (inbuf[i] == ',' || isSpChar(inbuf[i])) seenStr[pct] = false;
-                break;
-            case '&':;
-                if (!inStr && pct > 0) seenStr[pct] = false;
-                break;
-            case '|':;
-                if (!inStr && pct > 0) seenStr[pct] = false;
-                break;
-            case '"':;
-                inStr = !inStr;
-                if (inStr && seenStr[pct]) {
-                    dt = 0;
-                    cerr = 1;
-                    goto gvreturn;
+    cb_gvtoken* token = NULL;
+    tmp[0][0] = '+'; tmp[0][1] = 0; tmp[1][0] = 0;
+    int tokens = 0;
+    bool mtoken = false;
+    if (isSpChar(*inbuf) && *inbuf != '-') {cerr = 1; dt = 0; goto gvreturn;}
+    char* t1, * t2;
+    uint8_t sawSpChar = 0;
+    //printf("getVal[%d]: block 0: time: [%ld]\n", getValIndex - 1, usTime() - starttime); starttime = usTime();
+    for (t1 = inbuf, t2 = tmp[0]; *t1; ++t1) {
+        if (!pct && !bct && !inStr) {
+            if (isSpChar(*t2)) {
+                if (*t2 == '-' && sawSpChar) {
+                    if (sawSpChar > 1) {dt = 0; cerr = 1; goto gvreturn;}
+                } else if (isSpChar(*t2) && sawSpChar) {
+                    dt = 0; cerr = 1; goto gvreturn;
+                } else {
+                    ++tokens;
                 }
-                seenStr[pct] = true;
-                break;
-            case '(':;
-                if (inStr) break;
-                if (pct == 0) {ip = i;}
-                pct++;
-                seenStr = (bool*)realloc(seenStr, (pct + 1) * sizeof(bool));
-                seenStr[pct] = false;
-                break;
-            case ')':;
-                if (inStr) break;
-                pct--;
-                if (pct == 0 && (ip == 0 || isSpChar(inbuf[ip - 1]))) {
-                    int32_t tmplen[2];
-                    tmplen[0] = strlen(inbuf);
-                    jp = i;
-                    copyStrSnip(inbuf, ip + 1, jp, tmp[0]);
-                    t = getVal(tmp[0], tmp[0]);
-                    if (t == 0) {dt = 0; goto gvreturn;}
-                    if (dt == 0) dt = t;
-                    if (t == 255) {t = 1; dt = 1;}
-                    if (t != dt) {cerr = 2; dt = 0; goto gvreturn;}
-                    copyStrFrom(inbuf, jp + 1, tmp[1]);
-                    inbuf[ip] = 0;
-                    if (t == 1) copyStrApndQ(tmp[0], inbuf);
-                    else copyStrApnd(tmp[0], inbuf);
-                    copyStrApnd(tmp[1], inbuf);
-                    tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
-                    tmplen[1] = strlen(inbuf);
-                    i -= tmplen[0] - tmplen[1];
-                }
-                break;
-            case '[':;
-                if (inStr) break;
-                bct++;
-                break;
-            case ']':;
-                if (inStr) break;
-                bct--;
-                break;
+                ++sawSpChar;
+            } else {
+                sawSpChar = 0;
+            }
+        }
+        *(++t2) = *t1;
+        switch (*t1) {
+            default:; if (inStr) break; if (*t1 == ',' || isSpChar(*t1)) seenStr[pct] = false; break;
+            case '&':; if (!inStr && pct > 0) seenStr[pct] = false; break;
+            case '|':; if (!inStr && pct > 0) seenStr[pct] = false; break;
+            case '"':; if (pct || bct) break; inStr = !inStr; if (inStr && seenStr[pct]) {dt = 0; cerr = 1; goto gvreturn;} seenStr[pct] = true; break;
+            case '(':; if (inStr) break; ++pct; seenStr = (bool*)realloc(seenStr, (pct + 1) * sizeof(bool)); seenStr[pct] = false; break;
+            case ')':; if (inStr) break; --pct; break;
+            case '[':; if (inStr) break; ++bct; break;
+            case ']':; if (inStr) break; --bct; break;
         }
     }
-    if (pct || bct) {cerr = 1; dt = 0; goto gvreturn;}
-    ip = 0; jp = 0;
-    tmp[0][0] = 0; tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
-    while (1) {
-        pct = 0;
-        bct = 0;
-        while (inbuf[jp]) {
-            if (inbuf[jp] == '"') inStr = !inStr;
-            if (!inStr) {
-                switch (inbuf[jp]) {
-                    case '(': pct++; break;
-                    case ')': pct--; break;
-                    case '[': bct++; break;
-                    case ']': bct--; break;
-                    default:;
-                        if ((inbuf[jp] != '-' || jp > 0) && isSpChar(inbuf[jp]) && !pct && !bct) goto gvwhileexit1;
-                        break;
-                }
-            }
-            jp++;
-        }
-        gvwhileexit1:;
-        if (inStr) {dt = 0; cerr = 1; goto gvreturn;}
-        copyStrSnip(inbuf, ip, jp, tmp[0]);
-        t = getType(tmp[0]);
-        if (t == 1) getStr(tmp[0], tmp[0]);
-        if (t == 255) {
-            t = getVar(tmp[0], tmp[0]);
-            if (t == 0) {dt = 0; dt = 0; goto gvreturn;}
-            if (t == 1) {
-                tmp[3][0] = 0;
-                copyStrApndQ(tmp[0], tmp[3]);
-                swap(tmp[0], tmp[3]);
-            }
-        }
-        if (t && dt == 0) {dt = t;} else
-        if ((t && t != dt)) {cerr = 2; dt = 0; goto gvreturn;} else
-        if (t == 0) {cerr = 1; dt = 0; goto gvreturn;}
-        if ((dt == 1 && inbuf[jp] != '+') && inbuf[jp]) {cerr = 1; dt = 0; goto gvreturn;}
-        if (t == 1) {copyStrSnip(tmp[0], 1, strlen(tmp[0]) - 1, tmp[2]); copyStrApnd(tmp[2], tmp[1]);} else
-        if (t == 2) {
-            if (inbuf[jp - 1]) copyStrFrom(inbuf, jp, tmp[1]);
-            else tmp[1][0] = 0;
-            copyStrApnd(tmp[1], tmp[0]);
-            register int32_t p1, p2, p3;
-            bool inStr = false;
-            pct = 0;
-            bct = 0;
-            while (1) {
-                numAct = 0;
-                p1 = 0, p2 = 0, p3 = 0;
-                for (register int32_t i = 0; tmp[0][i]; ++i) {
-                    switch (tmp[0][i]) {
-                        case '"': if (!pct && !bct) inStr = !inStr; break;
-                        case '(': pct++; break;
-                        case ')': pct--; break;
-                        case '[': bct++; break;
-                        case ']': bct--; break;
-                        case '^':;
-                            if (!inStr && !pct && !bct) {
-                                if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
-                                p2 = i; numAct = 4;
-                                if (p2) goto foundact;
-                            }
-                            break;
-                    }
-                }
-                for (register int32_t i = 0; tmp[0][i]; ++i) {
-                    switch (tmp[0][i]) {
-                        case '"': if (!pct && !bct) inStr = !inStr; break;
-                        case '(': pct++; break;
-                        case ')': pct--; break;
-                        case '[': bct++; break;
-                        case ']': bct--; break;
-                        case '*':;
-                            if (!inStr && !pct && !bct) {
-                                if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
-                                p2 = i; numAct = 2;
-                                if (p2) goto foundact;
-                            }
-                            break;
-                        case '/':;
-                            if (!inStr && !pct && !bct) {
-                                if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
-                                p2 = i; numAct = 3;
-                                if (p2) goto foundact;
-                            }
-                            break;
-                    }
-                }
-                for (register int32_t i = 0; tmp[0][i]; ++i) {
-                    switch (tmp[0][i]) {
-                        case '"': if (!pct && !bct) inStr = !inStr; break;
-                        case '(': pct++; break;
-                        case ')': pct--; break;
-                        case '[': bct++; break;
-                        case ']': bct--; break;
-                        case '+':;
-                            if (!inStr && !pct && !bct) {
-                                if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
-                                p2 = i; numAct = 0;
-                                if (p2) goto foundact;
-                            }
-                            break;
-                        case '-':;
-                            if (!inStr && !pct && !bct) {
-                                if (!gvchkchar(tmp[0], i)) {dt = 0; goto gvreturn;}
-                                p2 = i; numAct = 1;
-                                if (p2) goto foundact;
-                            }
-                            break;
-                    }
-                }
-                foundact:;
-                inStr = false;
-                pct = 0;
-                bct = 0;
-                if (p2 == 0) {
-                    if (p3 == 0) {
-                        t = getType(tmp[0]);
-                        if (t == 0) {cerr = 1; dt = 0; goto gvreturn;} else
-                        if (t == 255) {
-                            t = getVar(tmp[0], tmp[0]);
-                            if (t == 0) {dt = 0; goto gvreturn;}
-                            if (t == 255) {t = 2; tmp[0][0] = '0'; tmp[0][1] = 0;}
-                            if (t != 2) {cerr = 2; dt = 0; goto gvreturn;}
-                        }
-                    }
-                    swap(tmp[0], tmp[1]);
-                    goto gvfexit;
-                }
-                tmp[1][0] = 0; tmp[2][0] = 0; tmp[3][0] = 0;
-                for (register int32_t i = p2 - 1; i > 0; --i) {
-                    if (!pct && !bct && tmp[0][i] == '"') inStr = !inStr;
-                    if (!inStr) {
-                        switch (tmp[0][i]) {
-                            case '(': pct++; break;
-                            case ')': pct--; break;
-                            case '[': bct++; break;
-                            case ']': bct--; break;
-                            default:;
-                                if (isSpChar(tmp[0][i]) && !inStr && !pct && !bct) {p1 = i; goto gvforexit1;}
-                                break;
-                        }
-                    }
-                }
-                gvforexit1:;
-                for (register int32_t i = p2 + 1; true; ++i) {
-                    if (!pct && !bct && tmp[0][i] == '"') inStr = !inStr;
-                    if (!inStr) {
-                        switch (tmp[0][i]) {
-                            case '(': pct++; break;
-                            case ')': pct--; break;
-                            case '[': bct++; break;
-                            case ']': bct--; break;
-                            case 0: p3 = i; goto gvforexit2;
-                            default:;
-                                if (isSpChar(tmp[0][i]) && i != p2 + 1 && !pct && !bct) {p3 = i; goto gvforexit2;}
-                                break;
-                        }
-                    }
-                }
-                gvforexit2:;
-                if (p1 != 0 && isSpChar(tmp[0][p1])) p1++;
-                copyStrSnip(tmp[0], p1, p2, tmp[2]);
-                t = getType(tmp[2]);
-                if (t == 0) {cerr = 1; dt = 0; goto gvreturn;} else
-                if (t == 255) {t = getVar(tmp[2], tmp[2]); if (t == 0) {dt = 0; goto gvreturn;} if (t != 2) {cerr = 2; dt = 0; goto gvreturn;}}
-                copyStrSnip(tmp[0], p2 + 1, p3, tmp[3]);
-                t = getType(tmp[3]);
-                if (t == 0) {cerr = 1; dt = 0; goto gvreturn;} else
-                if (t == 255) {t = getVar(tmp[3], tmp[3]); if (t == 0) {dt = 0; goto gvreturn;} if (t != 2) {cerr = 2; dt = 0; goto gvreturn;}}
-                if (!strcmp(tmp[2], ".")) {cerr = 1; dt = 0; goto gvreturn;}
-                num1 = atof(tmp[2]);
-                if (!strcmp(tmp[2], ".")) {cerr = 1; dt = 0; goto gvreturn;}
-                num2 = atof(tmp[3]);
-                switch (numAct) {
-                    case 0: num3 = num1 + num2; break;
-                    case 1: num3 = num1 - num2; break;
-                    case 2: num3 = num1 * num2; break;
-                    case 3: if (num2 == 0) {cerr = 5; dt = 0; goto gvreturn;} num3 = num1 / num2; break;
-                    case 4:;
-                        if (num1 == 0) {if (num2 == 0) {cerr = 5; dt = 0; goto gvreturn;} num3 = 0; break;}
-                        if (num2 == 0) {num3 = 1; break;}
-                        num3 = pow(num1, num2);
-                        break;
-                }
-                sprintf(tmp[1], "%lf", num3);
-                int32_t i = 0, j = strlen(tmp[1]) - 1;
-                bool dp = false;
-                while (tmp[1][i]) {if (tmp[1][i++] == '.') {dp = true; tmp[1][i + 6] = 0; break;}}
-                if (dp) {while (tmp[1][j] == '0') {--j;} if (tmp[1][j] == '.') {--j;}}
-                i = (tmp[1][0] == '-'); dp = (bool)i;
-                while (tmp[1][i] == '0') {++i;}
-                if (!tmp[1][i] || tmp[1][i] == '.') {--i;}
-                if (dp) tmp[1][--i] = '-';
-                copyStrSnip(tmp[1], i, j + 1, tmp[2]);
-                copyStrFrom(tmp[0], p3, tmp[3]);
-                if (p1) copyStrTo(tmp[0], p1, tmp[1]);
-                else {tmp[1][0] = 0;}
-                copyStrApnd(tmp[2], tmp[1]);
-                copyStrApnd(tmp[3], tmp[1]);
-                swap(tmp[1], tmp[0]);
-            }
-        }
-        if (inbuf[jp] == 0) {break;}
-        jp++;
-        ip = jp;
+    if (pct || bct || inStr) {cerr = 1; dt = 0; goto gvreturn;}
+    if (isSpChar(*t2)) {cerr = 1; dt = 0; goto gvreturn;}
+    *++t2 = 0;
+    //printf("getVal[%d]: block 1: time: [%ld]\n", getValIndex - 1, usTime() - starttime); starttime = usTime();
+    //printf("tokens: [%d]\n", tokens);
+    token = malloc(tokens * sizeof(cb_gvtoken));
+    mtoken = true;
+    for (int i = 0; i < tokens; ++i) {
+        memset(&token[i], 0, sizeof(cb_gvtoken));
     }
-    gvfexit:;
+    int curtkn = 0;
+    for (t1 = tmp[0]; *t1; ++t1) {
+        switch (*t1) {
+            case '"':; if (pct || bct) break; inStr = !inStr; break;
+            case '(':; if (inStr) break; ++pct; break;
+            case ')':; if (inStr) break; --pct; break;
+            case '[':; if (inStr) break; ++bct; break;
+            case ']':; if (inStr) break; --bct; break;
+        }
+        if (!pct && !bct && !inStr) {
+            if (isSpChar(*t1)) {
+                if (!(*t1 == '-' && sawSpChar)) {
+                    ip = t1;
+                }
+                ++sawSpChar;
+            } else {
+                sawSpChar = 0;
+                if (isSpChar(*(t1 + 1)) || (!*(t1 + 1))) {
+                    jp = t1 + 1;
+                    token[curtkn].act = *(ip++);
+                    if (token[curtkn].act == '+' && *ip == '-') {++ip; token[curtkn].act = '-';}
+                    bool q = true;
+                    if (*ip == '(') {
+                        copyStrTo(ip + 1, jp - ip - 2, tmp[1]);
+                        t = getVal(tmp[1], tmp[1]);
+                        if (!t) {dt = 0; goto gvreturn;}
+                        if (t == 255) {dt = 0; cerr = 1; goto gvreturn;}
+                        if (!dt) dt = t;
+                        else if (t != dt) {dt = 0; cerr = 2; goto gvreturn;}
+                        q = false;
+                    } else {
+                        copyStrTo(ip, jp - ip, tmp[1]);
+                        t = getType(tmp[1]);
+                        if (!t) {dt = 0; cerr = 1; goto gvreturn;}
+                        if (t == 255) {t = getVar(tmp[1], tmp[1]); q = false;}
+                        if (!t) {dt = 0; goto gvreturn;}
+                        if (!dt) dt = t;
+                        else if (t != dt) {dt = 0; cerr = 2; goto gvreturn;}
+                    }
+                    if (t == 1) {
+                        if (token[curtkn].act != '+') {dt = 0; cerr = 1; goto gvreturn;}
+                        int32_t tmplen = strlen(tmp[1]) - q;
+                        token[curtkn].data = malloc(tmplen + 1);
+                        copyStrSnip(tmp[1], q, tmplen, token[curtkn].data);
+                        if (q) getStr(token[curtkn].data, token[curtkn].data);
+                    } else {
+                        token[curtkn].ndata = strtold(tmp[1], NULL);
+                        if (q && (token[curtkn].act == '*' || token[curtkn].act == '/') && token[curtkn].ndata < 0) {
+                            token[curtkn].neg = true;
+                            token[curtkn].ndata = -token[curtkn].ndata;
+                        }
+                    }
+                    //printf("added token: {%c} {%c}: {%s}/[%Lf]\n", token[curtkn].act, token[curtkn].neg, token[curtkn].data, token[curtkn].ndata);
+                    ++curtkn;
+                    jp = ip;
+                }
+            }
+        }
+    }
+    //printf("getVal[%d] to solve: [%d]:{%s}\n", getValIndex, tokens, tmp[0]);
+    //printf("getVal[%d]: block 2: time: [%ld]\n", getValIndex - 1, usTime() - starttime); starttime = usTime();
     if (dt == 2) {
+        if (tokens == 1) goto skipt;
+        for (int i = 1; i < tokens; ++i) {
+            if (token[i].act == '^') {
+                if (token[i - 1].ndata == 0) {if (token[i].ndata == 0) {cerr = 5; dt = 0; goto gvreturn;} token[i - 1].ndata = 0; continue;}
+                if (token[i].ndata == 0) {token[i - 1].ndata = 1; continue;}
+                token[i - 1].ndata = pow(token[i - 1].ndata, token[i].ndata);
+                if (token[i - 1].neg) {token[i - 1].ndata = -token[i - 1].ndata;}
+                token[i - 1].neg = false;
+                token[i].act = 0;
+            }
+        }
+        for (int i = 1; i < tokens; ++i) {
+            if (token[i].act == '*') {
+                int j;
+                for (j = i - 1; j >= 0 && token[j].act == 0; --j) {}
+                if (token[i].neg) {token[i].ndata = -token[i].ndata;}
+                if (token[j].neg) {token[j].ndata = -token[j].ndata;}
+                token[j].ndata = token[j].ndata * token[i].ndata;
+                token[j].neg = false;
+                token[i].act = 0;
+            }
+            if (token[i].act == '/') {
+                int j;
+                for (j = i - 1; j >= 0 && token[j].act == 0; --j) {}
+                if (token[i].neg) {token[i].ndata = -token[i].ndata;}
+                if (token[j].neg) {token[j].ndata = -token[j].ndata;}
+                if (token[i].ndata == 0) {cerr = 5; dt = 0; goto gvreturn;}
+                token[j].ndata = token[j].ndata / token[i].ndata;
+                token[j].neg = false;
+                token[i].act = 0;
+            }
+        }
+        for (int i = 1; i < tokens; ++i) {
+            if (token[i].act == '+') {
+                int j;
+                for (j = i - 1; j >= 0 && token[j].act == 0; --j) {}
+                if (token[j].act == '-') {token[j].ndata = -token[j].ndata; token[j].act = '+';}
+                token[j].ndata = token[j].ndata + token[i].ndata;
+                token[i].act = 0;
+            }
+            if (token[i].act == '-') {
+                int j;
+                for (j = i - 1; j >= 0 && token[j].act == 0; --j) {}
+                if (token[j].act == '-') {token[j].ndata = -token[j].ndata; token[j].act = '+';}
+                token[j].ndata = token[j].ndata - token[i].ndata;
+                token[i].act = 0;
+            }
+        }
+        skipt:;
+        //printf("last token: {%c}:[%Lf]\n", token[0].act, token[0].ndata);
+        sprintf(tmp[1], "%Lf", (token[0].act == '-') ? -token[0].ndata : token[0].ndata);
         if (!strcmp(tmp[1], ".")) {cerr = 1; dt = 0; goto gvreturn;}
         int32_t i = 0, j = strlen(tmp[1]) - 1;
         bool dp = false;
@@ -2469,17 +2560,31 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         copyStrSnip(tmp[1], i, j + 1, outbuf);
         if (outbuf[0] == '-' && outbuf[1] == '0' && outbuf[2] == 0) {outbuf[0] = '0'; outbuf[1] = 0;}
     } else {
-        copyStr(tmp[1], outbuf);
+        outbuf[0] = 0;
+        char* oOutbuf = outbuf;
+        for (int i = 0; i < tokens; ++i) {
+            //printf("appending: [%d]:{%s}\n", i, token[i].data);
+            oOutbuf = copyStrApndO(token[i].data, oOutbuf);
+        }
+        //printf("outbuf: {%s}\n", outbuf);
     }
+    //printf("getVal[%d]: block 3: time: [%ld]\n", getValIndex - 1, usTime() - starttime); starttime = usTime();
     if (outbuf[0] == 0 && dt != 1) {outbuf[0] = '0'; outbuf[1] = 0; dt = 2;}
     gvreturn:;
     getValIndex--;
     nfree(seenStr);
-    if (getValIndex) {nfree(tmp[0]); nfree(tmp[1]); nfree(tmp[2]); nfree(tmp[3]);}
+    if (mtoken) {
+        for (int i = 0; i < tokens; ++i) {
+            nfree(token[i].data);
+        }
+        nfree(token);
+    }
+    if (getValIndex) {nfree(tmp[0]); nfree(tmp[1]);}
+    //printf("getVal[%d]: out: [%d]:{%s}, time: [%lu]\n", getValIndex, dt, outbuf, usTime() - starttime);
     return dt;
 }
 
-static inline bool solvearg(int i) {
+static inline bool solvearg(char** arg, uint8_t* argt, int32_t* argl, int i) {
     if (i == 0) {
         argt[0] = 0;
         argl[0] = strlen(arg[0]);
@@ -2586,60 +2691,6 @@ static inline int getArgO(int num, char* inbuf, char* outbuf, int32_t i) {
 }
 
 char tmpbuf[2][CB_BUF_SIZE];
-
-static inline void mkargs() {
-    int32_t j = 0;
-    while (cmd[j] == ' ') {++j;}
-    int32_t h = j;
-    bool sccmd = false;
-    if (cmd[j] == '$' || cmd[j] == '@' || cmd[j] == '%') {
-        int32_t tmpj = j + 1;
-        while (cmd[tmpj] == ' ') {++tmpj;}
-        if (cmd[tmpj] != '=') sccmd = true;
-    }
-    if (!sccmd) {
-        while (cmd[h] != ' ' && cmd[h] != '=' && cmd[h]) {++h;}
-    }
-    copyStrFrom(cmd, (cmd[h]) ? h + 1 : h, tmpbuf[0]);
-    if (!sccmd) {
-        int32_t tmph = h;
-        while (cmd[tmph] == ' ' && cmd[tmph]) {++tmph;}
-        if (cmd[tmph] == '=') {
-            strcpy(tmpbuf[1], "SET ");
-            cmd[tmph] = ',';
-            copyStrApnd(cmd, tmpbuf[1]);
-            cmd = (char*)realloc(cmd, strlen(tmpbuf[1]) + 1);
-            copyStr(tmpbuf[1], cmd);
-            copyStr(tmpbuf[1], tmpbuf[0]);
-            tmpbuf[1][0] = 0;
-            h = 3;
-            j = 0;
-        }
-    }
-    for (int i = 0; i <= argct; ++i) {
-        nfree(arg[i]);
-    }
-    argct = getArgCt(tmpbuf[0]);
-    arg = (char**)realloc(arg, (argct + 1) * sizeof(char*));
-    argt = (uint8_t*)realloc(argt, (argct + 1) * sizeof(uint8_t));
-    argl = (int32_t*)realloc(argl, (argct + 1) * sizeof(int32_t));
-    int32_t gptr = 0;
-    copyStrSnip(cmd, j, ((sccmd) ? h + 1 : h), tmpbuf[0]);
-    argl[0] = strlen(tmpbuf[0]);
-    arg[0] = malloc(argl[0] + 1);
-    copyStr(tmpbuf[0], arg[0]);
-    copyStrFrom(cmd, (h >= argl[0]) ? argl[0] : h + 1, tmpbuf[0]);
-    for (int i = 1; i <= argct; ++i) {
-        int32_t ngptr = getArgO(i - 1, tmpbuf[0], tmpbuf[1], gptr);
-        if (ngptr == -1) return;
-        argl[i] = ngptr - gptr;
-        gptr = ngptr;
-        arg[i] = malloc(argl[i] + 1);
-        copyStr(tmpbuf[1], arg[i]);
-        arg[i][argl[i]] = 0;
-    }
-    if (argct == 1 && arg[1][0] == 0) {argct = 0;}
-}
 
 char* lttmp_tmp[3];
 int logictestexpr_index = 0;
@@ -2748,44 +2799,44 @@ static inline uint8_t logictestexpr(char* inbuf) {
         goto ltreturn;
     } else if (!strcmp(lttmp[1], ">")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
-        double num1, num2;
-        sscanf(lttmp[0], "%lf", &num1);
-        sscanf(lttmp[2], "%lf", &num2);
+        long double num1, num2;
+        sscanf(lttmp[0], "%Lf", &num1);
+        sscanf(lttmp[2], "%Lf", &num2);
         ret = num1 > num2;
         goto ltreturn;
     } else if (!strcmp(lttmp[1], "<")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
-        double num1, num2;
-        sscanf(lttmp[0], "%lf", &num1);
-        sscanf(lttmp[2], "%lf", &num2);
+        long double num1, num2;
+        sscanf(lttmp[0], "%Lf", &num1);
+        sscanf(lttmp[2], "%Lf", &num2);
         ret = num1 < num2;
         goto ltreturn;
     } else if (!strcmp(lttmp[1], ">=")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
-        double num1, num2;
-        sscanf(lttmp[0], "%lf", &num1);
-        sscanf(lttmp[2], "%lf", &num2);
+        long double num1, num2;
+        sscanf(lttmp[0], "%Lf", &num1);
+        sscanf(lttmp[2], "%Lf", &num2);
         ret = num1 >= num2;
         goto ltreturn;
     } else if (!strcmp(lttmp[1], "<=")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
-        double num1, num2;
-        sscanf(lttmp[0], "%lf", &num1);
-        sscanf(lttmp[2], "%lf", &num2);
+        long double num1, num2;
+        sscanf(lttmp[0], "%Lf", &num1);
+        sscanf(lttmp[2], "%Lf", &num2);
         ret = num1 <= num2;
         goto ltreturn;
     } else if (!strcmp(lttmp[1], "=>")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
-        double num1, num2;
-        sscanf(lttmp[0], "%lf", &num1);
-        sscanf(lttmp[2], "%lf", &num2);
+        long double num1, num2;
+        sscanf(lttmp[0], "%Lf", &num1);
+        sscanf(lttmp[2], "%Lf", &num2);
         ret = num1 >= num2;
         goto ltreturn;
     } else if (!strcmp(lttmp[1], "=<")) {
         if (t1 == 1) {cerr = 2; goto ltreturn;}
-        double num1, num2;
-        sscanf(lttmp[0], "%lf", &num1);
-        sscanf(lttmp[2], "%lf", &num2);
+        long double num1, num2;
+        sscanf(lttmp[0], "%Lf", &num1);
+        sscanf(lttmp[2], "%Lf", &num2);
         ret = num1 <= num2;
         goto ltreturn;
     }
@@ -2858,7 +2909,7 @@ uint8_t logictest(char* inbuf) {
 
 char ltmp[2][CB_BUF_SIZE];
 
-bool runlogic() {
+bool runlogic(char* cmd) {
     ltmp[0][0] = 0; ltmp[1][0] = 0;
     int32_t i = 0;
     while (cmd[i] == ' ') {++i;}
@@ -2871,7 +2922,7 @@ bool runlogic() {
     if (isLineNumber(ltmp[0])) {
         int tmp = -1;
         for (int j = 0; j < gotomaxct; ++j) {
-            if (!gotodata[j].used) {tmp = j; break;}
+            if (!gotodata[j].inuse) {tmp = j; break;}
             else if (!strcmp(gotodata[j].name, ltmp[0])) {
                 if (gotodata[j].cp == cmdpos) {goto skiplbl;}
                 cerr = 28; return true;
@@ -2882,11 +2933,10 @@ bool runlogic() {
             ++gotomaxct;
             gotodata = realloc(gotodata, gotomaxct * sizeof(cb_goto));
         }
-        gotodata[tmp].name = malloc(strlen(ltmp[0]) + 1);
-        copyStr(ltmp[0], gotodata[tmp].name);
+        gotodata[tmp].name = strdup(ltmp[0]);
         gotodata[tmp].cp = cmdpos;
         gotodata[tmp].pl = progLine;
-        gotodata[tmp].used = true;
+        gotodata[tmp].inuse = true;
         gotodata[tmp].dlsp = dlstackp;
         gotodata[tmp].fnsp = fnstackp;
         gotodata[tmp].itsp = itstackp;
@@ -2902,6 +2952,7 @@ bool runlogic() {
         j -= i;
         i = 0;
     }
+    if (addsub > -1) return false;
     cerr = 0;
     chkCmdPtr = ltmp[0];
     #include "logic.c"
@@ -2911,8 +2962,6 @@ bool runlogic() {
 static inline void initBaseMem() {
     getVal_tmp[0] = malloc(CB_BUF_SIZE);
     getVal_tmp[1] = malloc(CB_BUF_SIZE);
-    getVal_tmp[2] = malloc(CB_BUF_SIZE);
-    getVal_tmp[3] = malloc(CB_BUF_SIZE);
     getFunc_gftmp[0] = malloc(CB_BUF_SIZE);
     getFunc_gftmp[1] = malloc(CB_BUF_SIZE);
     bfnbuf = malloc(CB_BUF_SIZE);
@@ -2926,8 +2975,6 @@ static inline void initBaseMem() {
 static inline void freeBaseMem() {
     nfree(getVal_tmp[0]);
     nfree(getVal_tmp[1]);
-    nfree(getVal_tmp[2]);
-    nfree(getVal_tmp[3]);
     nfree(getFunc_gftmp[0]);
     nfree(getFunc_gftmp[1]);
     nfree(bfnbuf);
@@ -2938,11 +2985,10 @@ static inline void freeBaseMem() {
     nfree(getVarBuf);
 }
 
-static inline void printError(int error) {
+static inline void printError(int error, char* arg0, char* cmd) {
     getCurPos();
     if (curx != 1) putchar('\n');
-    if (inProg) {printf("Error %d on line %d of '%s':\n%s\n", error, progLine, basefilename(progfnstr), cmd);}
-    else {printf("Error %d: ", error);}
+    printf("Error %d: ", error);
     switch (error) {
         default:;
             fputs("Unknown", stdout);
@@ -3058,6 +3104,21 @@ static inline void printError(int error) {
         case 36:;
             printf("Extension already loaded: '%s'", errstr);
             break;
+        case 37:;
+            printf("Cannot find subfunction: '%s'", errstr);
+            break;
+        case 38:;
+            printf("Invalid subfunction name: '%s'", errstr);
+            break;
+        case 39:;
+            printf("Subfunction already exists: '%s'", errstr);
+            break;
+        case 40:;
+            fputs("Subfunctions cannot be nested", stdout);
+            break;
+        case 41:;
+            fputs("ENDSUB with no SUB", stdout);
+            break;
         case 125:;
             printf("Function only valid in program: '%s'", errstr);
             break;
@@ -3068,16 +3129,140 @@ static inline void printError(int error) {
             printf("Not a function: '%s'", errstr);
             break;
         case 253:;
-            printf("Command only valid in program: '%s'", arg[0]);
+            printf("Command only valid in program: '%s'", arg0);
             break;
         case 254:;
-            printf("Command not valid in program: '%s'", arg[0]);
+            printf("Command not valid in program: '%s'", arg0);
             break;
         case 255:;
-            printf("Not a command: '%s'", arg[0]);
+            printf("Not a command: '%s'", arg0);
             break;
     }
     putchar('\n');
+    if (inProg) {printf("On line %d of '%s':\n%s\n", progLine, basefilename(progfnstr), cmd);}
+}
+
+int runcmd(char* cmd) {
+    if (cmd[0] == 0 || cmdint) return 0;
+    cerr = 0;
+    char** arg = NULL;
+    uint8_t* argt = NULL;
+    int32_t* argl = NULL;
+    int argct = 0;
+    bool lgc = runlogic(cmd);
+    if (lgc) goto cmderr;
+    if (cmd[0] == 0) return 0;
+    int32_t tmpi = 0;
+    while (cmd[tmpi] && cmd[tmpi] != ' ') {tmpi++;}
+    if (!cmd[tmpi]) tmpi = -1;
+    if (tmpi > -1) cmd[tmpi] = 0;
+    if (addsub > -1) {
+        if (tmpi > -1) cmd[tmpi] = 0;
+        if (!strcmp(cmd, "ENDSUB")) {
+            if (tmpi > -1) {
+                if (getArgCt(cmd + tmpi + 1)) {
+                    subdata[addsub].inuse = false;
+                    free(subdata[addsub].name);
+                    free(subdata[addsub].data);
+                    subdata[addsub].type = 0;
+                    if (addsub == submaxct - 1) {
+                        while (addsub >= 0 && !subdata[addsub].inuse) {submaxct--; addsub--;}
+                        subdata = (cb_sub*)realloc(subdata, submaxct * sizeof(cb_sub));
+                    }
+                    addsub = -1;
+                    cerr = 3;
+                    goto cmderr;
+                }
+            }
+            subdata[addsub].data = realloc(subdata[addsub].data, strlen(subdata[addsub].data) + 1);
+            addsub = -1;
+        }
+        if (tmpi > -1) cmd[tmpi] = ' ';
+        if (addsub < 0) return 0;
+        copyStrApnd(cmd, subdata[addsub].data);
+        strApndChar(subdata[addsub].data, '\n');
+        return 0;
+    }
+    chkCmdPtr = cmd;
+    if (!chkCmd(2, "LABEL", "LBL") && cmd[0] != '@') {
+        if (tmpi > -1) cmd[tmpi] = ' ';
+        if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {if (dldcmd[dlstackp]) return 0;}
+        if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {if (itdcmd[itstackp]) return 0;}
+        if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {if (fndcmd[fnstackp]) return 0;}
+    }
+    if (tmpi > -1) cmd[tmpi] = ' ';
+    int32_t j = 0;
+    while (cmd[j] == ' ') {++j;}
+    int32_t h = j;
+    bool sccmd = false;
+    if (cmd[j] == '$' || cmd[j] == '@' || cmd[j] == '%' || cmd[j] == '>') {
+        int32_t tmpj = j + 1;
+        while (cmd[tmpj] == ' ') {++tmpj;}
+        if (cmd[tmpj] != '=') sccmd = true;
+    }
+    if (!sccmd) {
+        while (cmd[h] != ' ' && cmd[h] != '=' && cmd[h]) {++h;}
+    }
+    copyStrFrom(cmd, (cmd[h]) ? h + 1 : h, tmpbuf[0]);
+    if (!sccmd) {
+        int32_t tmph = h;
+        while (cmd[tmph] == ' ' && cmd[tmph]) {++tmph;}
+        if (cmd[tmph] == '=') {
+            strcpy(tmpbuf[1], "SET ");
+            cmd[tmph] = ',';
+            copyStrApnd(cmd, tmpbuf[1]);
+            copyStr(tmpbuf[1], cmd);
+            copyStr(tmpbuf[1], tmpbuf[0]);
+            tmpbuf[1][0] = 0;
+            h = 3;
+            j = 0;
+        }
+    }
+    argct = getArgCt(tmpbuf[0]);
+    arg = (char**)malloc((argct + 1) * sizeof(char*));
+    argt = (uint8_t*)malloc((argct + 1) * sizeof(uint8_t));
+    argl = (int32_t*)malloc((argct + 1) * sizeof(int32_t));
+    int32_t gptr = 0;
+    copyStrSnip(cmd, j, ((sccmd) ? h + 1 : h), tmpbuf[0]);
+    argl[0] = strlen(tmpbuf[0]);
+    arg[0] = malloc(argl[0] + 1);
+    copyStr(tmpbuf[0], arg[0]);
+    copyStrFrom(cmd, (h >= argl[0]) ? argl[0] : h + 1, tmpbuf[0]);
+    for (int i = 1; i <= argct; ++i) {
+        int32_t ngptr = getArgO(i - 1, tmpbuf[0], tmpbuf[1], gptr);
+        if (ngptr == -1) goto cmderr;
+        argl[i] = ngptr - gptr;
+        gptr = ngptr;
+        arg[i] = malloc(argl[i] + 1);
+        copyStr(tmpbuf[1], arg[i]);
+        arg[i][argl[i]] = 0;
+    }
+    if (argct == 1 && arg[1][0] == 0) {argct = 0;}
+    if (cerr) goto cmderr;
+    solvearg(arg, argt, argl, 0);
+    cerr = 255;
+    chkCmdPtr = arg[0];
+    #include "commands.c"
+    cmderr:;
+    if (!hideerror) {
+        if (cerr) {
+            err = 0;
+            if (runc || runfile) err = 1;
+            printError(cerr, (arg) ? arg[0] : defaultstr, cmd);
+            return cerr;
+        }
+    } else {
+        hideerror = false;
+    }
+    noerr:;
+    if (lgc) return cerr;
+    for (int i = 0; i <= argct; ++i) {
+        nfree(arg[i]);
+    }
+    nfree(arg);
+    nfree(argt);
+    nfree(argl);
+    return cerr;
 }
 
 int loadExt(char* path) {
@@ -3093,8 +3278,7 @@ int loadExt(char* path) {
     if (!oextname | !cbext_init) {cerr = 34; goto loadfail;}
     if (!oextname[0]) {cerr = 34; goto loadfail;}
     int e = -1;
-    char* extname = (char*)malloc(strlen(oextname) + 1);
-    copyStr(oextname, extname);
+    char* extname = strdup(oextname);
     upCase(extname);
     for (register int i = 0; i < extmaxct; ++i) {
         if (extdata[i].inuse && !strcmp(extname, extdata[i].name)) {
@@ -3115,6 +3299,10 @@ int loadExt(char* path) {
         &txtattrib,
         &curx, &cury,
         startcmd, roptstr,
+        &progLine, &lockpl, &didloop,
+        &inProg, &chkinProg,
+        &cmdl, &cp, &concp,
+        cb_exec,
         getCurPos,
         gethome,
         seterrstr,
@@ -3131,7 +3319,8 @@ int loadExt(char* path) {
         getVal,
         solvearg,
         logictest,
-        printError
+        printError,
+        runcmd
     };
     if (!cbext_init(extargs)) {cerr = 35; goto loadfail;}
     if (e == -1) {
@@ -3180,46 +3369,3 @@ bool unloadExt(int e) {
      }
      return true;
 }
-
-void runcmd() {
-    if (cmd[0] == 0) return;
-    cerr = 0;
-    bool lgc = runlogic();
-    if (lgc) goto cmderr;
-    if (cmd[0] == 0) return;
-    int32_t tmpi = 0;
-    while (cmd[tmpi] && cmd[tmpi] != ' ') {tmpi++;}
-    if (!cmd[tmpi]) tmpi = -1;
-    if (tmpi > -1) cmd[tmpi] = 0;
-    chkCmdPtr = cmd;
-    if (!chkCmd(2, "LABEL", "LBL") && cmd[0] != '@') {
-        if (tmpi > -1) cmd[tmpi] = ' ';
-        if (dlstackp > ((progindex > -1) ? mindlstackp[progindex] : -1)) {if (dldcmd[dlstackp]) return;}
-        if (itstackp > ((progindex > -1) ? minitstackp[progindex] : -1)) {if (itdcmd[itstackp]) return;}
-        if (fnstackp > ((progindex > -1) ? minfnstackp[progindex] : -1)) {if (fndcmd[fnstackp]) return;}
-    }
-    if (tmpi > -1) cmd[tmpi] = ' ';
-    mkargs();
-    if (cerr) goto cmderr;
-    solvearg(0);
-    cerr = 255;
-    chkCmdPtr = arg[0];
-    #include "commands.c"
-    cmderr:;
-    if (cerr) {
-        err = 0;
-        if (runc || runfile) err = 1;
-        printError(cerr);
-        cp = -1;
-        concp = -1;
-        chkinProg = inProg = false;
-    }
-    noerr:;
-    if (lgc) return;
-    for (int i = 0; i <= argct; ++i) {
-        nfree(arg[i]);
-    }
-    argct = 0;
-    return;
-}
-

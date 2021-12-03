@@ -59,20 +59,20 @@ if (chkCmd(1, "CHRAT$")) {
 if (chkCmd(2, "RND", "RAND")) {
     cerr = 0;
     ftype = 2;
-    double min = 0;
-    double max;
+    long double min = 0;
+    long double max;
     if (fargct == 1) {
         if (fargt[1] != 2) {cerr = 2; goto fexit;}
-        sscanf(farg[1], "%lf", &max);
+        sscanf(farg[1], "%Lf", &max);
     } else if (fargct == 2) {
         if (fargt[1] + fargt[2] != 4) {cerr = 2; goto fexit;}
-        sscanf(farg[1], "%lf", &min);
-        sscanf(farg[2], "%lf", &max);
+        sscanf(farg[1], "%Lf", &min);
+        sscanf(farg[2], "%Lf", &max);
     } else {
         cerr = 3;
         goto fexit;
     }
-    sprintf(outbuf, "%lf", randNum(min, max));
+    sprintf(outbuf, "%Lf", randNum(min, max));
     goto fexit;
 }
 if (chkCmd(1, "TIMERUS")) {
@@ -149,12 +149,12 @@ if (chkCmd(2, "EXEC", "EXECA")) {
     bool execa = false;
     char** tmpfarg = NULL;
     int tmpfargct = 0;
-    if (!strcmp(farg[0], "EXECA")) {
+    if (farg[0][4] == 'A') {
         if (fargct != 1) {cerr = 3; goto fexit;}
         execa = true;
         int v = -1;
         for (register int i = 0; i < varmaxct; ++i) {
-            if (vardata[i].inuse && !strcmp(arg[1], vardata[i].name)) {v = i; break;}
+            if (vardata[i].inuse && !strcmp(farg[1], vardata[i].name)) {v = i; break;}
         }
         if (v == -1 || vardata[v].size == -1) {cerr = 23; seterrstr(farg[1]); goto fexit;}
         if (vardata[v].type != 1) {cerr = 2; goto fexit;}
@@ -170,7 +170,6 @@ if (chkCmd(2, "EXEC", "EXECA")) {
     #else
     if (sh_clearAttrib) SetConsoleTextAttribute(hConsole, ocAttrib);
     #endif
-    #ifndef _WIN32
     char** runargs = (char**)malloc((fargct + 1) * sizeof(char*));
     runargs[0] = farg[1];
     int argno = 1;
@@ -178,7 +177,6 @@ if (chkCmd(2, "EXEC", "EXECA")) {
         runargs[argno] = farg[argno + 1];
     }
     runargs[argno] = NULL;
-    int status;
     int stdout_dup = 0, stderr_dup = 0, fd = 0;
     if (sh_silent) {
         stdout_dup = dup(1);
@@ -187,51 +185,13 @@ if (chkCmd(2, "EXEC", "EXECA")) {
         dup2(fd, 1);
         dup2(fd, 2);
     }
-    pid_t pid = fork();
-    if (pid < 0) cerr = -1;
-    if (pid == 0) {
-        execvp(runargs[0], runargs);
-        exit(127);
-    }
-    else if (pid > 0) {
-        while (wait(&status) != pid) {}
-        sprintf(outbuf, "%d", (retval = WEXITSTATUS(status)));
-    }
-    else if (sh_silent) {
+    sprintf(outbuf, "%d", (retval = cb_exec(runargs)));
+    if (sh_silent) {
         dup2(stdout_dup, 1);
         dup2(stderr_dup, 2);
         close(fd);
     }
     free(runargs);
-    #else
-    char* tmpcmd = malloc(CB_BUF_SIZE);
-    tmpcmd[0] = 0;
-    bool winecho = false;
-    for (int argno = 1; argno <= fargct; argno++) {
-        bool nq = winArgNeedsQuotes(farg[argno]);
-        if (argno == 1) {
-            upCase(farg[argno]);
-            winecho = !strcmp(farg[argno], "ECHO");
-        }
-        if (nq && !winecho) copyStrApnd(" \"", tmpcmd);
-        copyStrApnd(farg[argno], tmpcmd);
-        if (nq && !winecho) strApndChar(tmpcmd, '"');
-    }
-    int stdout_dup = 0, stderr_dup = 0;
-    if (sh_silent) {
-        stdout_dup = dup(1);
-        stderr_dup = dup(2);
-        int fd = open("NUL", _O_WRONLY);
-        dup2(fd, 1);
-        dup2(fd, 2);
-    }
-    retval = WEXITSTATUS(system(tmpcmd));
-    if (sh_silent) {
-        dup2(stdout_dup, 1);
-        dup2(stderr_dup, 2);
-    }
-    free(tmpcmd);
-    #endif
     if (execa) {
         fargct = tmpfargct;
         farg = tmpfarg;
@@ -265,7 +225,7 @@ if (chkCmd(2, "EXEC$", "EXECA$")) {
     bool execa = false;
     char** tmpfarg = NULL;
     int tmpfargct = 0;
-    if (!strcmp(farg[0], "EXECA$")) {
+    if (farg[0][4] == 'A') {
         if (fargct != 1) {cerr = 3; goto fexit;}
         execa = true;
         int v = -1;
@@ -281,7 +241,6 @@ if (chkCmd(2, "EXEC$", "EXECA$")) {
     } else {
         if (fargt[1] != 1) {cerr = 2; goto fexit;}
     }
-    #ifndef _WIN32
     char** runargs = (char**)malloc((fargct + 1) * sizeof(char*));
     runargs[0] = farg[1];
     int argno = 1;
@@ -290,60 +249,96 @@ if (chkCmd(2, "EXEC$", "EXECA$")) {
     }
     runargs[argno] = NULL;
     int stdout_dup = 0, stderr_dup = 0, fd[2];
-    if (pipe(fd) == -1) {cerr = -1; goto fexit;}
+    #ifndef _WIN32
+    pipe2(fd, O_NONBLOCK);
+    #else
+    _pipe(fd, CB_BUF_SIZE, _O_BINARY);
+    #endif
     stdout_dup = dup(1);
     stderr_dup = dup(2);
     dup2(fd[1], 1);
     dup2(fd[1], 2);
-    pid_t pid = fork();
-    if (pid < 0) cerr = -1;
-    else if (pid == 0) {
-        execvp(runargs[0], runargs);
-        putchar(0);
-        exit(127);
-    }
-    else if (pid > 0) {
-        while (wait(&retval) != pid) {}
-        retval = WEXITSTATUS(retval);
-        outbuf[read(fd[0], outbuf, CB_BUF_SIZE - 1)] = 0;
+    retval = cb_exec(runargs);
+    *outbuf = 0;
+    if (retval >= 0) {
+        #ifndef _WIN32
+        int inchar = 0;
+        ioctl(fd[0], FIONREAD, &inchar);
+        #else
+        DWORD inchar = 0;
+        PeekNamedPipe((HANDLE)_get_osfhandle(fd[0]), NULL, 0, NULL, &inchar, NULL);
+        #endif
+        if (inchar) outbuf[read(fd[0], outbuf, CB_BUF_SIZE - 1)] = 0;
     }
     dup2(stdout_dup, 1);
     dup2(stderr_dup, 2);
     close(fd[0]);
     close(fd[1]);
     free(runargs);
-    #else
-    char* tmpcmd = malloc(CB_BUF_SIZE);
-    tmpcmd[0] = 0;
-    bool winecho = false;
-    for (int argno = 1; argno <= fargct; argno++) {
-        bool nq = winArgNeedsQuotes(farg[argno]);
-        if (argno == 1) {
-            upCase(farg[argno]);
-            winecho = !strcmp(farg[argno], "ECHO");
-        }
-        if (nq && !winecho) copyStrApnd(" \"", tmpcmd);
-        copyStrApnd(farg[argno], tmpcmd);
-        if (nq && !winecho) strApndChar(tmpcmd, '"');
-    }
-    int duperr;
-    duperr = dup(2);
-    close(2);
-    outbuf[0] = 0;
-    FILE* p = popen(tmpcmd, "r");
-    if (p) {
-        outbuf[fread(outbuf, 1, CB_BUF_SIZE, p)] = 0;
-        retval = WEXITSTATUS(pclose(p));
-    }
-    dup2(duperr, 2);
-    close(duperr);
-    free(tmpcmd);
-    #endif
     if (execa) {
         fargct = tmpfargct;
         farg = tmpfarg;
     }
-    //printf("farg[1]: {%s}\n", farg[1]);
+    goto fexit;
+}
+if (chkCmd(1, "CALLFUNC")) {
+    if (fargct < 1) {cerr = 3; goto fexit;}
+    cerr = 0;
+    ftype = 1;
+    newprogargc = fargct;
+    newprogargs = (char**)malloc((fargct + 1) * sizeof(char*));
+    for (int i = 1; i < newprogargc; ++i) {
+        newprogargs[i] = NULL;
+    }
+    for (int i = 2; i <= fargct; ++i) {
+        newprogargs[i - 1] = malloc(CB_BUF_SIZE);
+        if (!getVal(farg[i], newprogargs[i - 1])) {
+            for (int j = i - 1; j > 0; --j) {
+                free(newprogargs[j]);
+            }
+            free(newprogargs);
+            goto fexit;
+        }
+        newprogargs[i - 1] = realloc(newprogargs[i - 1], strlen(newprogargs[i - 1]) + 1);
+    }
+    
+    if (!loadSub(farg[1], true, &subinfo.type)) goto callfunc_err;
+    subinfo.insub = true;
+    ftype = subinfo.type;
+    bool oip = inProg;
+    inProg = true;
+    int ptr1 = 0, ptr2 = 0;
+    char* buf = (char*)malloc(CB_BUF_SIZE);
+    while (1) {
+        while (progbuf[progindex][ptr2] && progbuf[progindex][ptr2] != '\n') {++ptr2;}
+        copyStrSnip(progbuf[progindex], ptr1, ptr2, buf);
+        if ((cerr = runcmd(buf))) {hideerror = true; break;}
+        if (!progbuf[progindex][ptr2]) break;
+        if (!didloop) ++progLine;
+        else didloop = false;
+        ++ptr2;
+        ptr1 = ptr2;
+    }
+    free(buf);
+    inProg = oip;
+    unloadProg();
+    goto callfunc_noerr;
+    callfunc_err:;
+    for (int i = 1; i < newprogargc; ++i) {
+        nfree(newprogargs[i]);
+    }
+    nfree(newprogargs);
+    newprogargc = 0;
+    goto fexit;
+    callfunc_noerr:;
+    if (!cerr) {
+        if (funcret) {
+            copyStr(funcret, outbuf);
+            nfree(funcret);
+        } else {
+            copyStr((ftype == 1) ? defaultstr : defaultnum, outbuf);
+        }
+    }
     goto fexit;
 }
 if (chkCmd(1, "CINT")) {
@@ -351,7 +346,7 @@ if (chkCmd(1, "CINT")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    sprintf(outbuf, "%d", (int)round(atof(farg[1])));
+    sprintf(outbuf, "%d", (int)round(strtold(farg[1], NULL)));
     goto fexit;
 }
 if (chkCmd(1, "INT")) {
@@ -359,8 +354,8 @@ if (chkCmd(1, "INT")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
     sprintf(outbuf, "%d", (int)dbl);
     int32_t i;
     for (i = 0; outbuf[i] != '.' && outbuf[i]; i++) {}
@@ -373,12 +368,7 @@ if (chkCmd(1, "VAL")) {
     if (fargct < 1 || fargct > 2) {cerr = 3; goto fexit;}
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
     if (fargct == 2 && fargt[2] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    if (fargct == 1) {
-        sscanf(farg[1], "%lf", &dbl);
-        sprintf(outbuf, "%lf", dbl);
-        goto fexit;
-    }
+    long double dbl;
     int act = 0;
     uint64_t num;
     char* tmpstr = NULL;
@@ -388,6 +378,7 @@ if (chkCmd(1, "VAL")) {
     switch (act) {
         case 0:;
             tmplen = strlen(farg[1]);
+            if (!tmplen) {copyStr(defaultstr, outbuf); break;}
             for (int32_t i = 0; farg[1][i] == '0' && i < tmplen; i++) {
                 tmppos++;
             }
@@ -398,9 +389,9 @@ if (chkCmd(1, "VAL")) {
                 outbuf[1] = 0;
                 break;
             }
-            sscanf(tmpstr, "%lf", &dbl);
+            sscanf(tmpstr, "%Lf", &dbl);
             free(tmpstr);
-            sprintf(outbuf, "%lf", dbl);
+            sprintf(outbuf, "%Lf", dbl);
             break;
         case 1:;
             sscanf(farg[1], "%llx", (long long unsigned int*)&num);
@@ -438,10 +429,10 @@ if (chkCmd(1, "MOD")) {
     ftype = 2;
     if (fargct != 2) {cerr = 3; goto fexit;}
     if (fargt[1] != 2 || fargt[2] != 2) {cerr = 2; goto fexit;}
-    double dbl1, dbl2;
-    sscanf(farg[1], "%lf", &dbl1);
-    sscanf(farg[2], "%lf", &dbl2);
-    sprintf(outbuf, "%lf", fmod(dbl1, dbl2));
+    long double dbl1, dbl2;
+    sscanf(farg[1], "%Lf", &dbl1);
+    sscanf(farg[2], "%Lf", &dbl2);
+    sprintf(outbuf, "%Lf", fmodl(dbl1, dbl2));
     goto fexit;
 }
 if (chkCmd(1, "PI")) {
@@ -456,7 +447,7 @@ if (chkCmd(1, "ABS")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    sprintf(outbuf, "%lf", fabs(atof(farg[1])));
+    sprintf(outbuf, "%Lf", fabsl(strtold(farg[1], NULL)));
     goto fexit;
 }
 if (chkCmd(1, "SIN")) {
@@ -464,9 +455,9 @@ if (chkCmd(1, "SIN")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%lf", sin(dbl));
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
+    sprintf(outbuf, "%Lf", sinl(dbl));
     goto fexit;
 }
 if (chkCmd(1, "COS")) {
@@ -474,9 +465,9 @@ if (chkCmd(1, "COS")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%lf", cos(dbl));
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
+    sprintf(outbuf, "%Lf", cosl(dbl));
     goto fexit;
 }
 if (chkCmd(1, "TAN")) {
@@ -484,9 +475,11 @@ if (chkCmd(1, "TAN")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%lf", tan(dbl));
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
+    dbl = tanl(dbl);
+    if (!isfinite(dbl)) {cerr = 5; goto fexit;}
+    sprintf(outbuf, "%Lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, "SINH")) {
@@ -494,11 +487,11 @@ if (chkCmd(1, "SINH")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    dbl = sinh(dbl);
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
+    dbl = sinhl(dbl);
     if (!isfinite(dbl)) {cerr = 5; goto fexit;}
-    sprintf(outbuf, "%lf", dbl);
+    sprintf(outbuf, "%Lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, "COSH")) {
@@ -506,11 +499,11 @@ if (chkCmd(1, "COSH")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    dbl = cosh(dbl);
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
+    dbl = coshl(dbl);
     if (!isfinite(dbl)) {cerr = 5; goto fexit;}
-    sprintf(outbuf, "%lf", dbl);
+    sprintf(outbuf, "%Lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, "TANH")) {
@@ -518,9 +511,11 @@ if (chkCmd(1, "TANH")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%lf", tanh(dbl));
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
+    dbl = tanhl(dbl);
+    if (!isfinite(dbl)) {cerr = 5; goto fexit;}
+    sprintf(outbuf, "%Lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, "LOG")) {
@@ -528,11 +523,11 @@ if (chkCmd(1, "LOG")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
     dbl = log(dbl);
     if (!isfinite(dbl)) {cerr = 5; goto fexit;}
-    sprintf(outbuf, "%lf", dbl);
+    sprintf(outbuf, "%Lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, "LOG10")) {
@@ -540,11 +535,11 @@ if (chkCmd(1, "LOG10")) {
     ftype = 2;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
     dbl = log10(dbl);
     if (!isfinite(dbl)) {cerr = 5; goto fexit;}
-    sprintf(outbuf, "%lf", dbl);
+    sprintf(outbuf, "%Lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, "SHIFT")) {
@@ -612,11 +607,11 @@ if (chkCmd(1, "EXP")) {
     cerr = 0;
     ftype = 2;
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
     dbl = exp(dbl);
     if (!isfinite(dbl)) {cerr = 5; goto fexit;}
-    sprintf(outbuf, "%lf", dbl);
+    sprintf(outbuf, "%Lf", dbl);
     goto fexit;
 }
 if (chkCmd(1, "INKEY$")) {
@@ -638,9 +633,10 @@ if (chkCmd(1, "INKEY$")) {
     }
     outbuf[obp] = 0;
     #else
-    updatechars();
+    uctStop();
     copyStr(kbinbuf, outbuf);
     kbinbuf[0] = 0;
+    uctStart();
     #endif
     goto fexit;
 }
@@ -727,9 +723,9 @@ if (chkCmd(1, "HEX$")) {
     ftype = 1;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
-    sprintf(outbuf, "%llx", (long long unsigned int)dbl);
+    uint64_t num;
+    sscanf(farg[1], "%llu", (long long unsigned int *)&num);
+    sprintf(outbuf, "%llx", (long long unsigned int)num);
     upCase(outbuf);
     goto fexit;
 }
@@ -738,8 +734,8 @@ if (chkCmd(1, "OCT$")) {
     ftype = 1;
     if (fargct != 1) {cerr = 3; goto fexit;}
     if (fargt[1] != 2) {cerr = 2; goto fexit;}
-    double dbl;
-    sscanf(farg[1], "%lf", &dbl);
+    long double dbl;
+    sscanf(farg[1], "%Lf", &dbl);
     sprintf(outbuf, "%llo", (long long unsigned int)dbl);
     upCase(outbuf);
     goto fexit;
@@ -763,27 +759,27 @@ if (chkCmd(1, "RGB")) {
 if (chkCmd(1, "LIMIT")) {
     cerr = 0;
     ftype = 2;
-    double num = 0;
+    long double num = 0;
     if (fargct < 2 || fargct > 3) {cerr = 3; goto fexit;}
     if (fargt[1] != 2 || fargt[2] != 2) {cerr = 2; goto fexit;}
     if (fargct == 3 && fargt[3] == 1) {cerr = 2; goto fexit;}
-    num = atof(farg[1]);
+    num = strtold(farg[1], NULL);
     if (fargct == 2) {
-        double max = atof(farg[2]);
+        long double max = strtold(farg[2], NULL);
         if (num > max) {num = max;}
     } else if (fargct == 3 && fargt[3] == 0) {
-        double min = atof(farg[2]);
+        long double min = strtold(farg[2], NULL);
         if (num < min) {num = min;}
     } else if (fargct == 3) {
-        double min = atof(farg[2]);
-        double max = atof(farg[3]);
+        long double min = strtold(farg[2], NULL);
+        long double max = strtold(farg[3], NULL);
         if (num > max) {num = max;}
         else if (num < min) {num = min;}
     } else {
         cerr = 3;
         goto fexit;
     }
-    sprintf(outbuf, "%lf", num);
+    sprintf(outbuf, "%Lf", num);
     goto fexit;
 }
 if (chkCmd(1, "PAD$")) {
@@ -887,27 +883,24 @@ if (chkCmd(1, "INPUT$")) {
     cerr = 0;
     ftype = 1;
     if (fargct > 1) {cerr = 3; goto fexit;}
-    if (fargct == 1 && fargt[1] != 1) {cerr = 2; goto fexit;}
-    if (fargct != 1) {
-        farg[1] = malloc(4);
-        strcpy(farg[1], "?: ");
-    }
+    if (fargct && fargt[1] != 1) {cerr = 2; goto fexit;}
+    copyStr((fargct) ? farg[1] : "?: ", gpbuf);
     char* tmp = NULL;
-    #ifndef _WIN32
+    #ifdef _WIN32
+    uctStop();
+    #else
     getCurPos();
-    curx--;
-    farg[1] = realloc(farg[1], strlen(farg[1]) + curx);
-    int32_t ptr = strlen(farg[1]);
-    while (curx) {farg[1][ptr] = 22; ptr++; curx--;}
-    farg[1][ptr] = 0;
-    #endif
-    #ifndef _WIN32
+    char* tfarg = gpbuf + strlen(gpbuf);
+    while (--curx) {*tfarg++ = 22;}
+    *tfarg = 0;
     __typeof__(rl_getc_function) old_rl_getc_function = rl_getc_function;
     rl_getc_function = getc;
     #endif
-    tmp = readline(farg[1]);
+    tmp = readline(gpbuf);
     #ifndef _WIN32
     rl_getc_function = old_rl_getc_function;
+    #else
+    uctStart();
     #endif
     if (tmp != NULL) {
         copyStr(tmp, outbuf);
@@ -1508,6 +1501,60 @@ if (chkCmd(1, "_TXTLOCK")) {
     ftype = 2;
     if (fargct) {cerr = 3; goto fexit;}
     sprintf(outbuf, "%d", (int)textlock);
+    goto fexit;
+}
+if (chkCmd(1, "_TXTATTRIB")) {
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    cerr = 0;
+    ftype = 2;
+    if (fargt[1] == 0) {cerr = 3; goto fexit;}
+    int attrib = 0;
+    if (fargt[1] == 1) {
+        for (int32_t i = 0; farg[1][i]; i++) {
+            if (farg[1][i] >= 'a' && farg[1][i] <= 'z') farg[1][i] -= 32;
+            if (farg[1][i] == ' ') farg[1][i] = '_';
+        }
+        if (!strcmp(farg[1], "RESET")) attrib = 0; else
+        if (!strcmp(farg[1], "BOLD")) attrib = 1; else
+        if (!strcmp(farg[1], "ITALIC")) attrib = 2; else
+        if (!strcmp(farg[1], "UNDERLINE")) attrib = 3; else
+        if (!strcmp(farg[1], "DBL_UNDERLINE") || !strcmp(farg[1], "long double_UNDERLINE")) attrib = 4; else
+        if (!strcmp(farg[1], "SQG_UNDERLINE") || !strcmp(farg[1], "SQUIGGLY_UNDERLINE")) attrib = 5; else
+        if (!strcmp(farg[1], "STRIKETHROUGH")) attrib = 6; else
+        if (!strcmp(farg[1], "OVERLINE")) attrib = 7; else
+        if (!strcmp(farg[1], "DIM")) attrib = 8; else
+        if (!strcmp(farg[1], "BLINK")) attrib = 9; else
+        if (!strcmp(farg[1], "HIDDEN")) attrib = 10; else
+        if (!strcmp(farg[1], "REVERSE")) attrib = 11; else
+        if (!strcmp(farg[1], "UNDERLINE_COLOR")) attrib = 12; else
+        if (!strcmp(farg[1], "FGC")) attrib = 13; else
+        if (!strcmp(farg[1], "BGC")) attrib = 14; else
+        if (!strcmp(farg[1], "TRUECOLOR") || !strcmp(farg[1], "TRUE_COLOR") || !strcmp(farg[1], "24BITCOLOR") || !strcmp(farg[1], "24BIT_COLOR")) attrib = 15; else
+        {cerr = 16; goto fexit;}
+    } else {
+        attrib = atoi(farg[1]);
+        if (attrib < 0 || attrib > 15) {cerr = 16; goto fexit;}
+    }
+    int val = 0;
+    switch (attrib) {
+        case 0: val = 0; break;
+        case 1: val = txtattrib.bold; break;
+        case 2: val = txtattrib.italic; break;
+        case 3: val = txtattrib.underln; break;
+        case 4: val = txtattrib.underlndbl; break;
+        case 5: val = txtattrib.underlnsqg; break;
+        case 6: val = txtattrib.strike; break;
+        case 7: val = txtattrib.overln; break;
+        case 8: val = txtattrib.dim; break;
+        case 9: val = txtattrib.blink; break;
+        case 10: val = txtattrib.hidden; break;
+        case 11: val = txtattrib.reverse; break;
+        case 12: val = txtattrib.underlncolor; break;
+        case 13: val = txtattrib.fgce; break;
+        case 14: val = txtattrib.bgce; break;
+        case 15: val = txtattrib.truecolor; break;
+    }
+    sprintf(outbuf, "%d", (int)val);
     goto fexit;
 }
 if (chkCmd(1, "_VER$")) {
