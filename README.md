@@ -14,8 +14,8 @@ Windows Readline: https://github.com/PQCraft/clibasic-winrllib <br>
 ---
 ### Required Packages/Programs <br>
 #### Linux <br>
-Debian (`apt`): `build-essential`, `libreadline-dev` <br>
 Arch (`pacman`): `base-devel`, `readline` <br>
+Debian (`apt`): `build-essential`, `libreadline-dev` <br>
 Alpine (`apk`): `build-base`, `readline-dev` <br>
 #### Windows <br>
 NT - 10 (download): [`MinGW`](http://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/installer/mingw-w64-install.exe/download), [`Make for Windows`](http://gnuwin32.sourceforge.net/packages/make.htm) <br>
@@ -26,8 +26,8 @@ Mojave - Big Sur (`brew`): `gcc`, `make`, `readline` <br>
 ---
 ### Recommended Packages/Programs <br>
 #### Linux <br>
-Debian (`apt`): `git` <br>
 Arch (`pacman`): `git` <br>
+Debian (`apt`): `git` <br>
 Alpine (`apk`): `git` <br>
 #### Windows <br>
 NT - 10 (download): [`git`](https://git-scm.com/download/win) <br>
@@ -73,7 +73,7 @@ How to add MinGW and/or Make to the %PATH%: <br>
         5. Add the copied location
 
 To build, use `make build`. <br>
-To run, use `make run` or `./clibasic`. <br>
+To run, use `make run` or `.\clibasic.exe`. <br>
 To build then run, use `make` (same as `make all`). <br>
 To build CLIBASIC with support for VT escape codes, add `vt` before the rest of the rules. <br>
 
@@ -84,7 +84,6 @@ To build CLIBASIC with support for VT escape codes, add `vt` before the rest of 
 ---
 ### Notes <br>
 - On Arch Linux, you can install CLIBASIC by installing either the [`clibasic`](https://aur.archlinux.org/packages/clibasic/) or [`clibasic-bin`](https://aur.archlinux.org/packages/clibasic-bin/) AUR package.
-- Due to Windows not having proper fork() and exec\*() functions, EXEC, EXEC(), and EXEC$() are passed through system() under Windows and one issue out of the many with this is a space parsing issue where running `EXEC "test prog"` will attempt to execute `EXEC "test", "prog"` if `test prog` cannot be found in the current directory or %PATH%.
 - On Windows, pressing CTRL+C will not display a new prompt line due to the Windows version of readline catching and ignoring the CTRL+C.
 - Most terminals cannot handle input while processing a cursor position request and INKEY$() will not reflect keys that were pressed during that time. The effect is more noticeable on terminals that are slow to respond such as Alacritty, Gnome Terminal, and Termux. A terminal that is fast to respond such as Konsole is recommended.
 - If the file `.clibasic_history` is present in the user's home directory CLIBASIC will automatically save history there. Run `_AUTOCMDHIST`, `_SAVECMDHIST` (without any arguments), or create the file `.clibasic_history` in your home/user folder to enable this feature. Remove the file to disable this feature.
