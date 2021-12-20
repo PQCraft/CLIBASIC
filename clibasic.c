@@ -122,32 +122,32 @@
 
 // Base defines
 
-char VER[] = "1.0";
+static char VER[] = "1.1";
 
 #if defined(__linux__)
-    char OSVER[] = "Linux";
+    static char OSVER[] = "Linux";
 #elif defined(BSD)
-    char OSVER[] = "BSD";
+    static char OSVER[] = "BSD";
 #elif defined(__APPLE__)
-    char OSVER[] = "MacOS";
+    static char OSVER[] = "MacOS";
 #elif defined(__unix__)
-    char OSVER[] = "Unix";
+    static char OSVER[] = "Unix";
 #elif defined(_WIN32)
-    char OSVER[] = "Windows";
+    static char OSVER[] = "Windows";
 #else
     #warning /* No matching operating system defines */ \
     Could not detect operating system. (No matching operating system defines)
-    char OSVER[] = "?";
+    static char OSVER[] = "?";
 #endif
 
 #ifdef B32
-    char BVER[] = "32";
+    static char BVER[] = "32";
 #elif B64
-    char BVER[] = "64";
+    static char BVER[] = "64";
 #else
     #warning /* Neither B32 or B64 was defined */ \
     Could not detect architecture bits, please use '-DB64' or '-DB32' when compiling (Neither B32 or B64 was defined).
-    char BVER[] = "?";
+    static char BVER[] = "?";
 #endif
 
 #if defined(FORCE_VT) && defined(_WIN_NO_VT)
@@ -158,45 +158,45 @@ char VER[] = "1.0";
 
 #include "clibasic.h"
 
-char* defaultstr = "";
-char* defaultnum = "0";
+static char* defaultstr = "";
+static char* defaultnum = "0";
 
-int progindex = -1;
-char** progbuf = NULL;
-char** progfn = NULL;
+static int progindex = -1;
+static char** progbuf = NULL;
+static char** progfn = NULL;
 #define progfnstr (progfn[progindex])
-int32_t* progcp = NULL;
-int* progcmdl = NULL;
-int* proglinebuf = NULL;
+static int32_t* progcp = NULL;
+static int* progcmdl = NULL;
+static int* proglinebuf = NULL;
 
-int err = 0;
-int cerr;
+static int err = 0;
+static int cerr;
 
-bool inProg = false;
-bool chkinProg = false;
-int progLine = 1;
+static bool inProg = false;
+static bool chkinProg = false;
+static int progLine = 1;
 
-int varmaxct = 0;
+static int varmaxct = 0;
 
-cb_var* vardata = NULL;
+static cb_var* vardata = NULL;
 
-char gpbuf[CB_BUF_SIZE];
+static char gpbuf[CB_BUF_SIZE];
 
-char* cmd = NULL;
-int cmdl = 0;
+static char* cmd = NULL;
+static int cmdl = 0;
 
-int cmdpos = 0;
+static int cmdpos = 0;
 
-bool didloop = false;
-bool lockpl = false;
+static bool didloop = false;
+static bool lockpl = false;
 
 typedef struct {
     uint8_t type;
     uint8_t block;
 } __attribute__((aligned(sizeof(void*)))) cb_brkinfo;
 
-cb_brkinfo brkinfo;
-cb_brkinfo* oldbrkinfo = NULL;
+static cb_brkinfo brkinfo;
+static cb_brkinfo* oldbrkinfo = NULL;
 
 typedef struct {
     int pl;
@@ -204,24 +204,24 @@ typedef struct {
     cb_brkinfo brkinfo;
 } __attribute__((aligned(sizeof(void*)))) cb_jump;
 
-cb_jump dlstack[CB_PROG_LOGIC_MAX];
-bool dldcmd[CB_PROG_LOGIC_MAX];
-int dlstackp = -1;
-int* mindlstackp = NULL;
+static cb_jump dlstack[CB_PROG_LOGIC_MAX];
+static bool dldcmd[CB_PROG_LOGIC_MAX];
+static int dlstackp = -1;
+static int* mindlstackp = NULL;
 
-bool itdcmd[CB_PROG_LOGIC_MAX];
-int itstackp = -1;
-int* minitstackp = NULL;
-bool didelse[CB_PROG_LOGIC_MAX];
-bool didelseif[CB_PROG_LOGIC_MAX];
+static bool itdcmd[CB_PROG_LOGIC_MAX];
+static int itstackp = -1;
+static int* minitstackp = NULL;
+static bool didelse[CB_PROG_LOGIC_MAX];
+static bool didelseif[CB_PROG_LOGIC_MAX];
 
-cb_jump fnstack[CB_PROG_LOGIC_MAX];
-bool fndcmd[CB_PROG_LOGIC_MAX];
-bool fninfor[CB_PROG_LOGIC_MAX];
-int fnstackp = -1;
-int* minfnstackp = NULL;
-char fnvar[CB_BUF_SIZE];
-char forbuf[4][CB_BUF_SIZE];
+static cb_jump fnstack[CB_PROG_LOGIC_MAX];
+static bool fndcmd[CB_PROG_LOGIC_MAX];
+static bool fninfor[CB_PROG_LOGIC_MAX];
+static int fnstackp = -1;
+static int* minfnstackp = NULL;
+static char fnvar[CB_BUF_SIZE];
+static char forbuf[4][CB_BUF_SIZE];
 
 typedef struct {
     int pl;
@@ -232,76 +232,75 @@ typedef struct {
     cb_brkinfo brkinfo;
 } __attribute__((aligned(sizeof(void*)))) cb_gosub;
 
-cb_gosub gsstack[CB_PROG_LOGIC_MAX];
-int gsstackp = -1;
+static cb_gosub gsstack[CB_PROG_LOGIC_MAX];
+static int gsstackp = -1;
 
-char* errstr = NULL;
+static char* errstr = NULL;
 
-char conbuf[CB_BUF_SIZE];
-char prompt[CB_BUF_SIZE];
-char pstr[CB_BUF_SIZE];
-char cmpstr[CB_BUF_SIZE];
+static char conbuf[CB_BUF_SIZE];
+static char prompt[CB_BUF_SIZE];
+static char pstr[CB_BUF_SIZE];
+static char cmpstr[CB_BUF_SIZE];
 
-int curx = 0;
-int cury = 0;
+static int curx = 0;
+static int cury = 0;
 
-int concp = 0;
-int32_t cp = 0;
+static int concp = 0;
+static int32_t cp = 0;
 
-sig_atomic_t cmdint = false;
-sig_atomic_t inprompt = false;
-bool dprompt = false;
+static sig_atomic_t cmdint = false;
+static sig_atomic_t inprompt = false;
 
-bool runfile = false;
-bool runc = false;
-bool autorun = false;
-bool* autorunstack = NULL;
+static bool runfile = false;
+static bool runc = false;
+static bool autorun = false;
 
-bool redirection = false;
-bool checknl = false;
-bool esc = true;
-bool cpos = true;
-bool skip = false;
+static bool redirection = false;
+static bool checknl = false;
+static bool esc = true;
+static bool cpos = true;
+static bool skip = false;
 
-bool sh_silent = false;
-bool sh_clearAttrib = true;
-bool sh_restoreAttrib = true;
+static bool sh_silent = false;
+static bool sh_clearAttrib = true;
+static bool sh_restoreAttrib = true;
 
-cb_txt txtattrib;
+static cb_txt txtattrib;
 
 #ifdef _WIN32
 static __volatile__ bool textlock = false;
 #else
-bool textlock = false;
+static bool textlock = false;
+static bool sneaktextlock = false;
 #endif
-bool sneaktextlock = false;
-bool hidecursor = false;
+static bool hidecursor = false;
 
-bool keep = false;
-bool keepall = false;
+static bool keep = false;
+static bool keepall = false;
 
-char* homepath = NULL;
-char* cwd = NULL;
+static char* homepath = NULL;
 
-bool autohist = false;
+static bool autohist = false;
 
-int tab_width = 4;
+static int tab_width = 4;
 
-int progargc = 0;
-int* oldprogargc = NULL;
-int newprogargc = 0;
-char** progargs = NULL;
-char*** oldprogargs = NULL;
-char** newprogargs = NULL;
-char* startcmd = NULL;
-bool argslater = false;
+static int progargc = 0;
+static int* oldprogargc = NULL;
+static int newprogargc = 0;
+static char** progargs = NULL;
+static char*** oldprogargs = NULL;
+static char** newprogargs = NULL;
+static char* startcmd = NULL;
+static bool argslater = false;
 
-bool changedtitle = false;
-bool changedtitlecmd = false;
+#ifndef _WIN_NO_VT
+static bool changedtitle = false;
+static bool changedtitlecmd = false;
+#endif
 
-int retval = 0;
+static int retval = 0;
 
-bool hideerror = false;
+static bool hideerror = false;
 
 typedef struct {
     bool inuse;
@@ -314,14 +313,14 @@ typedef struct {
     cb_brkinfo brkinfo;
 } __attribute__((aligned(sizeof(void*)))) cb_goto;
 
-cb_goto* gotodata = NULL;
-cb_goto** proggotodata = NULL;
-int gotomaxct = 0;
-int* proggotomaxct = NULL;
+static cb_goto* gotodata = NULL;
+static cb_goto** proggotodata = NULL;
+static int gotomaxct = 0;
+static int* proggotomaxct = NULL;
 
-cb_file* filedata = NULL;
-int filemaxct = 0;
-int fileerror = 0;
+static cb_file* filedata = NULL;
+static int filemaxct = 0;
+static int fileerror = 0;
 
 typedef struct {
     bool inuse;
@@ -335,14 +334,14 @@ typedef struct {
     uint8_t type;
 } __attribute__((aligned(sizeof(void*)))) cb_subinfo;
 
-cb_sub* subdata = NULL;
-int submaxct = 0;
-int addsub = -1;
-cb_subinfo subinfo;
-cb_subinfo* oldsubinfo = NULL;
-char* funcret = NULL;
+static cb_sub* subdata = NULL;
+static int submaxct = 0;
+static int addsub = -1;
+static cb_subinfo subinfo;
+static cb_subinfo* oldsubinfo = NULL;
+static char* funcret = NULL;
 
-char* rl_tmpptr = NULL;
+static char* rl_tmpptr = NULL;
 
 typedef struct {
     bool inuse;
@@ -357,13 +356,13 @@ typedef struct {
     bool (*deinit)(void);
 } __attribute__((aligned(sizeof(void*)))) cb_ext;
 
-int extmaxct = 0;
-cb_ext* extdata = NULL;
+static int extmaxct = 0;
+static cb_ext* extdata = NULL;
 
 #ifndef _WIN32
-struct termios term, restore;
-struct termios kbhterm, kbhterm2;
-struct termios initterm;
+static struct termios term, restore;
+static struct termios kbhterm, kbhterm2;
+static struct termios initterm;
 
 static inline void txtqunlock() {if (textlock || sneaktextlock) {tcsetattr(0, TCSANOW, &restore); textlock = false;}}
 
@@ -375,7 +374,7 @@ static inline int kbhit() {
 
 sigset_t intmask, oldmask;
 
-char inkeybuf[CB_BUF_SIZE];
+static char inkeybuf[CB_BUF_SIZE];
 #endif
 
 static inline void* setsig(int sig, void* func) {
@@ -394,7 +393,7 @@ static inline void* setsig(int sig, void* func) {
     #endif
 }
 
-int tab_end = 0;
+static int tab_end = 0;
 static inline void strApndChar(char*, char);
 char* rl_get_tab(const char* text, int state) {
     char* tab = NULL;
@@ -460,9 +459,7 @@ static inline void promptReady() {
 
 #ifdef _WIN32
 #define hConsole GetStdHandle(STD_OUTPUT_HANDLE)
-char* rlptr;
-char kbinbuf[256];
-bool inrl = false;
+static char kbinbuf[256];
 void cleanExit();
 void cmdIntHndl();
 void setcsr() {
@@ -480,7 +477,7 @@ void rl_sigh(int sig) {
 }
 void txtqunlock() {}
 #ifndef _WIN_NO_VT
-bool vtenabled = false;
+static bool vtenabled = false;
 void enablevt() {
     if (vtenabled) return;
     vtenabled = true;
@@ -557,10 +554,8 @@ WORD ocAttrib = 0;
 #endif
 #endif
 
-struct timeval time1;
-uint64_t tval;
-
-void* oldsigh = NULL;
+static struct timeval time1;
+static uint64_t tval;
 
 void forceExit() {
     #ifndef _WIN32
@@ -807,7 +802,7 @@ void* ucThread(void* data) {
             pthread_mutex_lock(&uctMutex);
             if (status[0]) l1 = false;
             pthread_mutex_unlock(&uctMutex);
-            //if (l1) cb_wait(5000);
+            if (l1) cb_wait(5000);
         }
         pthread_mutex_lock(&uctMutex);
         status[1] = false;
@@ -900,15 +895,13 @@ static inline void readyTerm() {
     #endif
 }
 
-uint8_t roptptr = 1;
-char roptstr[16] = "-";
+static uint8_t roptptr = 1;
+static char roptstr[16] = "-";
 
 #define RARG() {fprintf(stderr, "Short option '%c' requires argument(s) and must be last.\n", argv[i][shortopti]);}
 #define IACT() {fputs("Incorrect number of arguments passed.\n", stderr);}
 #define IOCT() {fputs("Incorrect number of options passed.\n", stderr);}
 #define OHBP() {fprintf(stderr, "Option '%c' has already been passed.\n", argv[i][shortopti]);}
-
-char elfsnip[6];
 
 int main(int argc, char** argv) {
     bool pexit = false;
@@ -1343,7 +1336,7 @@ static inline int isFile(char* path) {
 }
 
 #ifndef _WIN32
-bool gcp_sig = true;
+static bool gcp_sig = true;
 #endif
 
 static inline void getCurPos() {
@@ -1542,7 +1535,6 @@ bool loadProg(char* filename) {
     }
     cerr = 0;
     ++progindex;
-    fseek(prog, 0, SEEK_END);
     progfn = (char**)realloc(progfn, (progindex + 1) * sizeof(char*));
     #ifdef _WIN32
     progfn[progindex] = _fullpath(NULL, filename, CB_BUF_SIZE);
@@ -1558,6 +1550,7 @@ bool loadProg(char* filename) {
         progargs = newprogargs;
         newprogargs = NULL;
     }
+    fseek(prog, 0, SEEK_END);
     int32_t fsize = (uint32_t)ftell(prog);
     fseek(prog, 0, SEEK_SET);
     progbuf[progindex] = (char*)malloc(fsize + 1);
@@ -1768,7 +1761,7 @@ static inline void seterrstr(char* newstr) {
 typedef pid_t cb_exec_async_t;
 #else
 typedef HANDLE cb_exec_async_t;
-char* cb_exec_async_buf = NULL;
+static char* cb_exec_async_buf = NULL;
 #endif
 
 static inline cb_exec_async_t cb_exec_async(char** args) {
@@ -1872,7 +1865,7 @@ static inline void updateTxtAttrib() {
     fflush(stdout);
 }
 
-char buf[CB_BUF_SIZE];
+static char buf[CB_BUF_SIZE];
 
 static inline void getStr(char* str1, char* str2) {
     int32_t j = 0, i;
@@ -1937,7 +1930,7 @@ static inline bool isLineNumber(char* str) {
     return true;
 }
 
-int cbrmIndex = 0;
+static int cbrmIndex = 0;
 
 bool cbrm(char* path) {
     fileerror = 0;
@@ -1976,8 +1969,8 @@ static inline int getArg(int, char*, char*);
 static inline int getArgO(int, char*, char*, int32_t);
 static inline int getArgCt(char*);
 
-uint16_t getFuncIndex = 0;
-char* getFunc_gftmp[2] = {NULL, NULL};
+static uint16_t getFuncIndex = 0;
+static char* getFunc_gftmp[2] = {NULL, NULL};
 
 uint8_t getFunc(char* inbuf, char* outbuf) {
     char** farg;
@@ -2076,10 +2069,10 @@ uint8_t getFunc(char* inbuf, char* outbuf) {
     return ftype;
 }
 
-bool chkvar = true;
+static bool chkvar = true;
 
-uint16_t getVarIndex = 0;
-char* getVarBuf = NULL;
+static uint16_t getVarIndex = 0;
+static char* getVarBuf = NULL;
 
 uint8_t getVar(char* vn, char* varout) {
     char* lgetVarBuf = (getVarIndex) ? malloc(CB_BUF_SIZE) : getVarBuf;
@@ -2169,7 +2162,7 @@ uint8_t getVar(char* vn, char* varout) {
     return ret;
 }
 
-char setVarBuf[CB_BUF_SIZE];
+static char setVarBuf[CB_BUF_SIZE];
 
 bool setVar(char* vn, char* val, uint8_t t, int32_t s) {
     int32_t vnlen = strlen(vn);
@@ -2358,8 +2351,8 @@ bool closeFile(int num) {
     return true;
 }
 
-uint16_t getValIndex = 0;
-char* getVal_tmp[4] = {NULL, NULL};
+static uint16_t getValIndex = 0;
+static char* getVal_tmp[4] = {NULL, NULL};
 
 typedef struct {
     char act;
@@ -2367,8 +2360,6 @@ typedef struct {
     char* data;
     long double ndata;
 } __attribute__((aligned(sizeof(void*)))) cb_gvtoken;
-
-cb_gvtoken token[256];
 
 uint8_t getVal(char* inbuf, char* outbuf) {
     if (inbuf[0] == 0) {return 255;}
@@ -2417,11 +2408,11 @@ uint8_t getVal(char* inbuf, char* outbuf) {
             default:; if (inStr) break; if (*t1 == ',' || isSpChar(*t1)) seenStr[pct] = false; break;
             case '&':; if (!inStr && pct > 0) seenStr[pct] = false; break;
             case '|':; if (!inStr && pct > 0) seenStr[pct] = false; break;
-            case '"':; if (pct || bct) break; inStr = !inStr; if (inStr && seenStr[pct]) {dt = 0; cerr = 1; goto gvreturn;} seenStr[pct] = true; break;
-            case '(':; if (inStr) break; ++pct; seenStr = (bool*)realloc(seenStr, (pct + 1) * sizeof(bool)); seenStr[pct] = false; break;
-            case ')':; if (inStr) break; --pct; break;
-            case '[':; if (inStr) break; ++bct; break;
-            case ']':; if (inStr) break; --bct; break;
+            case '"':; inStr = !inStr; if (inStr && seenStr[pct]) {dt = 0; cerr = 1; goto gvreturn;} seenStr[pct] = true; break;
+            case '(':; if (bct || inStr) break; ++pct; seenStr = (bool*)realloc(seenStr, (pct + 1) * sizeof(bool)); seenStr[pct] = false; break;
+            case ')':; if (bct || inStr) break; --pct; break;
+            case '[':; if (pct || inStr) break; ++bct; break;
+            case ']':; if (pct || inStr) break; --bct; break;
         }
     }
     if (pct || bct || inStr) {cerr = 1; dt = 0; goto gvreturn;}
@@ -2437,11 +2428,11 @@ uint8_t getVal(char* inbuf, char* outbuf) {
     int curtkn = 0;
     for (t1 = tmp[0]; *t1; ++t1) {
         switch (*t1) {
-            case '"':; if (pct || bct) break; inStr = !inStr; break;
-            case '(':; if (inStr) break; ++pct; break;
-            case ')':; if (inStr) break; --pct; break;
-            case '[':; if (inStr) break; ++bct; break;
-            case ']':; if (inStr) break; --bct; break;
+            case '"':; inStr = !inStr; break;
+            case '(':; if (bct || inStr) break; ++pct; break;
+            case ')':; if (bct || inStr) break; --pct; break;
+            case '[':; if (pct || inStr) break; ++bct; break;
+            case ']':; if (pct || inStr) break; --bct; break;
         }
         if (!pct && !bct && !inStr) {
             if (isSpChar(*t1)) {
@@ -2550,7 +2541,7 @@ uint8_t getVal(char* inbuf, char* outbuf) {
         if (!strcmp(tmp[1], ".")) {cerr = 1; dt = 0; goto gvreturn;}
         int32_t i = 0, j = strlen(tmp[1]) - 1;
         bool dp = false;
-        while (tmp[1][i]) {if (tmp[1][i++] == '.') {dp = true; tmp[1][i + 6] = 0; break;}}
+        while (tmp[1][i]) {if (tmp[1][i++] == '.') {dp = true; break;}}
         if (dp) {while (tmp[1][j] == '0') {--j;} if (tmp[1][j] == '.') {--j;}}
         i = (tmp[1][0] == '-'); dp = (bool)i;
         while (tmp[1][i] == '0') {++i;}
@@ -2690,10 +2681,10 @@ static inline int getArgO(int num, char* inbuf, char* outbuf, int32_t i) {
     return i;
 }
 
-char tmpbuf[2][CB_BUF_SIZE];
+static char tmpbuf[2][CB_BUF_SIZE];
 
-char* lttmp_tmp[3];
-int logictestexpr_index = 0;
+static char* lttmp_tmp[3];
+static int logictestexpr_index = 0;
 
 static inline uint8_t logictestexpr(char* inbuf) {
     int32_t tmpp = 0;
@@ -2788,7 +2779,8 @@ static inline uint8_t logictestexpr(char* inbuf) {
     if (t1 == 255) {cerr = 1; goto ltreturn;}
     if (t2 == 255) {
         t2 = t1;
-        if (t2 != 1) copyStr("0", lttmp[2]);
+        if (t2 == 2) copyStr("0", lttmp[2]);
+        else lttmp[2][0] = 0;
     }
     if (t1 != t2) {cerr = 2; goto ltreturn;}
     if (!strcmp(lttmp[1], "=")) {
@@ -2851,8 +2843,8 @@ static inline uint8_t logictestexpr(char* inbuf) {
     return ret;
 }
 
-char* ltbuf_tmp = NULL;
-int logictest_index = 0;
+static char* ltbuf_tmp = NULL;
+static int logictest_index = 0;
 
 uint8_t logictest(char* inbuf) {
     bool inStr = false;
@@ -3265,6 +3257,9 @@ int runcmd(char* cmd) {
     return cerr;
 }
 
+bool setextarg = false;
+cb_extargs extargs;
+
 int loadExt(char* path) {
     seterrstr(path);
     #ifndef _WIN32
@@ -3274,7 +3269,7 @@ int loadExt(char* path) {
     #endif
     if (!lib) {cerr = 33; return -1;}
     char* oextname = (void*)dlsym(lib, "cbext_name");
-    bool (*cbext_init)(cb_extargs) = (void*)dlsym(lib, "cbext_init");
+    bool (*cbext_init)(cb_extargs*) = (void*)dlsym(lib, "cbext_init");
     if (!oextname | !cbext_init) {cerr = 34; goto loadfail;}
     if (!oextname[0]) {cerr = 34; goto loadfail;}
     int e = -1;
@@ -3290,39 +3285,42 @@ int loadExt(char* path) {
     for (register int i = 0; i < extmaxct; ++i) {
         if (!extdata[i].inuse) {e = i; break;}
     }
-    cb_extargs extargs = {
-        VER, BVER, OSVER,
-        &cerr, &retval, &fileerror,
-        &varmaxct, vardata,
-        &filemaxct, filedata,
-        &chkCmdPtr,
-        &txtattrib,
-        &curx, &cury,
-        startcmd, roptstr,
-        &progLine, &lockpl, &didloop,
-        &inProg, &chkinProg,
-        &cmdl, &cp, &concp,
-        cb_exec,
-        getCurPos,
-        gethome,
-        seterrstr,
-        basefilename, pathfilename,
-        openFile, closeFile, cbrm,
-        usTime, timer, resetTimer, cb_wait,
-        updateTxtAttrib,
-        randNum,
-        chkCmd,
-        isSpChar, isExSpChar, isValidVarChar, isValidHexChar,
-        getArgCt, getArg, getArgO,
-        getStr, getType,
-        getVar, setVar, delVar,
-        getVal,
-        solvearg,
-        logictest,
-        printError,
-        runcmd
-    };
-    if (!cbext_init(extargs)) {cerr = 35; goto loadfail;}
+    if (!setextarg) {
+        extargs = (cb_extargs){
+            VER, BVER, OSVER,
+            &cerr, &retval, &fileerror,
+            &varmaxct, vardata,
+            &filemaxct, filedata,
+            &chkCmdPtr,
+            &txtattrib,
+            &curx, &cury,
+            startcmd, roptstr,
+            &progLine, &lockpl, &didloop,
+            &inProg, &chkinProg,
+            &cmdl, &cp, &concp,
+            cb_exec,
+            getCurPos,
+            gethome,
+            seterrstr,
+            basefilename, pathfilename,
+            openFile, closeFile, cbrm,
+            usTime, timer, resetTimer, cb_wait,
+            updateTxtAttrib,
+            randNum,
+            chkCmd,
+            isSpChar, isExSpChar, isValidVarChar, isValidHexChar,
+            getArgCt, getArg, getArgO,
+            getStr, getType,
+            getVar, setVar, delVar,
+            getVal,
+            solvearg,
+            logictest,
+            printError,
+            runcmd
+        };
+        setextarg = true;
+    }
+    if (!cbext_init(&extargs)) {cerr = 35; goto loadfail;}
     if (e == -1) {
         e = extmaxct;
         ++extmaxct;

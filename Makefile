@@ -2,7 +2,7 @@ ifndef CC
 CC = gcc
 endif
 
-BASE_CFLAGS = --std=c99 -Wall -Wextra -Ofast -lm -lreadline -funsigned-char
+BASE_CFLAGS = --std=c99 -Wall -Wextra -flto -O3 -mtune=generic -lm -lreadline -funsigned-char
 
 ifndef OS
 
@@ -30,7 +30,7 @@ else
 ifeq ($(shell uname -o), Android)
 CFLAGS += -s
 else
-CFLAGS += -g -no-pie
+CFLAGS += -s -no-pie
 endif
 endif
 

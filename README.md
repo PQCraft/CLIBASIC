@@ -82,6 +82,9 @@ To build CLIBASIC with support for VT escape codes, add `vt` before the rest of 
 [![asciicast](https://asciinema.org/a/447773.png)](https://asciinema.org/a/447773)
 
 ---
+[<img src="https://repology.org/badge/vertical-allrepos/clibasic.svg"></img>](#?)
+
+---
 ### Notes <br>
 - On Arch Linux, you can install CLIBASIC by installing either the [`clibasic`](https://aur.archlinux.org/packages/clibasic/) or [`clibasic-bin`](https://aur.archlinux.org/packages/clibasic-bin/) AUR package.
 - On Windows, pressing CTRL+C will not display a new prompt line due to the Windows version of readline catching and ignoring the CTRL+C.

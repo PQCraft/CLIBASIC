@@ -7,7 +7,7 @@
 //   char cbext_name[]
 //     Name of the extension (cannot be empty)
 // 
-//   bool cbext_init(cb_extargs)
+//   bool cbext_init(cb_extargs*)
 //     Initialize pointers to internal CLIBASIC functions, set up the extension for use, and
 //     return true if successful, otherwise, return false
 // 

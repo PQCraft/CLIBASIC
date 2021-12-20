@@ -51,8 +51,8 @@ if (chkCmd(2, "?", "PRINT") || cmd[i] == '?') {
             switch (cmd[i]) {
                 case '(': ++pct; break;
                 case ')': --pct; break;
-                case '[': ++bct; break;
-                case ']': --bct; break;
+                case '[': if (pct) break; ++bct; break;
+                case ']': if (pct) break; --bct; break;
             }
         }
         if ((cmd[i] == ',' || cmd[i] == ';' || cmd[i] == 0) && !inStr && pct == 0 && bct == 0) {

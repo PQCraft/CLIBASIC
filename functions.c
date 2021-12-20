@@ -250,7 +250,8 @@ if (chkCmd(2, "EXEC$", "EXECA$")) {
     runargs[argno] = NULL;
     int stdout_dup = 0, stderr_dup = 0, fd[2];
     #ifndef _WIN32
-    pipe2(fd, O_NONBLOCK);
+    int ret = pipe2(fd, O_NONBLOCK);
+    (void)ret;
     #else
     _pipe(fd, CB_BUF_SIZE, _O_BINARY);
     #endif
@@ -439,7 +440,7 @@ if (chkCmd(1, "PI")) {
     cerr = 0;
     ftype = 2;
     if (fargct) {cerr = 3; goto fexit;}
-    strcpy(outbuf, "3.141593");
+    strcpy(outbuf, "3.14159265358979323846264338327950288");
     goto fexit;
 }
 if (chkCmd(1, "ABS")) {
@@ -663,7 +664,7 @@ if (chkCmd(1, "LEN")) {
     cerr = 0;
     ftype = 2;
     if (fargt[1] != 1) {cerr = 2; goto fexit;}
-    sprintf(outbuf, "%lu", (long unsigned)strlen(farg[1]));
+    sprintf(outbuf, "%lu", (long unsigned)flen[1]);
     goto fexit;
 }
 if (chkCmd(1, "TYPEOF")) {
@@ -943,6 +944,122 @@ if (chkCmd(1, "LINE$")) {
         }
     }
     if (outbuf[strlen(outbuf) - 1] == '\r') outbuf[strlen(outbuf) - 1] = 0;
+    goto fexit;
+}
+if (chkCmd(1, "WORDS")) {
+    cerr = 0;
+    ftype = 2;
+    if (fargct < 1 || fargct > 2) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1 || fargt[1] != 1) {cerr = 2; goto fexit;}
+    int num = 0;
+    if (num < 0) {cerr = 16; goto fexit;}
+    char div = ' ';
+    if (fargct == 2) {
+        if (fargt[2] != 1) {cerr = 2; goto fexit;}
+        if (!farg[2][0] || farg[2][1]) {cerr = 16; goto fexit;}
+        div = farg[2][0];
+    }
+    int ip = 0, jp = 0;
+    {
+        int i = 0;
+        while (1) {
+            while (farg[1][ip] == ' ' || farg[1][ip] == '\t') {++ip;}
+            if (!farg[1][ip]) break;
+            jp = ip;
+            while (farg[1][jp] && farg[1][jp] != div) {++jp;}
+            ++num;
+            if (!farg[1][jp]) break;
+            ip = jp;
+            if (farg[1][ip]) {++ip;}
+            else {break;}
+            ++i;
+        }
+    }
+    sprintf(outbuf, "%d", num);
+    goto fexit;
+}
+if (chkCmd(1, "WORD$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct < 2 || fargct > 3) {cerr = 3; goto fexit;}
+    if (fargt[1] != 2 || fargt[2] != 1) {cerr = 2; goto fexit;}
+    int num = atoi(farg[1]);
+    if (num < 0) {cerr = 16; goto fexit;}
+    char div = ' ';
+    if (fargct == 3) {
+        if (fargt[3] != 1) {cerr = 2; goto fexit;}
+        if (!farg[3][0] || farg[3][1]) {cerr = 16; goto fexit;}
+        div = farg[3][0];
+    }
+    int ip = 0, jp = 0;
+    {
+        int i = 0;
+        while (1) {
+            while (farg[2][ip] == ' ' || farg[2][ip] == '\t') {++ip;}
+            if (!farg[2][ip]) break;
+            jp = ip;
+            while (farg[2][jp] && farg[2][jp] != div) {++jp;}
+            if (i == num) {
+                int njp = jp;
+                while (njp > ip && (farg[2][njp - 1] == ' ' || farg[2][njp - 1] == '\t')) {--njp;}
+                copyStrSnip(farg[2], ip, njp, outbuf);
+                break;
+            }
+            if (!farg[2][jp]) break;
+            ip = jp;
+            if (farg[2][ip]) {++ip;}
+            else {break;}
+            ++i;
+        }
+    }
+    goto fexit;
+}
+if (chkCmd(1, "LTRIM$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    char* str = farg[1];
+    while (1) {
+        if (!*str) break;
+        if (*str == ' ' || *str == '\t') ++str;
+        else break;
+    }
+    copyStr(str, outbuf);
+    goto fexit;
+}
+if (chkCmd(1, "RTRIM$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    if (!farg[1][0]) goto fexit;
+    int ptr = flen[1];
+    while (ptr > 0) {
+        --ptr;
+        if (farg[1][ptr] != ' ' && farg[1][ptr] != '\t') {++ptr; break;}
+    }
+    copyStrTo(farg[1], ptr, outbuf);
+    goto fexit;
+}
+if (chkCmd(1, "TRIM$")) {
+    cerr = 0;
+    ftype = 1;
+    if (fargct != 1) {cerr = 3; goto fexit;}
+    if (fargt[1] != 1) {cerr = 2; goto fexit;}
+    if (!farg[1][0]) goto fexit;
+    char* str = farg[1];
+    while (1) {
+        if (!*str) break;
+        if (*str == ' ' || *str == '\t') ++str;
+        else break;
+    }
+    int ptr = flen[1] - (str - farg[1]);
+    while (ptr > 0) {
+        --ptr;
+        if (str[ptr] != ' ' && str[ptr] != '\t') {++ptr; break;}
+    }
+    copyStrTo(str, ptr, outbuf);
     goto fexit;
 }
 if (chkCmd(1, "DATE")) {
