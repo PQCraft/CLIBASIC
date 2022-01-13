@@ -122,7 +122,7 @@
 
 // Base defines
 
-static char VER[] = "1.1";
+static char VER[] = "1.1.1";
 
 #if defined(__linux__)
     static char OSVER[] = "Linux";
@@ -1136,7 +1136,7 @@ int main(int argc, char** argv) {
         #ifndef _WIN32
         if (esc) fputs("\e[22;0t", stdout);
         changedtitle = true;
-        if (esc) printf("\e]2;CLIBASIC %s (%s-bit)%c", VER, BVER, 7);
+        if (esc) printf("\e]2;CLIBASIC %s (%s-bit)\x07", VER, BVER);
         fflush(stdout);
         #else
         char* tmpstr = (char*)malloc(CB_BUF_SIZE);
