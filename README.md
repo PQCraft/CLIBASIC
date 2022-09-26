@@ -93,3 +93,4 @@ To build CLIBASIC with support for VT escape codes, add `vt` before the rest of 
 - CLIBASIC will look for `~/.clibasicrc`, `~/autorun.bas`, then `~/.autorun.bas` in this order in the user's home directory and run the first file found.
 - The development scripts are `build.sh` which is for testing if CLIBASIC compiles correctly for Linux and Windows, `package.sh` which creates the zip files for making a CLIBASIC release, `commit.sh` which automates the build and push process, and `release-text.sh` which generates the text for making a CLIBASIC release.
 - Include the `clibasic.h` file when making a clibasic extension.
+- **There will most likely not be any more updates as CLIBASIC is a major architectural disaster.**
